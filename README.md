@@ -97,8 +97,12 @@ Every fs, terminal and agent call checks that the project is in `settings.openPr
   1. Bump `version` in package.json.
   2. Add a CHANGELOG entry.
   3. Run `npm run typecheck; npm test; npx electron-vite build`.
-  4. Run `$env:GH_TOKEN = (gh auth token); npx electron-builder --win nsis --publish always`.
-- That uploads the installer, the blockmap and `latest.yml` as a release, and existing installs pick it up within about 4 hours or on next start.
+  4. Run `npx electron-builder --win nsis --publish never`.
+  5. Generate `release/latest.yml` (version, sha512 in base64, size; see the 0.3.3 CHANGELOG entry for the exact format).
+  6. Run `git tag vX.Y.Z; git push origin vX.Y.Z`.
+  7. Run `gh release create vX.Y.Z release/DahlStudio-Setup-X.Y.Z.exe release/DahlStudio-Setup-X.Y.Z.exe.blockmap release/latest.yml --title X.Y.Z --notes "..."`.
+  - Never pipe the upload through `Select-Object -First`: it kills the process mid-upload. `electron-builder --publish always` raced itself creating the tag (HTTP 422) in this environment, so step 7 is the reliable path.
+- Existing installs pick the new release up on next start, or within about 4 hours.
 - The app is unsigned, so Windows SmartScreen may warn on first install. A code-signing certificate removes that.
 
 ## PROGRESS.md (per project)

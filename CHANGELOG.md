@@ -19,6 +19,11 @@ Format: date, what changed, why, and evidence (the commands and results actually
   - Cause: my PowerShell output filter (`Select-Object -First`) stopped the pipeline and killed electron-builder mid-upload, before the 127 MB installer and `latest.yml` were sent.
   - Fix: the broken v0.3.2 release and tag were deleted, and 0.3.3 was published with the output logged to a file instead.
   - Lesson for future agents: never pipe long-running publish commands through `Select-Object -First`.
+- **Publishing 0.3.3**
+  - `electron-builder --publish always` hit "422 Published releases must have a valid tag" (two parallel create calls raced), but the release and tag v0.3.3 were created.
+  - `latest.yml` was not written locally, so I generated it (sha512 base64 of the installer, size, version) and uploaded the installer, blockmap and latest.yml with `gh release upload`.
+  - Verified: https://github.com/Nexkeys/dahl-studio/releases/tag/v0.3.3 has all 3 assets, `releases/latest/download/latest.yml` downloads, and the installer URL returns 200 with the exact size (133,647,972 bytes).
+  - Not yet verified: an installed 0.3.3 app actually auto-updating. That needs a newer release (0.3.4+) to exist.
 
 ---
 
