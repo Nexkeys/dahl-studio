@@ -100,21 +100,45 @@ async function analyzeImage(name: string, mediaType: string, data: string, signa
   }
   // A vision-capable model from a provider the user configured (never sends anything if none is configured)
   let vision: string | undefined
-  const list = (await models.list()).models
-  const order = ['anthropic', 'openai', 'gemini', 'nvidia'] as const
-  for (const p of order) {
-    if (!(await vault.has(PROVIDER_INFO[p].slot))) continue
-    const m = list.find((x) => x.provider === p && x.vision)
-    if (!m) continue
+  for (const m of await visionCandidates()) {
     try {
       const r = await models.chat({ model: m.key, vision: true, messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe this image in precise detail for a developer who cannot see it: layout and sections from top to bottom, every UI element, all visible text, colours (hex estimates), typography, spacing and style. Be exhaustive but structured.' }, { type: 'image', mediaType, data, name }] }] }, signal)
       vision = `(${m.label}) ${r.content}`
       break
     } catch (e) {
-      void log('error', `vision assist via ${m.key} failed: ${(e as Error).message}`)
+      if ((e as Error).name === 'DahlError' && (e as { kind?: string }).kind === 'cancelled') break
+      visionFailed.add(m.key) // never retry this model again in this session
+      void log('info', `vision assist: ${m.key} unavailable (${(e as Error).message.slice(0, 160)}); trying the next option`)
     }
   }
   return formatBreakdown(name, px, ocr, vision)
+}
+
+const visionFailed = new Set<string>()
+const PREFERRED_VISION: [string, RegExp, RegExp?][] = [
+  ['anthropic', /claude-(sonnet|opus|haiku)/i],
+  ['openai', /^(gpt-4o|gpt-4\.1|gpt-5)/i, /(mini-tts|audio|realtime|search)/i],
+  ['gemini', /gemini-[\d.]+-flash/i, /(image|tts|live|lite-preview|thinking-exp)/i],
+  ['nvidia', /(llama-4|llama-3\.2-\d+b-vision|phi-4-multimodal|gemma-3)/i, /fuyu|kosmos|neva|vila/i]
+]
+
+/**
+ * Pick at most 2 vision models to try: the user's selected model first (if it accepts images), then one well-known
+ * vision model per configured provider. Skips providers whose key is known to be failing and models that already failed.
+ */
+async function visionCandidates(): Promise<{ key: string; label: string }[]> {
+  const list = (await models.list()).models.filter((m) => m.vision && !visionFailed.has(m.key))
+  const out: { key: string; label: string }[] = []
+  const current = (await settings.get()).defaultModel
+  const selected = list.find((m) => m.key === current)
+  if (selected) out.push(selected)
+  for (const [p, good, bad] of PREFERRED_VISION) {
+    const slot = PROVIDER_INFO[p as keyof typeof PROVIDER_INFO].slot
+    if (!(await vault.has(slot)) || ['auth_failed', 'exhausted'].includes(health[slot]?.health)) continue
+    const m = list.filter((x) => x.provider === p && good.test(x.id) && !(bad && bad.test(x.id))).sort((a, b) => b.id.localeCompare(a.id))[0]
+    if (m && !out.some((o) => o.key === m.key)) out.push(m)
+  }
+  return out.slice(0, 2)
 }
 
 export const runner = new AgentRunner({

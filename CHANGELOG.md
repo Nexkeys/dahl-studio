@@ -5,6 +5,20 @@ Format: date, what changed, why, and evidence (the commands and results actually
 
 ---
 
+## 0.3.4 — 2026-10-25 — Smarter image vision assist, diff view fix (first auto-update test)
+
+### Fixed (seen in the user's application log)
+- **Image analysis tried the first "vision" model per provider and retried failures on every image**, flooding the log with errors: Anthropic invalid key, Gemini `*-flash-image` with zero free quota, NVIDIA `fuyu-8b` 404 for the account.
+  - It now tries at most 2 candidates: the selected model if it accepts images, then one well-known vision model per provider (Claude Sonnet/Opus/Haiku, GPT-4o/4.1/5, Gemini x.y Flash excluding image/TTS/live variants, Llama 4 / Llama 3.2 Vision / Phi-4 multimodal / Gemma 3).
+  - Providers whose key is marked auth-failed or exhausted are skipped. Failed models are not retried for the rest of the session.
+  - Failures are logged as info ("unavailable, trying the next option"), not errors. OCR and pixel analysis still work without any vision model.
+- **"TextModel got disposed before DiffEditorWidget model got reset"** (renderer console, from closing a diff review). DiffEditor now uses `keepCurrentOriginalModel` and `keepCurrentModifiedModel`.
+
+### Note
+- This is the first release published after an auto-updating build (0.3.3) was installed. The user's installed 0.3.3 should download it and offer "Restart to install".
+
+---
+
 ## 0.3.3 — 2026-10-25 — Windows notifications; fixed release publishing
 
 ### Added

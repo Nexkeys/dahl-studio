@@ -95,7 +95,7 @@ export function EditorArea({ root }: { root: string }) {
             </div>
           </div>
           <div className="editor-host">
-            <DiffEditor
+            <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel
               original={review.before ?? ''}
               modified={review.after ?? ''}
               language={languageFor(review.path ?? '')}

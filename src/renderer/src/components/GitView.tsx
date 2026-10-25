@@ -65,7 +65,7 @@ export function GitView() {
           </div>
           <div className="git-diff">
             {diff && sel ? (
-              <DiffEditor original={diff.before} modified={diff.after} language={languageFor(sel)} theme={theme} options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, automaticLayout: true }} />
+              <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel original={diff.before} modified={diff.after} language={languageFor(sel)} theme={theme} options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, automaticLayout: true }} />
             ) : <div className="empty-state"><div className="muted">Select a changed file to see its diff against HEAD.</div></div>}
           </div>
         </div>
