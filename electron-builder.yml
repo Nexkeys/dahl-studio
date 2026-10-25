@@ -1,0 +1,38 @@
+appId: global.dahl.studio
+productName: Dahl Studio
+copyright: Dahl Studio
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+asarUnpack:
+  - resources/**
+  - node_modules/**
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  executableName: DahlStudio
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dahl Studio
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  artifactName: DahlStudio-Setup-${version}.exe
+npmRebuild: false
+publish:
+  provider: github
+  owner: Nexkeys
+  repo: dahl-studio
+  releaseType: release

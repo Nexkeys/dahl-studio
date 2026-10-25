@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dahl Studio - AI Code Editor</title>
+  <link rel="stylesheet" href="app.css">
+  <!-- Monaco Editor loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <!-- Marked for markdown parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+</head>
+<body class="dark-theme">
+  <!-- Top Application Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2">
+          <polyline points="16 18 22 12 16 6"></polyline>
+          <polyline points="8 6 2 12 8 18"></polyline>
+        </svg>
+        <span class="logo-title">Dahl<strong>Studio</strong></span>
+      </div>
+      <button class="btn btn-secondary" id="btnOpenFolder" title="Open Workspace Folder">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <span>Open Folder</span>
+      </button>
+      <div class="workspace-badge" id="currentWorkspaceBadge" title="Current Workspace">
+        No folder open
+      </div>
+    </div>
+
+    <div class="header-center">
+      <button class="btn btn-icon" id="btnSaveFile" title="Save File (Ctrl+S)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span>Save</span>
+      </button>
+      <button class="btn btn-icon" id="btnToggleTerminal" title="Toggle Terminal">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        <span>Terminal</span>
+      </button>
+    </div>
+
+    <div class="header-right">
+      <div class="agent-status-badge" id="modelActivePill">
+        <span class="status-dot"></span>
+        <span id="headerModelLabel">Dahl AI</span>
+      </div>
+      <button class="btn btn-secondary" id="btnOpenSettings" title="Dahl API & Model Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Work Area -->
+  <main class="main-layout">
+    <!-- Sidebar / File Explorer -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">EXPLORER</span>
+        <div class="sidebar-actions">
+          <button class="icon-btn" id="btnNewFile" title="New File">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+          </button>
+          <button class="icon-btn" id="btnRefreshFiles" title="Refresh">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="file-tree" id="fileTreeContainer">
+        <!-- Rendered dynamically -->
+        <div class="empty-state">No folder selected.<br>Click "Open Folder" above.</div>
+      </div>
+    </aside>
+
+    <!-- Editor Container -->
+    <section class="editor-panel">
+      <!-- Tabs Bar -->
+      <div class="tabs-bar" id="tabsBar">
+        <!-- Tabs rendered dynamically -->
+      </div>
+      <!-- Monaco Container -->
+      <div id="monacoEditorContainer" class="monaco-container">
+        <div class="no-file-screen" id="noFileScreen">
+          <div class="splash-box">
+            <h2>Welcome to Dahl Studio</h2>
+            <p>Direct workspace AI assistant powered by Dahl API</p>
+            <div class="quick-tips">
+              <div><kbd>Ctrl</kbd> + <kbd>S</kbd> Save File</div>
+              <div><kbd>Ctrl</kbd> + <kbd>P</kbd> Quick Commands</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Integrated Terminal Drawer -->
+      <div class="terminal-drawer hidden" id="terminalDrawer">
+        <div class="terminal-header">
+          <span>Terminal Output</span>
+          <button class="icon-btn" id="btnCloseTerminal">✕</button>
+        </div>
+        <div class="terminal-body" id="terminalOutput"></div>
+        <div class="terminal-input-bar">
+          <span class="term-prompt">$</span>
+          <input type="text" id="terminalInput" placeholder="Enter shell command (e.g. dir, python app.py, npm test)..." autocomplete="off">
+          <button class="btn btn-secondary" id="btnRunCommand">Run</button>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <footer class="editor-status-bar">
+        <span id="activeFilePath">Ready</span>
+        <div class="status-right">
+          <span id="editorLanguageLabel">Plain Text</span>
+          <span id="editorCursorPosition">Ln 1, Col 1</span>
+          <span>UTF-8</span>
+        </div>
+      </footer>
+    </section>
+
+    <!-- AI Assistant Panel (Right) -->
+    <aside class="ai-panel" id="aiPanel">
+      <div class="ai-panel-header">
+        <div class="ai-title-row">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12 2.1 12a10.1 10.1 0 0 0 9.9 10z"></path><path d="M12 12V2.1a10.1 10.1 0 0 1 10 9.9z"></path></svg>
+          <span class="ai-title">Dahl Agent</span>
+        </div>
+        <div class="ai-controls-row">
+          <!-- Reasoning Selector -->
+          <div class="reasoning-control" title="Reasoning Effort for DeepSeek/Reasoning models">
+            <span class="reasoning-label">Reasoning:</span>
+            <select id="reasoningSelect" class="compact-select">
+              <option value="disabled">Disabled</option>
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <button class="icon-btn" id="btnClearChat" title="Clear Chat History">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-prompts-bar">
+        <button class="prompt-chip" data-prompt="Explain this file and its main architecture.">Explain</button>
+        <button class="prompt-chip" data-prompt="Find potential bugs, edge cases, and performance bottlenecks in this code.">Find Bugs</button>
+        <button class="prompt-chip" data-prompt="Write unit tests for this code.">Write Tests</button>
+        <button class="prompt-chip" data-prompt="Refactor this code for readability and cleaner patterns.">Refactor</button>
+      </div>
+
+      <!-- Messages Stream -->
+      <div class="ai-chat-messages" id="chatMessages">
+        <div class="chat-msg assistant">
+          <div class="msg-avatar">🤖</div>
+          <div class="msg-content">
+            <p>Hey! I am your <strong>DahlStudio AI Agent</strong>. I can read, write, edit files in your workspace, and run shell commands directly.</p>
+            <p>Make sure your <strong>Dahl API Key</strong> is entered in <em>Settings</em> (top right) to begin!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="ai-input-container">
+        <div class="input-options">
+          <label class="checkbox-label" title="Attach active editor file to the context">
+            <input type="checkbox" id="chkIncludeFileContext" checked>
+            <span>Attach active file</span>
+          </label>
+        </div>
+        <div class="input-box-wrapper">
+          <textarea id="aiPromptInput" placeholder="Ask Dahl AI to write code, edit files, or debug... (Shift+Enter for new line)" rows="3"></textarea>
+          <button class="btn btn-primary" id="btnSendPrompt">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Dahl API & Model Settings</h3>
+        <button class="icon-btn" id="btnCloseSettings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="inputApiKey">Dahl API Key <span class="required">*</span></label>
+          <div class="input-with-action">
+            <input type="password" id="inputApiKey" placeholder="inf_..." autocomplete="off">
+            <button class="btn btn-secondary btn-sm" id="btnToggleApiKey">Show</button>
+          </div>
+          <small class="helper-text">Get your key from <a href="https://inference.dahl.global" target="_blank" style="color: #60a5fa;">inference.dahl.global</a></small>
+        </div>
+
+        <div class="form-group">
+          <label for="inputBaseUrl">Base URL</label>
+          <input type="text" id="inputBaseUrl" value="https://inference.dahl.global/v1">
+        </div>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label for="selectModel">Model ID</label>
+            <button class="btn-link" id="btnFetchModels">🔄 Fetch Live Models</button>
+          </div>
+          <div class="input-with-action">
+            <input type="text" id="inputModel" list="modelsDataList" placeholder="e.g. deepseek-ai/DeepSeek-V3" value="deepseek-ai/DeepSeek-V3">
+            <datalist id="modelsDataList">
+              <option value="deepseek-ai/DeepSeek-V3"></option>
+              <option value="deepseek-ai/DeepSeek-R1"></option>
+              <option value="MiniMax-Text-01"></option>
+              <option value="GLM-4-Plus"></option>
+            </datalist>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="selectDefaultReasoning">Default Reasoning Effort</label>
+          <select id="selectDefaultReasoning">
+            <option value="disabled">Disabled (Faster responses)</option>
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium (Recommended for coding)</option>
+            <option value="high">High (Deep reasoning)</option>
+          </select>
+        </div>
+
+        <div class="status-msg" id="settingsStatusMsg"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelSettings">Cancel</button>
+        <button class="btn btn-primary" id="btnSaveSettings">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

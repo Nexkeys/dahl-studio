@@ -1,0 +1,52 @@
+/* ---------- theme personality: font, radius, backdrop, glass, effects ---------- */
+body { font-family: var(--font); letter-spacing: var(--tracking); }
+.app { background: var(--backdrop), var(--bg); }
+.btn, .input, .card, .list, .segmented, .composer textarea, .tool-card, .approval-card, .reasoning { border-radius: var(--radius); }
+.panel, .rail, .topbar, .statusbar { background: var(--glass); backdrop-filter: saturate(140%) blur(10px); }
+.theme-switching *, .theme-switching *::before { transition: background-color .3s ease, border-color .3s ease, color .3s ease !important; }
+/* the rail sits above page content so its tooltips are never hidden behind panels */
+.rail { position: relative; z-index: 50; overflow: visible; }
+.rail-btn { position: relative; transition: background .15s, color .15s, transform .15s; }
+.rail-btn:active { transform: scale(.94); }
+.rail-tip { position: absolute; left: 48px; white-space: nowrap; background: var(--text); color: var(--bg); font-size: 11.5px; padding: 4px 8px; border-radius: 6px; opacity: 0; pointer-events: none; transform: translateX(-4px); transition: all .15s; z-index: 40; }
+.rail-btn:hover .rail-tip { opacity: 1; transform: none; }
+.rail .grow { flex: 1; }
+.content { animation: fade .2s both; }
+.btn { transition: background .15s, transform .12s, box-shadow .15s, filter .15s; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.update-ready { color: var(--accent) !important; font-weight: 600; animation: pulse 2s infinite; }
+
+/* Hacker Mode: CRT scanlines + phosphor glow */
+[data-effect='scanlines'] body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 100; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
+[data-effect='scanlines'] .panel-title, [data-effect='scanlines'] h1, [data-effect='scanlines'] .msg-who { text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
+[data-effect='scanlines'] .btn.primary { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-effect='scanlines'] .caret { box-shadow: 0 0 8px var(--accent); }
+
+/* Baddie / Solar: soft accent glow */
+[data-effect='glow'] .btn.primary, [data-effect='glow'] .rail-btn.on, [data-effect='glow'] .model-chip.on { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+[data-effect='glow'] .msg.user .msg-text { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Vibe Coder: frosted glass panels */
+[data-effect='glass'] .panel, [data-effect='glass'] .card, [data-effect='glass'] .mcp-card { backdrop-filter: blur(16px) saturate(160%); }
+[data-effect='glass'] .activity, [data-effect='glass'] .agent-card { box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+
+/* Pen Tester: tactical uppercase labels, hard edges */
+[data-effect='tactical'] .panel-title, [data-effect='tactical'] .label, [data-effect='tactical'] h2, [data-effect='tactical'] .run-badge { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+[data-effect='tactical'] h1 { text-transform: uppercase; letter-spacing: .06em; }
+[data-effect='tactical'] .panel-head { border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+
+/* Sakura Flow: drifting petals */
+[data-effect='petals'] .app::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5;
+  background-image: radial-gradient(4px 3px at 10% 20%, #f4a7c1 50%, transparent 51%), radial-gradient(3px 2px at 70% 10%, #f8c3d4 50%, transparent 51%), radial-gradient(4px 3px at 40% 60%, #f4a7c1 50%, transparent 51%), radial-gradient(3px 2px at 85% 75%, #f8c3d4 50%, transparent 51%), radial-gradient(4px 3px at 25% 85%, #f4a7c1 50%, transparent 51%);
+  background-size: 600px 600px; animation: petals 40s linear infinite; }
+@keyframes petals { from { background-position: 0 0; } to { background-position: 300px 600px; } }
+
+/* Arctic: crisp frost borders */
+[data-effect='frost'] .panel-head, [data-effect='frost'] .topbar { border-bottom-color: color-mix(in srgb, var(--accent) 18%, var(--border)); }
+
+/* Forest: subtle grain */
+[data-effect='grain'] .app::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .05; z-index: 0; background-image: repeating-radial-gradient(circle at 17% 32%, #fff 0 1px, transparent 1px 3px); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

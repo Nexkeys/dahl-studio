@@ -1,0 +1,11 @@
+node_modules/
+out/
+release/
+*.log
+*.bak
+.dahl/
+.playwright-mcp/
+legacy-pywebview/dist/
+legacy-pywebview/__pycache__/
+legacy-pywebview/DahlStudio.exe
+
