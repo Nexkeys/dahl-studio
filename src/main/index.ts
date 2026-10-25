@@ -84,7 +84,9 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('global.dahl.studio')
+  // Only the installed app uses the real AppUserModelId. Dev/smoke runs use electron.exe (atom icon); sharing the
+  // id made Windows cache the atom icon for the installed app's taskbar button.
+  app.setAppUserModelId(app.isPackaged && !process.env.DAHL_SMOKE ? 'global.dahl.studio' : 'global.dahl.studio.dev')
   registerIpc()
   for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted().catch(() => 0)
   createWindow()

@@ -5,6 +5,22 @@ Format: date, what changed, why, and evidence (the commands and results actually
 
 ---
 
+## Unreleased
+
+### Fixed
+- **Taskbar showed Electron's atom icon instead of the Dahl icon**, on the development machine only.
+  - The installed exe has the correct icon (verified by extraction).
+  - Cause: smoke tests ran `node_modules/electron/dist/electron.exe` (atom icon) with the same AppUserModelId (`global.dahl.studio`) as the installed app, so Windows cached the atom icon for that ID.
+  - Fix: dev and smoke runs now use `global.dahl.studio.dev`. On the affected machine the icon cache was refreshed with `ie4uinit.exe -show`.
+  - End users who never ran dev builds are not affected.
+
+### Verified
+- **Auto-update works end to end on the user's PC** (from the user's log):
+  - 0.3.3 found 0.3.4 on GitHub Releases and made a differential download (4.5 MB of 130 MB, 213 changed blocks).
+  - The user clicked Restart to install, and the app restarted as v0.3.4.
+
+---
+
 ## 0.3.4 — 2026-10-25 — Smarter image vision assist, diff view fix (first auto-update test)
 
 ### Fixed (seen in the user's application log)
