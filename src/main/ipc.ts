@@ -273,6 +273,7 @@ export function registerIpc(): void {
       }
     })
   })
+  handle('notify:test', async () => (await import('./notify')).testNotification())
   handle('update:status', () => getUpdateStatus())
   handle('update:check', () => checkForUpdates())
   handle('update:install', () => installUpdate())

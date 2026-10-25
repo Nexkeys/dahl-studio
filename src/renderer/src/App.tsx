@@ -115,6 +115,7 @@ export default function App() {
       api.on('agent:event', handleAgentEvent),
       api.on('keys:changed', (keys) => set({ keys })),
       api.on('usage:changed', (usage) => set({ usage })),
+      api.on('app:focusProject' as never, (p: string) => (set({ view: 'workspace' }), void updateSettings({ activeProject: p }))),
       api.on('models:changed' as never, (models: ModelInfo[]) => (set({ models }), void ensureDefaultModel(models)))
     ]
     return () => offs.forEach((o) => o())

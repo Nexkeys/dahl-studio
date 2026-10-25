@@ -120,7 +120,10 @@ async function analyzeImage(name: string, mediaType: string, data: string, signa
 export const runner = new AgentRunner({
   backend: models,
   getSettings: () => settings.get(),
-  emit: (e) => send('agent:event', e),
+  emit: (e) => {
+    send('agent:event', e)
+    void import('./notify').then((m) => m.notifyAgentEvent(e)).catch(() => {})
+  },
   runCommand: (cmd, cwd, t, sig) => procs.run(cmd, cwd, t, sig),
   secrets: () => vault.allValues(),
   reasoning: async (project) => reasoning.resolve((await settings.get()).projectReasoning[project]),

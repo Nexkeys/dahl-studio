@@ -146,6 +146,7 @@ export function SettingsView() {
       </section>
       <section>
         <h2><ShieldCheck size={16} /> Behaviour</h2>
+        <label className="check"><input type="checkbox" checked={s.notifications} onChange={(e) => updateSettings({ notifications: e.target.checked })} /> Windows notifications when Dahl needs approval, finishes, fails or pauses (only while Dahl Studio is in the background) <button className="btn tiny ghost" onClick={async (e) => { e.preventDefault(); const ok = await api.invoke<boolean>('notify:test'); if (!ok) useStore.getState().notify('Notifications are not supported or are blocked in Windows settings', 'error') }}>Send test notification</button></label>
         <label className="check"><input type="checkbox" checked={s.maintainProgress} onChange={(e) => updateSettings({ maintainProgress: e.target.checked })} /> Keep a PROGRESS.md work log in each project (task, plan, results, next steps; read back at the start of every task)</label>
         <label className="check"><input type="checkbox" checked={s.autoMemory} onChange={(e) => updateSettings({ autoMemory: e.target.checked })} /> Learn project memory automatically after tasks (one small extra model call)</label>
         <label className="check"><input type="checkbox" checked={s.autoApproveWrites} onChange={(e) => updateSettings({ autoApproveWrites: e.target.checked })} /> Apply file changes without asking (not recommended)</label>

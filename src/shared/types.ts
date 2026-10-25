@@ -75,6 +75,8 @@ export interface Settings {
   autoMemory: boolean
   /** keep an app-maintained PROGRESS.md work log in the project root */
   maintainProgress: boolean
+  /** Windows notifications for approvals, finished/failed/paused tasks (only when the window is not focused) */
+  notifications: boolean
   webResearch: boolean
   openProjects: string[]
   activeProject: string | null

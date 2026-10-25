@@ -5,6 +5,23 @@ Format: date, what changed, why, and evidence (the commands and results actually
 
 ---
 
+## 0.3.3 — 2026-10-25 — Windows notifications; fixed release publishing
+
+### Added
+- **System notifications** (`main/notify.ts`, Settings toggle, on by default):
+  - Notifies on: an approval request (shows the file, command or connector tool and which agent asked), a finished task, a failed task, a paused task (step limit or Pause), and a failed sub-agent.
+  - Shown only while Dahl Studio is not the focused window. Bursts are de-duplicated, and the taskbar icon flashes until the window is focused.
+  - Clicking a notification restores and focuses the window and switches to that project (`app:focusProject` event).
+  - Settings has a "Send test notification" button. Verified in the built app: `Notification.isSupported()` and show returned true, with 0 errors.
+
+### Fixed
+- **The v0.3.2 GitHub release was incomplete** (only the blockmap was uploaded).
+  - Cause: my PowerShell output filter (`Select-Object -First`) stopped the pipeline and killed electron-builder mid-upload, before the 127 MB installer and `latest.yml` were sent.
+  - Fix: the broken v0.3.2 release and tag were deleted, and 0.3.3 was published with the output logged to a file instead.
+  - Lesson for future agents: never pipe long-running publish commands through `Select-Object -First`.
+
+---
+
 ## 0.3.2 — 2026-10-25 — Auto-update via GitHub Releases, PROGRESS.md work log
 
 ### Added

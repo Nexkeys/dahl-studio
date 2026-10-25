@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoApproveCommands: false,
   autoMemory: true,
   maintainProgress: true,
+  notifications: true,
   webResearch: true,
   openProjects: [],
   activeProject: null,
