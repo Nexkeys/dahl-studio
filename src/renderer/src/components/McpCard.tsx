@@ -29,7 +29,6 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
     }
   }
   const state = status?.state ?? 'stopped'
-  const id = cfg?.id
   return (
     <div className={`mcp-card ${entry?.risk === 'high' ? 'high' : ''} reveal`}>
       <div className="mcp-head">

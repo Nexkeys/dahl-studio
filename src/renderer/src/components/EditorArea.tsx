@@ -1,8 +1,10 @@
-import { useEffect, useCallback } from 'react'
-import Editor, { DiffEditor } from '@monaco-editor/react'
+import { useEffect, useCallback, Suspense } from 'react'
 import { X, Check, Save, GitCompare, Code2 } from 'lucide-react'
 import { addAttachments, api, useStore } from '../store'
-import { languageFor } from '../monaco'
+import { languageFor } from '../lang'
+import { Editor, DiffEditor } from '../lazyMonaco'
+
+const EditorLoading = () => <div className="empty-state"><span className="spinner" /></div>
 
 function hash(s: string): string {
   let h = 0
@@ -11,12 +13,16 @@ function hash(s: string): string {
 }
 
 export function EditorArea({ root }: { root: string }) {
-  const p = useStore((s) => s.projects[root])
+  // narrow selectors: subscribing to the whole project would re-render the editor for every streamed reply update
+  const tabs = useStore((s) => s.projects[root]?.tabs) ?? []
+  const activePath = useStore((s) => s.projects[root]?.active ?? null)
+  const review = useStore((s) => {
+    const p = s.projects[root]
+    return p?.approvals.find((a) => a.id === p.reviewing && a.kind === 'write') ?? null
+  })
   const theme = useStore((s) => s.settings?.theme ?? 'dahl-classic')
   const patch = useStore((s) => s.patchProject)
-  const tabs = p?.tabs ?? []
-  const active = tabs.find((t) => t.path === p?.active) ?? null
-  const review = p?.approvals.find((a) => a.id === p?.reviewing && a.kind === 'write') ?? null
+  const active = tabs.find((t) => t.path === activePath) ?? null
 
   const save = useCallback(async () => {
     const st = useStore.getState()
@@ -69,7 +75,7 @@ export function EditorArea({ root }: { root: string }) {
           </div>
         )}
         {tabs.map((t) => (
-          <div key={t.path} role="tab" aria-selected={!review && t.path === p?.active} className={`tab ${!review && t.path === p?.active ? 'active' : ''}`}
+          <div key={t.path} role="tab" aria-selected={!review && t.path === activePath} className={`tab ${!review && t.path === activePath ? 'active' : ''}`}
             onClick={() => patch(root, { active: t.path, reviewing: null })} title={t.path}>
             <span>{t.path.split('/').pop()}</span>
             {t.content !== t.saved && <span className="dirty" aria-label="unsaved" />}
@@ -95,42 +101,46 @@ export function EditorArea({ root }: { root: string }) {
             </div>
           </div>
           <div className="editor-host">
-            <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel
-              original={review.before ?? ''}
-              modified={review.after ?? ''}
-              language={languageFor(review.path ?? '')}
-              theme={theme}
-              options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, fontFamily: 'Cascadia Code, Consolas, monospace', automaticLayout: true }}
-            />
+            <Suspense fallback={<EditorLoading />}>
+              <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel
+                original={review.before ?? ''}
+                modified={review.after ?? ''}
+                language={languageFor(review.path ?? '')}
+                theme={theme}
+                options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, fontFamily: 'Cascadia Code, Consolas, monospace', automaticLayout: true }}
+              />
+            </Suspense>
           </div>
         </div>
       ) : active ? (
         <div className="editor-host">
-          <Editor
-            path={`inmemory://p${hash(root)}/${active.path}`}
-            value={active.content}
-            language={languageFor(active.path)}
-            theme={theme}
-            onChange={(v) => patch(root, (c) => ({ tabs: c.tabs.map((t) => (t.path === active.path ? { ...t, content: v ?? '' } : t)) }))}
-            onMount={(ed, monaco) => {
-              // Ctrl+L: send the selection (or current line) to the chat as an attachment
-              ed.addAction({
-                id: 'dahl.askSelection',
-                label: 'Ask Dahl about selection',
-                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL],
-                contextMenuGroupId: 'navigation',
-                run: (e) => {
-                  const sel = e.getSelection()
-                  const model = e.getModel()
-                  if (!sel || !model) return
-                  const text = sel.isEmpty() ? model.getLineContent(sel.startLineNumber) : model.getValueInRange(sel)
-                  addAttachments(root, [{ id: crypto.randomUUID(), kind: 'selection', name: `${active.path}:${sel.startLineNumber}-${sel.endLineNumber}`, text }])
-                  useStore.getState().notify('Selection attached to the chat')
-                }
-              })
-            }}
-            options={{ fontSize: 13, fontFamily: 'Cascadia Code, Consolas, monospace', minimap: { enabled: true, scale: 1 }, smoothScrolling: true, automaticLayout: true, tabSize: 2, renderWhitespace: 'selection', bracketPairColorization: { enabled: true } }}
-          />
+          <Suspense fallback={<EditorLoading />}>
+            <Editor
+              path={`inmemory://p${hash(root)}/${active.path}`}
+              value={active.content}
+              language={languageFor(active.path)}
+              theme={theme}
+              onChange={(v) => patch(root, (c) => ({ tabs: c.tabs.map((t) => (t.path === active.path ? { ...t, content: v ?? '' } : t)) }))}
+              onMount={(ed, monaco) => {
+                // Ctrl+L: send the selection (or current line) to the chat as an attachment
+                ed.addAction({
+                  id: 'dahl.askSelection',
+                  label: 'Ask Dahl about selection',
+                  keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL],
+                  contextMenuGroupId: 'navigation',
+                  run: (e) => {
+                    const sel = e.getSelection()
+                    const model = e.getModel()
+                    if (!sel || !model) return
+                    const text = sel.isEmpty() ? model.getLineContent(sel.startLineNumber) : model.getValueInRange(sel)
+                    addAttachments(root, [{ id: crypto.randomUUID(), kind: 'selection', name: `${active.path}:${sel.startLineNumber}-${sel.endLineNumber}`, text }])
+                    useStore.getState().notify('Selection attached to the chat')
+                  }
+                })
+              }}
+              options={{ fontSize: 13, fontFamily: 'Cascadia Code, Consolas, monospace', minimap: { enabled: true, scale: 1 }, smoothScrolling: true, automaticLayout: true, tabSize: 2, renderWhitespace: 'selection', bracketPairColorization: { enabled: true } }}
+            />
+          </Suspense>
         </div>
       ) : (
         <div className="empty-state">

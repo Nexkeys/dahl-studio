@@ -3,7 +3,8 @@ import { Group, Panel, Separator } from 'react-resizable-panels'
 import { LayoutPanelLeft, ListChecks, Brain, BrainCircuit, Settings as SettingsIcon, HardDrive, FolderPlus, X, GitBranch, PanelBottom, CircleAlert, Users, Boxes, ScrollText, Command, Eye } from 'lucide-react'
 import type { KeyInfo, KeyUsageLocal, ModelInfo, Settings } from '@shared/types'
 import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, PROVIDER_NAMES, updateSettings, useStore, type View } from './store'
-import { applyTheme } from './themes'
+import { applyEffects, applyTheme, detectLowEnd } from './themes'
+import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
 import { EditorArea } from './components/EditorArea'
 import { ChatPanel } from './components/ChatPanel'
@@ -103,9 +104,15 @@ export default function App() {
       try {
         const s = await api.invoke<Settings>('settings:get')
         applyTheme(s.theme)
-        const [keys, usage] = await Promise.all([api.invoke<KeyInfo[]>('keys:list'), api.invoke<Record<string, KeyUsageLocal>>('usage:get')])
+        const [keys, usage, info] = await Promise.all([
+          api.invoke<KeyInfo[]>('keys:list'), api.invoke<Record<string, KeyUsageLocal>>('usage:get'), api.invoke<{ gpu: string; cpus: number }>('app:info')
+        ])
+        detectLowEnd(info)
+        applyEffects(s.effects)
         set({ settings: s, keys, usage, ready: true, web: s.webResearch })
         void loadModels()
+        // parse the editor bundle once the window is up and idle, so opening the first file is instant
+        setTimeout(() => requestIdleCallback(preloadMonaco), 1500)
       } catch (e) {
         set({ ready: true })
         useStore.getState().notify(`Startup problem: ${(e as Error).message}`, 'error')

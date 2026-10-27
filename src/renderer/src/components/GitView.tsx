@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
-import { DiffEditor } from '@monaco-editor/react'
+import { Suspense, useEffect, useState } from 'react'
 import { GitBranch, GitCommit, RefreshCw, Upload, Link2, Sparkles } from 'lucide-react'
 import { api, useStore } from '../store'
-import { languageFor } from '../monaco'
+import { languageFor } from '../lang'
+import { DiffEditor } from '../lazyMonaco'
 
 interface Status { repo: boolean; branch: string | null; ahead: number; behind: number; files: { path: string; index: string; work: string }[]; remote: string | null }
 
@@ -65,7 +65,9 @@ export function GitView() {
           </div>
           <div className="git-diff">
             {diff && sel ? (
-              <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel original={diff.before} modified={diff.after} language={languageFor(sel)} theme={theme} options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, automaticLayout: true }} />
+              <Suspense fallback={<div className="empty-state"><span className="spinner" /></div>}>
+                <DiffEditor keepCurrentOriginalModel keepCurrentModifiedModel original={diff.before} modified={diff.after} language={languageFor(sel)} theme={theme} options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false }, fontSize: 13, automaticLayout: true }} />
+              </Suspense>
             ) : <div className="empty-state"><div className="muted">Select a changed file to see its diff against HEAD.</div></div>}
           </div>
         </div>

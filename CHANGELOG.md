@@ -5,7 +5,21 @@ Format: date, what changed, why, and evidence (the commands and results actually
 
 ---
 
-## Unreleased
+## 0.3.5 — 2026-10-27 — Faster streaming and startup, visual effects setting, renderer CSP, legacy cleanup
+
+### Performance
+- **Long replies slowed the whole app down while streaming.**
+  - Cause: every token was its own store update, and the live reply re-parsed all of its Markdown each time. Measured on the dev machine (i7-10610U, React production build) with a 12,443-character reply: re-render cost 8.7 ms at 1,000 characters, 29 ms at 3,000, 81 ms at 6,000 and 148 ms at 12,000, per token. Tokens arrive every 15-30 ms, so the UI fell behind after about 2,000 characters.
+  - Fix: tokens are buffered and applied every 60 ms (`store.ts` `flushDeltas`, flushed before any event that ends the live text). The live reply is split into top-level blocks (`Markdown.tsx` `splitBlocks` / `LiveMarkdown`), and finished blocks are memoized, so only the open block is re-parsed. `Transcript` is memoized, and `EditorArea` no longer subscribes to the whole project, so neither re-renders on stream updates.
+  - Result, same benchmark with the real `splitBlocks`: 1,036 updates averaging 5.8 ms (worst 49.5 ms), about 6 s of rendering in total for the reply, down from about 150 s.
+- **Startup:** Monaco is now loaded lazily (`lazyMonaco.ts`) when an editor or diff is first shown, or when the app is idle 1.5 s after startup. The startup bundle went from 8.8 MB to 1.45 MB of JavaScript. In the built app, `.monaco-editor` is absent before a file is opened and present after clicking `package.json`.
+- **Visual effects setting** (Settings > Theme > Visual effects: Automatic, Full, Reduced). Reduced removes the backdrop blur that every theme applied to all panels, and the animated petals layer. Automatic uses Reduced when GPU compositing is not enabled (software rendering, many VMs, Remote Desktop) or the PC has 4 logical CPUs or fewer. The dev machine (8 threads, GPU) reports "full". Checked in the built app: with Reduced, `data-lite` is set and `.panel` computes `backdrop-filter: none`.
+
+### Security
+- **Content Security Policy for the packaged renderer** (`electron.vite.config.mts`, build only, because the dev server needs an inline Fast Refresh script). Only the app's own scripts, styles, fonts and workers load, so a Markdown image in a model reply can no longer fetch a remote URL. Verified in the built app: the meta tag is present, and startup, opening `package.json` (Monaco plus its JSON worker) and the Settings view gave 0 console errors.
+
+### Verification
+- typecheck 0 errors; vitest **53 passed**, including the new `tests/render.test.ts`. It checks that block splitting keeps code fences and indented list continuations whole, that earlier blocks never change as the text grows, that the split render gives the same HTML as a full render, and that buffered tokens land before the transcript event that clears the live text.
 
 ### Fixed
 - **Taskbar showed Electron's atom icon instead of the Dahl icon**, on the development machine only.
@@ -13,6 +27,15 @@ Format: date, what changed, why, and evidence (the commands and results actually
   - Cause: smoke tests ran `node_modules/electron/dist/electron.exe` (atom icon) with the same AppUserModelId (`global.dahl.studio`) as the installed app, so Windows cached the atom icon for that ID.
   - Fix: dev and smoke runs now use `global.dahl.studio.dev`. On the affected machine the icon cache was refreshed with `ie4uinit.exe -show`.
   - End users who never ran dev builds are not affected.
+- **The atom icon persisted after that fix** (user report, 2026-10-27). Refreshing the icon cache was not enough.
+  - Real cause: Electron creates a Start Menu shortcut for toast notifications when none exists for the AppUserModelId. A pre-fix smoke run on 2026-10-25 08:14 (the notification test) created `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Electron.lnk`, which pointed at `node_modules\electron\dist\electron.exe` and carried `System.AppUserModel.ID = global.dahl.studio`. Windows takes the taskbar icon for an AppUserModelId from the shortcut that owns it, so it used this shortcut instead of `Dahl Studio.lnk`.
+  - Checked with `Shell.Application` `ExtendedProperty('System.AppUserModel.ID')`: `Dahl Studio.lnk` (Start Menu and Public Desktop) and `Electron.lnk` all had `global.dahl.studio`.
+  - Fix on the dev machine: moved `Electron.lnk` out of the Start Menu (backed up, not deleted) and ran `ie4uinit.exe -show`. The dev AppUserModelId above keeps it from coming back. Any new `Electron.lnk` will have `global.dahl.studio.dev`.
+
+### Removed
+- **The legacy Python/pywebview app** (`legacy-pywebview/`, including its PyInstaller exes) and the PyInstaller build leftovers committed under `build/DahlStudio/`. Neither was used by the Electron app or the installer. The legacy source is still in git history (commit `eb5104d`). `build/icon.ico` and `build/icon.png` stay, because electron-builder uses them.
+- An unused `id` variable in `McpCard.tsx`, found with `tsc --noUnusedLocals --noUnusedParameters` (the only hit in either tsconfig).
+- Local only (gitignored): old installers 0.2.0 to 0.3.3 and `release/win-unpacked`. The 0.3.4 installer and `latest.yml` are kept.
 
 ### Verified
 - **Auto-update works end to end on the user's PC** (from the user's log):

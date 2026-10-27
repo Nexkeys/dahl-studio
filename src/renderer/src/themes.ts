@@ -1,5 +1,5 @@
 import type { editor } from 'monaco-editor'
-import type { ThemeId } from '@shared/types'
+import type { EffectsMode, ThemeId } from '@shared/types'
 import { PALETTES_A } from './themes-a'
 import { PALETTES_B } from './themes-b'
 
@@ -87,4 +87,20 @@ export function applyTheme(id: ThemeId): void {
   root.dataset.effect = t.effect
   root.style.colorScheme = t.dark ? 'dark' : 'light'
   setTimeout(() => root.classList.remove('theme-switching'), 320)
+}
+
+let lowEnd = false
+
+/** Low-end: software compositing (no usable GPU, many VMs and Remote Desktop) or 4 logical CPUs or fewer. */
+export function detectLowEnd(info: { gpu: string; cpus: number }): void {
+  lowEnd = !info.gpu.startsWith('enabled') || info.cpus <= 4
+}
+
+export function isLowEnd(): boolean {
+  return lowEnd
+}
+
+/** Reduced effects drop backdrop blur and animated theme layers (ui-themes.css [data-lite]). */
+export function applyEffects(mode: EffectsMode): void {
+  document.documentElement.toggleAttribute('data-lite', mode === 'reduced' || (mode === 'auto' && lowEnd))
 }

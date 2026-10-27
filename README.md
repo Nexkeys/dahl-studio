@@ -17,7 +17,7 @@ npm run build        # production bundle into out/
 npm run dist         # typecheck + test + build + NSIS installer into release/
 ```
 
-Smoke-test the built app (no dev server). This writes `smoke.json` (renderer console errors and a DOM probe) and `smoke.png` (a screenshot), then exits:
+Smoke-test the built app (no dev server). This writes `smoke.json` (renderer console errors and a DOM probe) and `smoke.png` (a screenshot), then exits. It uses a fresh profile in `<DAHL_SMOKE>\profile`, so put a `settings.json` there to open a project; the real settings are not touched. In a shell where `ELECTRON_RUN_AS_NODE` is set (for example VS Code's terminal for extensions), clear it first or electron.exe runs as plain Node:
 
 ```powershell
 $env:DAHL_SMOKE="$env:TEMP\dahl-smoke"; $env:DAHL_SMOKE_CLICK="package.json"  # CLICK is optional: clicks an element by title
@@ -49,8 +49,9 @@ src/preload/index.ts         window.dahl.invoke + allow-listed events
 src/renderer/src/            React UI: App (rail, views, palette), store.ts (zustand), themes*.ts (10 themes),
                              components/ (ChatPanel, Transcript, Composer, ApprovalCard, AgentsView, SettingsView,
                              ReasoningView, ToolboxView, McpCard, GitView, LogsView, CommandPalette, EditorArea, Explorer,
-                             TerminalPanel, Views), ui-*.css
-tests/                       dahl / agent / features (unit, 43); live.test.ts (real network, DAHL_LIVE=1)
+                             TerminalPanel, Views), ui-*.css. Monaco loads lazily: lazyMonaco.ts -> monaco.ts
+                             (only those two may import monaco-editor at runtime; lang.ts maps file names to languages)
+tests/                       dahl / agent / features / render (unit); live.test.ts (real network, DAHL_LIVE=1)
 ```
 
 Bundled MCP servers (`@modelcontextprotocol/server-filesystem`, `@playwright/mcp`) are real `dependencies`, unpacked from asar and run with Electron's own Node (`ELECTRON_RUN_AS_NODE=1`). All UI packages are devDependencies because Vite bundles them.

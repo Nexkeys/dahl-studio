@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react'
+import { memo, useState, type ReactElement } from 'react'
 import { ChevronRight, Wrench, Terminal, FileDiff, CircleAlert, CircleCheck, Brain, Globe, Image as ImageIcon, Users, Copy, Undo2, Files, Clock, BookmarkPlus, Paperclip } from 'lucide-react'
 import type { TranscriptItem } from '@shared/types'
 import { api, useStore } from '../store'
@@ -92,7 +92,8 @@ function Summary({ root, item }: { root: string; item: TranscriptItem }) {
   )
 }
 
-export function Transcript({ root, items, running }: { root: string; items: TranscriptItem[]; running: boolean }) {
+// memoized: the chat panel re-renders while a reply streams, but the finished transcript only changes per item
+export const Transcript = memo(function Transcript({ root, items, running }: { root: string; items: TranscriptItem[]; running: boolean }) {
   const out: ReactElement[] = []
   let group: TranscriptItem[] = []
   const flush = (live: boolean) => {
@@ -132,4 +133,4 @@ export function Transcript({ root, items, running }: { root: string; items: Tran
   }
   flush(running)
   return <>{out}</>
-}
+})

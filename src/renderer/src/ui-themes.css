@@ -49,4 +49,9 @@ body { font-family: var(--font); letter-spacing: var(--tracking); }
 /* Forest: subtle grain */
 [data-effect='grain'] .app::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .05; z-index: 0; background-image: repeating-radial-gradient(circle at 17% 32%, #fff 0 1px, transparent 1px 3px); }
 
+/* Reduced effects (Settings > Theme, automatic on low-end hardware): solid panels, no blur, no animated layers */
+[data-lite] .panel, [data-lite] .rail, [data-lite] .topbar, [data-lite] .statusbar { backdrop-filter: none; background: var(--surface); }
+[data-lite] .card, [data-lite] .mcp-card, [data-lite] .palette-backdrop { backdrop-filter: none !important; }
+[data-lite] .app::before { animation: none; }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

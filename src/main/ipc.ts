@@ -1,4 +1,5 @@
 import { app, dialog, ipcMain, safeStorage, shell } from 'electron'
+import os from 'node:os'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import type { Attachment, KeySlot, MemoryEntry, ReasoningProfile, Settings, StartRunRequest, StorageReport } from '@shared/types'
@@ -277,5 +278,9 @@ export function registerIpc(): void {
   handle('update:status', () => getUpdateStatus())
   handle('update:check', () => checkForUpdates())
   handle('update:install', () => installUpdate())
-  handle('app:info', () => ({ version: app.getVersion(), appDataDir: APP_DIR, encryption: safeStorage.isEncryptionAvailable() }))
+  handle('app:info', () => ({
+    version: app.getVersion(), appDataDir: APP_DIR, encryption: safeStorage.isEncryptionAvailable(),
+    // used by the renderer's 'auto' effects mode
+    gpu: String(app.getGPUFeatureStatus().gpu_compositing), cpus: os.cpus().length
+  }))
 }

@@ -143,16 +143,35 @@ export function addAttachments(root: string, atts: Attachment[]): void {
   useStore.getState().patchProject(root, (c) => ({ attachments: [...c.attachments, ...atts].slice(0, 20) }))
 }
 
-export function handleAgentEvent(e: AgentEvent): void {
+// Streamed tokens arrive as one IPC message each (often 30-80 per second). They are buffered and applied at most
+// every FLUSH_MS, so a long reply re-renders the chat about 16 times a second instead of once per token.
+const FLUSH_MS = 60
+const pendingDeltas = new Map<string, { live: string; reasoning: string }>()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushDeltas(): void {
+  if (flushTimer) clearTimeout(flushTimer)
+  flushTimer = null
+  if (!pendingDeltas.size) return
   const st = useStore.getState()
+  for (const [root, d] of pendingDeltas) st.patchProject(root, (c) => ({ live: c.live + d.live, liveReasoning: c.liveReasoning + d.reasoning }))
+  pendingDeltas.clear()
+}
+
+export function handleAgentEvent(e: AgentEvent): void {
   const root = e.project
+  if (e.type === 'delta' || e.type === 'reasoning_delta') {
+    const d = pendingDeltas.get(root) ?? { live: '', reasoning: '' }
+    if (e.type === 'delta') d.live += e.delta ?? ''
+    else d.reasoning += e.delta ?? ''
+    pendingDeltas.set(root, d)
+    flushTimer ??= setTimeout(flushDeltas, FLUSH_MS)
+    return
+  }
+  // buffered text must land before an event that ends or replaces the live text
+  flushDeltas()
+  const st = useStore.getState()
   switch (e.type) {
-    case 'delta':
-      st.patchProject(root, (c) => ({ live: c.live + (e.delta ?? '') }))
-      break
-    case 'reasoning_delta':
-      st.patchProject(root, (c) => ({ liveReasoning: c.liveReasoning + (e.delta ?? '') }))
-      break
     case 'transcript': {
       const item = e.item!
       st.patchProject(root, (c) => ({

@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoMemory: true,
   maintainProgress: true,
   notifications: true,
+  effects: 'auto',
   webResearch: true,
   openProjects: [],
   activeProject: null,

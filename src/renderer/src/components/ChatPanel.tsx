@@ -4,7 +4,7 @@ import type { RunState } from '@shared/types'
 import { api, useStore } from '../store'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
-import { Markdown } from './Markdown'
+import { LiveMarkdown } from './Markdown'
 import iconUrl from '../assets/icon.png'
 
 const SUGGESTIONS = [
@@ -102,7 +102,7 @@ export function ChatPanel({ root }: { root: string }) {
         {p?.live && (
           <div className="msg assistant">
             <div className="msg-who"><img src={iconUrl} alt="" className="avatar" /> Dahl</div>
-            <Markdown text={p.live} /><span className="caret" />
+            <LiveMarkdown text={p.live} /><span className="caret" />
           </div>
         )}
         {p?.status === 'running' && !p.live && !p.liveReasoning && <div className="status-line working"><span className="shimmer">Working</span></div>}

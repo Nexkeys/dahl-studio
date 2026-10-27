@@ -64,6 +64,8 @@ export interface ModelInfo {
   thinkingTypes?: string[]
 }
 
+export type EffectsMode = 'auto' | 'full' | 'reduced'
+
 export interface Settings {
   theme: ThemeId
   defaultModel: string | null
@@ -77,6 +79,8 @@ export interface Settings {
   maintainProgress: boolean
   /** Windows notifications for approvals, finished/failed/paused tasks (only when the window is not focused) */
   notifications: boolean
+  /** 'auto' turns off backdrop blur and animated theme layers on low-end hardware (see themes.ts detectLowEnd) */
+  effects: EffectsMode
   webResearch: boolean
   openProjects: string[]
   activeProject: string | null

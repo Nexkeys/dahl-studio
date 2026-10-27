@@ -1,4 +1,3 @@
-import './monaco'
 import './styles.css'
 import './ui-chat.css'
 import './ui-composer.css'

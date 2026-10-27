@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { KeyRound, RefreshCw, Trash2, CheckCircle2, XCircle, ShieldCheck, Palette, Cpu, Eye, Brain, Sparkles } from 'lucide-react'
-import type { KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
+import type { EffectsMode, KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
-import { THEMES, applyTheme, type Theme } from '../themes'
+import { THEMES, applyEffects, applyTheme, isLowEnd, type Theme } from '../themes'
 
 const KEY_HELP: Record<string, string> = {
   primary: 'Main Dahl key. Used first for Dahl models.',
@@ -157,6 +157,13 @@ export function SettingsView() {
         <div className="theme-grid">
           {THEMES.map((t) => <ThemePreview key={t.id} t={t} on={s.theme === t.id} onPick={() => { applyTheme(t.id as ThemeId); void updateSettings({ theme: t.id }) }} />)}
         </div>
+        <label className="check">Visual effects
+          <select className="input small" value={s.effects} onChange={(e) => { const v = e.target.value as EffectsMode; applyEffects(v); void updateSettings({ effects: v }) }}>
+            <option value="auto">Automatic ({isLowEnd() ? 'reduced on this PC' : 'full on this PC'})</option>
+            <option value="full">Full</option>
+            <option value="reduced">Reduced: no blur or animated backgrounds (faster on slow PCs)</option>
+          </select>
+        </label>
       </section>
       {info && <p className="muted small">Dahl Studio {info.version}. App data: {info.appDataDir}</p>}
     </div>
