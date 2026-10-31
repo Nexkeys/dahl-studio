@@ -89,6 +89,20 @@ h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; display: flex; gap: 8px
 .tree-icon { color: var(--muted); flex-shrink: 0; }
 .tree-icon.folder { color: var(--accent); }
 .tree-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-row.selected { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.tree-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.tree-item { position: relative; }
+.tree-item .tree-row { padding-right: 56px; }
+.tree-actions { position: absolute; right: 6px; top: 0; height: 26px; display: none; align-items: center; gap: 2px; }
+.tree-item:hover .tree-actions, .tree-item:focus-within .tree-actions { display: flex; }
+.tree-act { width: 22px; height: 22px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 4px; color: var(--muted); }
+.tree-act:hover, .tree-act:focus-visible { background: var(--surface); color: var(--text); outline: none; }
+.tree-draft { padding-right: 8px; padding-bottom: 2px; }
+.tree-draft-row { display: flex; align-items: center; gap: 5px; height: 26px; }
+.tree-input { flex: 1; min-width: 0; height: 22px; border: 1px solid var(--accent); border-radius: 4px; background: var(--editor-bg, var(--surface)); color: var(--text); padding: 0 6px; font: inherit; }
+.tree-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+.tree-input.invalid { border-color: var(--danger); }
+.tree-msg { margin: 2px 0 0 18px; padding: 4px 6px; border: 1px solid var(--danger); border-radius: 4px; background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--text); font-size: 11.5px; line-height: 1.35; }
 .empty { padding: 12px; color: var(--muted); }
 
 /* editor */
@@ -204,3 +218,8 @@ h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; display: flex; gap: 8px
 
 .toast { position: fixed; bottom: 38px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 12.5px; display: flex; gap: 6px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.18); max-width: 640px; z-index: 50; }
 .toast.error { background: var(--danger); color: #fff; }
+
+/* inline reason / name box (replaces window.prompt, which Electron does not support) */
+.reject-box { display: inline-flex; gap: 6px; align-items: center; flex: 1 1 220px; min-width: 0; }
+.reject-box input { flex: 1; min-width: 0; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 12px; }
+.reject-box input:focus { outline: none; border-color: var(--accent); }

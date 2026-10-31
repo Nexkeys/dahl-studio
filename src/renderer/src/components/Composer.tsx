@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign } from 'lucide-react'
-import type { AgentMode, Attachment, ThinkingLevel } from '@shared/types'
+import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks } from 'lucide-react'
+import type { AgentMode, Attachment, McpServerConfig, StartRunRequest, ThinkingLevel } from '@shared/types'
+import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { SKILLS } from './skills'
 
@@ -30,11 +31,12 @@ function fileToAttachment(f: File): Promise<Attachment> {
   })
 }
 
-export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string) => void }) {
+export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string, mcpServers?: StartRunRequest['mcpServers']) => void }) {
   const [input, setInput] = useState('')
   const [menu, setMenu] = useState<null | 'attach' | 'skills' | 'mention'>(null)
   const [files, setFiles] = useState<string[]>([])
   const [mq, setMq] = useState('')
+  const [mcp, setMcp] = useState<McpCommand[]>([])
   const ta = useRef<HTMLTextAreaElement>(null)
   const atts = useStore((s) => s.projects[root]?.attachments) ?? NO_ATTS
   const mode = useStore((s) => s.mode)
@@ -53,6 +55,21 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
     }
   }, [insert, set])
 
+  // MCP slash commands (/mcp and one per enabled server); refreshed whenever the skills menu opens
+  const loadMcp = () =>
+    api.invoke<{ servers: McpServerConfig[] }>('mcp:list').then((l) => {
+      const cmds = mcpCommands(l.servers, SKILLS.map((s) => s.cmd))
+      setMcp(cmds)
+      return cmds
+    }).catch(() => [] as McpCommand[])
+  const skillsOpen = menu === 'skills'
+  useEffect(() => {
+    void loadMcp()
+  }, [skillsOpen])
+
+  const typed = input.trim().toLowerCase()
+  const cmdMatch = (cmd: string) => !typed.startsWith('/') || typed === '/' || cmd.startsWith(typed)
+  const mcpHits = mcp.filter((c) => c.enabled && cmdMatch(c.cmd))
   const mentionHits = useMemo(() => (mq ? files.filter((f) => f.toLowerCase().includes(mq.toLowerCase())) : files).slice(0, 8), [files, mq])
 
   const pick = async (kind: 'file' | 'folder' | 'image') => {
@@ -81,7 +98,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
       if (!files.length) setFiles(await api.invoke<string[]>('fs:listAll', root).catch(() => []))
       setMq(at[2])
       setMenu('mention')
-    } else if (/^\/\w*$/.test(v)) setMenu('skills')
+    } else if (/^\/[\w-]*$/.test(v)) setMenu('skills')
     else if (menu === 'mention' || menu === 'skills') setMenu(null)
   }
   const chooseMention = async (f: string) => {
@@ -93,11 +110,14 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
       notify((e as Error).message, 'error')
     }
   }
-  const send = () => {
+  const send = async () => {
     const text = input.trim()
     if (!text || running) return
     setInput('')
-    onSend(text)
+    setMenu(null)
+    // "/<server> request" or "/mcp request": focus the run on that server (or on all MCP tools)
+    const hit = text.startsWith('/') ? parseMcpCommand(text, mcp.length ? mcp : await loadMcp()) : null
+    onSend(text, hit ? (hit.id ? [hit.id] : 'all') : undefined)
   }
 
   return (
@@ -116,11 +136,11 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
       )}
       <div className="composer-box">
         <textarea ref={ta} value={input} rows={3} disabled={running} aria-label="Message Dahl" onPaste={onPaste}
-          placeholder={running ? 'Dahl is working. Pause or cancel to send a new instruction.' : 'Ask Dahl to build, fix or explain. Type / for skills, @ to attach a file, paste images.'}
+          placeholder={running ? 'Dahl is working. Pause or cancel to send a new instruction.' : 'Ask Dahl to build, fix or explain. Type / for skills and MCP servers, @ to attach a file, paste images.'}
           onChange={(e) => void onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setMenu(null)
-            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); send() }
+            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); void send() }
           }} />
         {menu === 'mention' && (
           <div className="popover up">
@@ -132,9 +152,16 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
         {menu === 'skills' && (
           <div className="popover up wide">
             <div className="popover-title"><Sparkles size={12} /> Skills</div>
-            {SKILLS.filter((s) => !input.startsWith('/') || s.cmd.startsWith(input.trim()) || input.trim() === '/').map((s) => (
+            {SKILLS.filter((s) => cmdMatch(s.cmd)).map((s) => (
               <button key={s.cmd} className="popover-item" onClick={() => { setInput(s.prompt); if (s.mode) set({ mode: s.mode }); if (s.web) set({ web: true }); setMenu(null); ta.current?.focus() }}>
                 <s.icon size={14} /><span><b>{s.cmd}</b> <span className="muted">{s.label}</span></span>
+              </button>
+            ))}
+            {mcpHits.length > 0 && <div className="popover-title"><Plug size={12} /> MCP servers</div>}
+            {mcpHits.map((c) => (
+              <button key={c.cmd} className="popover-item" title={c.id ? `Type a request after ${c.cmd}, or send it alone to see what ${c.name} can do` : 'Type a request after /mcp, or send it alone to list connected servers and tools'}
+                onClick={() => { setInput(`${c.cmd} `); setMenu(null); ta.current?.focus() }}>
+                {c.id ? <Plug size={14} /> : <Blocks size={14} />}<span><b>{c.cmd}</b> <span className="muted">{c.label}</span></span>
               </button>
             ))}
           </div>
@@ -163,7 +190,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
           </select>
         </label>
         <span className="grow" />
-        <button className="btn primary send" onClick={send} disabled={running || !input.trim()} aria-label="Send"><Send size={15} /></button>
+        <button className="btn primary send" onClick={() => void send()} disabled={running || !input.trim()} aria-label="Send"><Send size={15} /></button>
       </div>
     </div>
   )

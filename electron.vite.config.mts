@@ -26,17 +26,32 @@ const csp: Plugin = {
   transformIndexHtml: (html) => html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`)
 }
 
+// Ownership notice stamped into every built bundle and the renderer page (kept by minifiers as a /*! */ comment)
+const NOTICE = 'Dahl Studio. Copyright (c) 2026 NexKeys. All rights reserved. Proprietary; see LICENSE.'
+const stamp: Plugin = {
+  name: 'dahl-stamp',
+  apply: 'build',
+  transformIndexHtml: (html) => html.replace('<head>', `<head>
+    <meta name="copyright" content="${NOTICE}" />`),
+  generateBundle(_o, bundle) {
+    for (const c of Object.values(bundle)) if (c.type === 'chunk' && !c.code.startsWith('/*!')) c.code = `/*! ${NOTICE} */
+${c.code}`
+  }
+}
+
 export default defineConfig({
   main: {
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@shared': resolve('src/shared') } },
+    plugins: [stamp]
   },
   preload: {
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@shared': resolve('src/shared') } },
+    plugins: [stamp]
   },
   renderer: {
     root: resolve('src/renderer'),
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    plugins: [react(), csp],
+    plugins: [react(), csp, stamp],
     build: { chunkSizeWarningLimit: 6000 }
   }
 })

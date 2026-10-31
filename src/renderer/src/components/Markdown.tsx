@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy } from 'lucide-react'
+import { stripDashes } from '@shared/dashes'
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false)
@@ -36,7 +37,7 @@ const Blocks = memo(function Blocks({ text }: { text: string }) {
 
 /** Safe Markdown (no raw HTML) with GFM tables/lists and copyable code blocks. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  return <div className="md"><Blocks text={text} /></div>
+  return <div className="md"><Blocks text={stripDashes(text)} /></div>
 })
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/
@@ -82,5 +83,5 @@ export function splitBlocks(text: string): string[] {
  * on its text), so each update re-parses only the open block instead of the whole reply.
  */
 export function LiveMarkdown({ text }: { text: string }) {
-  return <div className="md">{splitBlocks(text).map((b, i) => <Blocks key={i} text={b} />)}</div>
+  return <div className="md">{splitBlocks(stripDashes(text)).map((b, i) => <Blocks key={i} text={b} />)}</div>
 }

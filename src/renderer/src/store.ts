@@ -49,11 +49,16 @@ interface State {
   showTerminal: boolean
   palette: boolean
   composerInsert: string | null
+  showPreview: boolean
+  /** last Preview URL per project root (also kept in localStorage) */
+  previewUrls: Record<string, string>
   set: (p: Partial<State>) => void
   project: (root: string) => ProjectUI
   patchProject: (root: string, p: Partial<ProjectUI> | ((cur: ProjectUI) => Partial<ProjectUI>)) => void
   notify: (text: string, kind?: 'info' | 'error') => void
 }
+
+const PREVIEW_KEY = 'dahl.previewUrls'
 
 export const useStore = create<State>((set, get) => ({
   ready: false,
@@ -70,6 +75,8 @@ export const useStore = create<State>((set, get) => ({
   showTerminal: true,
   palette: false,
   composerInsert: null,
+  showPreview: false,
+  previewUrls: loadPreviewUrls(),
   set: (p) => set(p),
   project: (root) => get().projects[root] ?? emptyProject(),
   patchProject: (root, p) =>
@@ -85,6 +92,33 @@ export const useStore = create<State>((set, get) => ({
     }, kind === 'error' ? 7000 : 3200)
   }
 }))
+
+function loadPreviewUrls(): Record<string, string> {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(PREVIEW_KEY) ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+/** Remember the Preview URL for a project (the panel navigates when it changes). */
+export function setPreviewUrl(root: string, url: string): void {
+  const st = useStore.getState()
+  if (st.previewUrls[root] === url) return
+  const previewUrls = { ...st.previewUrls, [root]: url }
+  st.set({ previewUrls })
+  try {
+    localStorage.setItem(PREVIEW_KEY, JSON.stringify(previewUrls))
+  } catch {
+    /* storage full or unavailable */
+  }
+}
+
+/** Show the Preview panel, optionally navigating it. */
+export function openPreview(root: string, url?: string): void {
+  if (url) setPreviewUrl(root, url)
+  useStore.getState().set({ showPreview: true, view: 'workspace' })
+}
 
 export async function updateSettings(patch: Partial<Settings>): Promise<void> {
   const s = await api.invoke<Settings>('settings:update', patch)

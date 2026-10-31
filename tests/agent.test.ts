@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { AgentRunner, closeDanglingToolCalls, type ChatBackend } from '../src/main/agent/runner'
+import { AgentRunner, closeDanglingToolCalls, type ChatBackend, type McpBridge } from '../src/main/agent/runner'
 import { resolveInside, PathBoundaryError } from '../src/main/fs/workspace'
 import { ProjectStore, rankMemory } from '../src/main/store/projectStore'
 import { DEFAULT_SETTINGS } from '../src/main/settings'
@@ -50,7 +50,7 @@ function scripted(responses: Array<{ content?: string; tool?: { name: string; ar
   }
 }
 
-function harness(backend: ChatBackend, settings: Partial<Settings> = {}) {
+function harness(backend: ChatBackend, settings: Partial<Settings> = {}, mcp?: McpBridge) {
   const events: AgentEvent[] = []
   const commands: string[] = []
   let onApproval: ((a: PendingApproval) => void) | null = null
@@ -65,7 +65,8 @@ function harness(backend: ChatBackend, settings: Partial<Settings> = {}) {
       commands.push(c)
       return { exitCode: 0, output: 'tests passed', timedOut: false }
     },
-    secrets: async () => ['dahl_supersecret']
+    secrets: async () => ['dahl_supersecret'],
+    mcp
   })
   const done = () =>
     new Promise<void>((resolve) => {
@@ -244,5 +245,118 @@ describe('persistence helpers', () => {
     process.env.DAHL_API_KEY = 'dahl_shouldnotleak'
     expect(childEnv().DAHL_API_KEY).toBeUndefined()
     delete process.env.DAHL_API_KEY
+  })
+})
+
+describe('MCP tools outside Build mode', () => {
+  // a custom server like sekudo: one unannotated tool, one marked read-only, policy "allow"
+  const bridge = (calls: string[]): McpBridge => ({
+    toolsFor: async () => [
+      { serverId: 'custom-x', serverName: 'sekudo', policy: 'allow', tool: { name: 'scan', inputSchema: { type: 'object', properties: {} } }, fnName: 'mcp__custom-x__scan' },
+      { serverId: 'custom-x', serverName: 'sekudo', policy: 'allow', tool: { name: 'status', readOnly: true }, fnName: 'mcp__custom-x__status' }
+    ],
+    call: async (_s, _p, tool) => (calls.push(tool), { text: `${tool} ok`, isError: false, images: [] })
+  })
+
+  it('offers custom MCP tools in Plan mode: read-only ones run, others ask first', async () => {
+    const calls: string[] = []
+    const backend = scripted([{ tool: { name: 'mcp__custom-x__status', args: {} } }, { tool: { name: 'mcp__custom-x__scan', args: {} } }, { content: 'done' }])
+    const h = harness(backend, {}, bridge(calls))
+    const asked: string[] = []
+    h.setApprover((a) => (asked.push(a.tool ?? ''), h.runner.resolveApproval(a.id, false, 'not now')))
+    await h.runner.start({ project: dir, prompt: 'list your tools', mode: 'plan', model: 'm' })
+    await h.done()
+    expect(calls).toEqual(['status'])
+    expect(asked).toEqual(['sekudo / scan'])
+    const system = backend.seen[0][0].content as string
+    expect(system).toContain('mcp__custom-x__scan')
+    expect(system).toContain('needs the user\'s approval for each call')
+  })
+
+  it('keeps the server policy in Build mode (allow runs without asking)', async () => {
+    const calls: string[] = []
+    const h = harness(scripted([{ tool: { name: 'mcp__custom-x__scan', args: {} } }, { content: 'done' }]), {}, bridge(calls))
+    const asked: string[] = []
+    h.setApprover((a) => (asked.push(a.tool ?? ''), h.runner.resolveApproval(a.id, true)))
+    await h.runner.start({ project: dir, prompt: 'scan', mode: 'build', model: 'm' })
+    await h.done()
+    expect(calls).toEqual(['scan'])
+    expect(asked).toEqual([])
+  })
+})
+
+describe('MCP slash commands (focused runs)', () => {
+  // two enabled servers; the fake honours the `only` filter like McpManager.toolsFor
+  const bridge = (seen: (string[] | undefined)[]): McpBridge => ({
+    toolsFor: async (_p, only, problems) => {
+      seen.push(only)
+      if (only?.includes('broken')) problems?.push('MCP server "broken" failed to start: spawn ENOENT')
+      return [
+        { serverId: 'custom-sekudo', serverName: 'sekudo', policy: 'allow' as const, tool: { name: 'scan' }, fnName: 'mcp__custom-sekudo__scan' },
+        { serverId: 'git', serverName: 'Git', policy: 'allow' as const, tool: { name: 'git_status' }, fnName: 'mcp__git__git_status' }
+      ].filter((t) => !only || only.includes(t.serverId))
+    },
+    call: async (_s, _p, tool) => ({ text: `${tool} ok`, isError: false, images: [] })
+  })
+  /** wraps a scripted backend and records the tool names offered on each call */
+  const offered = (b: ChatBackend & { seen: ChatMessage[][] }) => {
+    const tools: string[][] = []
+    const backend: ChatBackend & { seen: ChatMessage[][] } = { seen: b.seen, chat: (req, s, cb) => (tools.push(((req.tools ?? []) as { function: { name: string } }[]).map((t) => t.function.name)), b.chat(req, s, cb)) }
+    return { backend, tools }
+  }
+
+  it('/<server> loads only that server and tells the model to use it', async () => {
+    const seen: (string[] | undefined)[] = []
+    const { backend, tools } = offered(scripted([{ content: 'sekudo can scan' }]))
+    const h = harness(backend, {}, bridge(seen))
+    await h.runner.start({ project: dir, prompt: '/sekudo', mode: 'plan', model: 'm', mcpServers: ['custom-sekudo'] })
+    await h.done()
+    expect(seen).toEqual([['custom-sekudo']])
+    expect(tools[0]).toContain('mcp__custom-sekudo__scan')
+    expect(tools[0]).not.toContain('mcp__git__git_status')
+    const system = backend.seen[0][0].content as string
+    expect(system).toContain('The user invoked the MCP server "sekudo" with a slash command')
+    const run = (await new ProjectStore(dir).loadRun(h.events[0].runId)) as RunState
+    expect(run.status).toBe('completed')
+    expect(run.mcpServers).toEqual(['custom-sekudo'])
+  })
+
+  it('/mcp offers all servers with an explicit instruction; normal runs get no focus line', async () => {
+    const seen: (string[] | undefined)[] = []
+    const { backend, tools } = offered(scripted([{ content: 'servers: sekudo, Git' }, { content: 'hi' }]))
+    const h = harness(backend, {}, bridge(seen))
+    await h.runner.start({ project: dir, prompt: '/mcp', mode: 'review', model: 'm', mcpServers: 'all' })
+    await h.done()
+    expect(tools[0]).toEqual(expect.arrayContaining(['mcp__custom-sekudo__scan', 'mcp__git__git_status']))
+    expect(backend.seen[0][0].content as string).toContain('The user invoked /mcp')
+    // a new message after the focused turn completed goes back to normal (all servers, no focus)
+    await h.runner.start({ project: dir, prompt: 'hello', mode: 'review', model: 'm', resumeRunId: h.events[0].runId })
+    await h.done()
+    expect(seen).toEqual([undefined, undefined])
+    expect(backend.seen[1][0].content as string).not.toContain('The user invoked')
+  })
+
+  it('keeps the focus when a paused turn continues', async () => {
+    const seen: (string[] | undefined)[] = []
+    const h = harness(scripted([{ content: 'a' }, { content: 'b' }]), {}, bridge(seen))
+    await h.runner.start({ project: dir, prompt: '/sekudo scan', mode: 'plan', model: 'm', mcpServers: ['custom-sekudo'] })
+    await h.done()
+    const store = new ProjectStore(dir)
+    const run = (await store.loadRun(h.events[0].runId)) as RunState
+    await store.saveRun({ ...run, status: 'paused' })
+    await h.runner.start({ project: dir, prompt: 'Continue', mode: 'plan', model: 'm', resumeRunId: run.id })
+    await h.done()
+    expect(seen).toEqual([['custom-sekudo'], ['custom-sekudo']])
+  })
+
+  it('reports a server that fails to start instead of running without its tools', async () => {
+    const backend = scripted([{ content: 'should not run' }])
+    const h = harness(backend, {}, bridge([]))
+    await h.runner.start({ project: dir, prompt: '/broken do it', mode: 'build', model: 'm', mcpServers: ['broken'] })
+    await h.done()
+    expect(backend.seen.length).toBe(0)
+    const run = (await new ProjectStore(dir).loadRun(h.events[0].runId)) as RunState
+    expect(run.status).toBe('failed')
+    expect(run.transcript.find((t) => t.kind === 'error')?.text).toContain('MCP server "broken" failed to start: spawn ENOENT')
   })
 })

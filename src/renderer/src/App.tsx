@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
-import { LayoutPanelLeft, ListChecks, Brain, BrainCircuit, Settings as SettingsIcon, HardDrive, FolderPlus, X, GitBranch, PanelBottom, CircleAlert, Users, Boxes, ScrollText, Command, Eye } from 'lucide-react'
+import { LayoutPanelLeft, ListChecks, Brain, BrainCircuit, Settings as SettingsIcon, HardDrive, FolderPlus, X, GitBranch, PanelBottom, CircleAlert, Users, Boxes, ScrollText, Command, Eye, Globe } from 'lucide-react'
 import type { KeyInfo, KeyUsageLocal, ModelInfo, Settings } from '@shared/types'
-import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, PROVIDER_NAMES, updateSettings, useStore, type View } from './store'
+import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, openPreview, PROVIDER_NAMES, updateSettings, useStore, type View } from './store'
 import { applyEffects, applyTheme, detectLowEnd } from './themes'
 import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
@@ -18,6 +18,9 @@ import { GitView } from './components/GitView'
 import { LogsView } from './components/LogsView'
 import { CommandPalette } from './components/CommandPalette'
 import iconUrl from './assets/icon.png'
+
+// the preview browser (and its <webview>) loads only when the panel is first opened
+const PreviewPanel = lazy(() => import('./components/PreviewPanel').then((m) => ({ default: m.PreviewPanel })))
 
 const NAV: { id: View; label: string; icon: typeof Brain }[] = [
   { id: 'workspace', label: 'Workspace', icon: LayoutPanelLeft },
@@ -48,6 +51,7 @@ function StatusBar({ root }: { root: string | null }) {
   const status = useStore((s) => (root ? s.projects[root]?.status : null))
   const agents = useStore((s) => (root ? Object.values(s.projects[root]?.agents ?? {}).filter((a) => !a.endedAt).length : 0))
   const showTerminal = useStore((s) => s.showTerminal)
+  const showPreview = useStore((s) => s.showPreview)
   const set = useStore((s) => s.set)
   const [git, setGit] = useState<{ repo: boolean; branch: string | null; files: unknown[] } | null>(null)
   useEffect(() => {
@@ -69,6 +73,7 @@ function StatusBar({ root }: { root: string | null }) {
       <UpdateBadge />
       <button className="sb-btn" onClick={() => set({ palette: true })}><Command size={12} /> Ctrl+K</button>
       {root && <button className="sb-btn" onClick={() => set({ showTerminal: !showTerminal })} aria-pressed={showTerminal}><PanelBottom size={12} /> Terminal</button>}
+      {root && <button className="sb-btn" title="Preview" onClick={() => (showPreview ? set({ showPreview: false }) : openPreview(root))} aria-pressed={showPreview}><Globe size={12} /> Preview</button>}
     </div>
   )
 }
@@ -97,6 +102,7 @@ export default function App() {
   const settings = useStore((s) => s.settings)
   const toast = useStore((s) => s.toast)
   const showTerminal = useStore((s) => s.showTerminal)
+  const showPreview = useStore((s) => s.showPreview)
   const set = useStore((s) => s.set)
 
   useEffect(() => {
@@ -174,7 +180,18 @@ export default function App() {
               <Separator className="sep v" />
               <Panel minSize={320} id="center">
                 <Group orientation="vertical" id="ws-v">
-                  <Panel minSize={160} id="editor"><EditorArea root={root} /></Panel>
+                  <Panel minSize={160} id="editor">
+                    {/* the editor keeps its place in the tree, so toggling Preview never remounts Monaco */}
+                    <Group orientation="horizontal" id="ws-preview">
+                      <Panel minSize={160} id="editor-main"><EditorArea root={root} /></Panel>
+                      {showPreview && <Separator className="sep v" />}
+                      {showPreview && (
+                        <Panel defaultSize="45%" minSize={220} id="preview">
+                          <Suspense fallback={<div className="panel"><div className="empty-state"><span className="spinner" /></div></div>}><PreviewPanel root={root} key={root} /></Suspense>
+                        </Panel>
+                      )}
+                    </Group>
+                  </Panel>
                   {showTerminal && <Separator className="sep h" />}
                   {showTerminal && <Panel defaultSize="26%" minSize={90} id="terminal"><TerminalPanel root={root} key={root} /></Panel>}
                 </Group>

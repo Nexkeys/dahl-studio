@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Square, Trash2, ChevronRight } from 'lucide-react'
+import { Square, Trash2, ChevronRight, Globe } from 'lucide-react'
 import type { TermEvent } from '@shared/types'
-import { api, useStore } from '../store'
+import { findDevServerUrl } from '@shared/preview'
+import { api, openPreview, useStore } from '../store'
 
 interface Line {
   kind: 'cmd' | 'out' | 'err' | 'exit'
@@ -18,6 +19,7 @@ export function TerminalPanel({ root }: { root: string }) {
   const [running, setRunning] = useState<string | null>(null)
   const [history, setHistory] = useState<string[]>([])
   const [hIdx, setHIdx] = useState(-1)
+  const [devUrl, setDevUrl] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -26,7 +28,12 @@ export function TerminalPanel({ root }: { root: string }) {
       if (e.type === 'exit') {
         setRunning(null)
         setLines((l) => [...l, { kind: 'exit', text: `Process exited with code ${e.code ?? 'unknown'}` }])
-      } else setLines((l) => [...l.slice(-3000), { kind: e.type, text: e.data ?? '' }])
+      } else {
+        setLines((l) => [...l.slice(-3000), { kind: e.type, text: e.data ?? '' }])
+        // a dev server announced its address (Vite, Next, http-server...): offer it in the Preview panel
+        const u = e.data ? findDevServerUrl(e.data) : null
+        if (u) setDevUrl(u)
+      }
     })
   }, [root])
 
@@ -57,8 +64,9 @@ export function TerminalPanel({ root }: { root: string }) {
         <span className="panel-title">Terminal</span>
         <span className="muted small">PowerShell in project root</span>
         <div className="row-actions">
+          {devUrl && <button className="btn small ghost" title={`Open ${devUrl} in Preview`} onClick={() => openPreview(root, devUrl)}><Globe size={12} /> <span className="ellipsis">Open {devUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')} in Preview</span></button>}
           {running && <button className="btn small ghost" onClick={() => api.invoke('term:stop', running)}><Square size={12} /> Stop</button>}
-          <button className="icon-btn" title="Clear" aria-label="Clear terminal" onClick={() => setLines([])}><Trash2 size={14} /></button>
+          <button className="icon-btn" title="Clear" aria-label="Clear terminal" onClick={() => (setLines([]), setDevUrl(null))}><Trash2 size={14} /></button>
         </div>
       </div>
       <div className="term-out" ref={box} onClick={() => document.getElementById('term-input')?.focus()}>

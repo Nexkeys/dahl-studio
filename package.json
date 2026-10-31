@@ -1,9 +1,10 @@
 {
   "name": "dahl-studio",
   "productName": "Dahl Studio",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Local-first Windows coding studio powered by the Dahl API",
-  "author": "Dahl Studio",
+  "author": "NexKeys",
+  "license": "UNLICENSED",
   "main": "./out/main/index.js",
   "private": true,
   "repository": "github:Nexkeys/dahl-studio",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Square, Pause, Bookmark, Plus, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText } from 'lucide-react'
-import type { RunState } from '@shared/types'
+import type { RunState, StartRunRequest } from '@shared/types'
 import { api, useStore } from '../store'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
@@ -41,7 +41,7 @@ export function ChatPanel({ root }: { root: string }) {
     if (el && stick.current) el.scrollTop = el.scrollHeight
   }, [p?.transcript.length, p?.live, p?.liveReasoning])
 
-  const send = async (text: string) => {
+  const send = async (text: string, mcpServers?: StartRunRequest['mcpServers']) => {
     if (running) return
     if (!settings?.defaultModel) return notify('Select a model first.', 'error')
     const provider = settings.defaultModel.split(':')[0]
@@ -52,7 +52,7 @@ export function ChatPanel({ root }: { root: string }) {
     stick.current = true
     try {
       const resumable = p?.runId && p.status && p.status !== 'running'
-      await api.invoke('agent:start', { project: root, prompt: text, mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined })
+      await api.invoke('agent:start', { project: root, prompt: text, mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined, mcpServers })
     } catch (e) {
       notify((e as Error).message, 'error')
       patchProject(root, { attachments })

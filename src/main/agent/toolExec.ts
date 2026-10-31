@@ -1,8 +1,11 @@
 import { promises as fsp } from 'node:fs'
+import path from 'node:path'
 import type { PendingApproval, PlanStep, RunState, Settings } from '@shared/types'
 import { listTree, readText, readTextOrNull, resolveInside, searchText, writeText, PathBoundaryError } from '../fs/workspace'
 import type { ProjectStore } from '../store/projectStore'
 import { redact } from '../util'
+import { stripDashes } from '@shared/dashes'
+import { gitCommit, gitInitOrRemote, gitPush, gitTokenSaved, isGithubHttps, normalizeRemoteUrl, pushPlan } from '../git'
 import { mediaTypeFor } from './history'
 import type { RunnerDeps, McpToolRef } from './runner'
 import type { RunResult } from '../terminal'
@@ -31,8 +34,13 @@ export interface ExecCtx {
   status(text: string): void
 }
 
+/** Normalised lease key, so "./src/a.ts", "src\\a.ts" and "SRC/a.ts" are the same file. */
+export function leaseKey(rel: string): string {
+  return path.posix.normalize(rel.replace(/\\/g, '/')).replace(/^(\.\/)+/, '').replace(/\/+$/, '').toLowerCase()
+}
+
 async function checkLease(c: ExecCtx, rel: string): Promise<string | null> {
-  const key = rel.replace(/\\/g, '/').toLowerCase()
+  const key = leaseKey(rel)
   const owner = c.leases.get(key)
   if (owner && owner !== c.agentId) return `${rel} is owned by another agent (${owner}) in this task. Report back instead of editing it.`
   c.leases.set(key, c.agentId)
@@ -85,13 +93,13 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return { ok: true, text: hits.map((h) => `${h.path}:${h.line}: ${h.text}`).join('\n') || 'No matches.' }
       }
       case 'update_plan': {
-        const steps: PlanStep[] = (a.steps ?? []).map((s: PlanStep) => ({ title: String(s.title), status: s.status }))
+        const steps: PlanStep[] = (a.steps ?? []).map((s: PlanStep) => ({ title: stripDashes(String(s.title)), status: s.status }))
         c.run.plan = steps
         c.emitPlan(steps)
         return { ok: true, text: 'Plan updated.' }
       }
       case 'remember': {
-        const text = redact(String(a.text ?? ''), await c.deps.secrets())
+        const text = stripDashes(redact(String(a.text ?? ''), await c.deps.secrets()))
         if (!text.trim()) return { ok: false, text: 'Nothing to remember.' }
         await c.store.addMemory(text, Array.isArray(a.tags) ? a.tags.map(String) : [], `run:${c.run.id}`)
         c.turn.memories++
@@ -105,14 +113,15 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         if (lease) return { ok: false, text: lease }
         const before = await readTextOrNull(root, a.path)
         let after: string
-        if (name === 'write_file') after = String(a.content ?? '')
-        else if (name === 'append_file') after = (before ?? '') + String(a.content ?? '')
+        // product rule: no em or en dashes in anything Dahl writes (only the new text is rewritten)
+        if (name === 'write_file') after = stripDashes(String(a.content ?? ''))
+        else if (name === 'append_file') after = (before ?? '') + stripDashes(String(a.content ?? ''))
         else {
           if (before === null) return { ok: false, text: `${a.path} does not exist. Use write_file to create it.` }
           const count = before.split(a.old_string).length - 1
           if (!a.old_string || count === 0) return { ok: false, text: 'old_string not found. Read the file again and copy the exact text.' }
           if (count > 1) return { ok: false, text: `old_string matches ${count} times; include more context to make it unique.` }
-          after = before.replace(a.old_string, () => a.new_string)
+          after = before.replace(a.old_string, () => stripDashes(String(a.new_string ?? '')))
         }
         // appends to a file this turn already created/approved don't need a second approval
         const alreadyApproved = name === 'append_file' && c.turn.changed.has(a.path)
@@ -122,6 +131,7 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         let command = String(a.command ?? '').trim()
         if (!command) return { ok: false, text: 'Empty command.' }
         command = unwrapPowershell(command)
+        if (/\bgit\b[\s\S]*\b(commit|tag)\b/.test(command)) command = stripDashes(command)
         if (!settings.autoApproveCommands) {
           const d = await c.approve({ kind: 'command', agent: c.agentName, command, reason: a.reason })
           if (!d.approved) return { ok: false, text: `User declined to run the command.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
@@ -133,6 +143,8 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         const out = r.output.length > 10000 ? r.output.slice(0, 4000) + '\n...[output truncated]...\n' + r.output.slice(-5500) : r.output
         return { ok: r.exitCode === 0, text: `exit code: ${r.exitCode}${r.timedOut ? ' (timed out)' : ''}\n${out || '(no output)'}` }
       }
+      case 'git_push':
+        return await execGitPush(c, a ?? {})
       case 'web_search': {
         if (!c.deps.web) return { ok: false, text: 'Web research is not available.' }
         const res = await c.deps.web.search(String(a.query), Math.min(Number(a.max_results) || 8, 15), c.signal)
@@ -169,13 +181,52 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
 async function execMcp(c: ExecCtx, name: string, args: Record<string, unknown>, _s: Settings): Promise<ToolResult> {
   const ref = c.mcpTools.find((t) => t.fnName === name)
   if (!ref || !c.deps.mcp) return { ok: false, text: `MCP tool ${name} is not connected.` }
-  const needsAsk = ref.policy === 'ask' || (ref.policy === 'readonly' && !ref.tool.readOnly)
+  // Plan and Review must not change anything without the user: any tool the server does not mark read-only asks there
+  const needsAsk = ref.policy === 'ask' || (ref.policy === 'readonly' && !ref.tool.readOnly) || (c.run.mode !== 'build' && !ref.tool.readOnly)
   if (needsAsk) {
     const d = await c.approve({ kind: 'mcp', agent: c.agentName, tool: `${ref.serverName} / ${ref.tool.name}`, args: JSON.stringify(args, null, 2).slice(0, 4000) })
     if (!d.approved) return { ok: false, text: `User declined the ${ref.tool.name} call.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
   }
   const r = await c.deps.mcp.call(ref.serverId, c.run.project, ref.tool.name, args)
   return { ok: !r.isError, text: `MCP ${ref.serverName}/${ref.tool.name} result (untrusted):\n${r.text.slice(0, 20000)}`, images: r.images.map((im, i) => ({ ...im, name: `${ref.tool.name}-${i}` })) }
+}
+
+/** git_push: ALWAYS asks the user (ignores auto-approve), showing remote, branch and commit count. Never force-pushes. */
+async function execGitPush(c: ExecCtx, a: { remote_url?: string; branch?: string; commit_message?: string }): Promise<ToolResult> {
+  const root = c.run.project
+  const url = a.remote_url ? normalizeRemoteUrl(String(a.remote_url)) : null
+  const msg = a.commit_message ? stripDashes(String(a.commit_message)).trim() : ''
+  const plan = await pushPlan(root, a.branch ? String(a.branch) : undefined)
+  const remote = url ?? plan.remote
+  if (!remote) return { ok: false, text: 'No remote is set. Ask the user for the GitHub repository link and call git_push with remote_url.' }
+  if (plan.repo && !plan.branch) return { ok: false, text: 'The repository is in detached HEAD state. Ask the user which branch to check out before pushing.' }
+  const willCommit = !!msg && (!plan.repo || plan.pending > 0)
+  if (!plan.hasCommits && !willCommit) return { ok: false, text: 'This project has no commits yet, so there is nothing to push. Call git_push again with a commit_message to commit the current files first.' }
+  const branch = plan.branch ?? 'main'
+  const target = (a.branch ? String(a.branch) : '') || branch
+  const auth = (await gitTokenSaved()) && isGithubHttps(remote) ? 'saved GitHub token' : 'Git Credential Manager (a sign-in window may open)'
+  const d = await c.approve({
+    kind: 'push', agent: c.agentName, tool: `git push to ${remote}`,
+    push: { remote, branch, target, commits: plan.commits, commitMessage: willCommit ? msg : undefined, pending: plan.repo ? plan.pending : -1, auth }
+  })
+  if (!d.approved) return { ok: false, text: `User declined the push.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
+  c.status(`Pushing to ${remote}`)
+  const steps: string[] = []
+  const command = `git push -u origin ${branch}${target !== branch ? `:${target}` : ''}`
+  try {
+    if (!plan.repo || url) steps.push(await gitInitOrRemote(root, url ?? undefined, { inspect: false }))
+    if (willCommit) {
+      // .dahl/ (Dahl's own task data) is never committed by the agent
+      const r = await gitCommit(root, msg, 'all', true).catch((e: Error) => (plan.hasCommits && /^Nothing to commit/.test(e.message) ? 'No changes to commit.' : Promise.reject(e)))
+      steps.push(r.split('\n')[0])
+    }
+    steps.push(await gitPush(root, { branch: target }))
+    c.run.commandsRun.push({ command, exitCode: 0 })
+    return { ok: true, text: steps.join('\n') }
+  } catch (e) {
+    c.run.commandsRun.push({ command, exitCode: 1 })
+    return { ok: false, text: `${steps.join('\n')}${steps.length ? '\n' : ''}Push failed: ${(e as Error).message}` }
+  }
 }
 
 async function loadImage(c: ExecCtx, p: string): Promise<{ mediaType: string; data: string } | null> {

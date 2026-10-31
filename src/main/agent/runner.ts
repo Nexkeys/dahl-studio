@@ -5,9 +5,10 @@ import { DahlError, type ChatRequest, type ChatResult, type StreamCallbacks } fr
 import { projectOutline, resolveInside, writeText } from '../fs/workspace'
 import { ProjectStore } from '../store/projectStore'
 import { nowIso, redact, shortId } from '../util'
+import { stripDashes } from '@shared/dashes'
 import { ROLE_INFO, systemPrompt, THINKING_GUIDANCE, TOOL_DEFS, toolsFor, WRITE_ROLES } from './tools'
 import { buildUserContent, compact, repairHistory, summariseTool, summary } from './history'
-import { execTool, type ExecCtx, type ToolResult } from './toolExec'
+import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
 
@@ -24,7 +25,8 @@ export interface McpToolRef {
   fnName: string
 }
 export interface McpBridge {
-  toolsFor(project: string): Promise<McpToolRef[]>
+  /** `only`: load just these server ids; `problems`: receives a readable reason per unusable server */
+  toolsFor(project: string, only?: string[], problems?: string[]): Promise<McpToolRef[]>
   call(serverId: string, project: string, tool: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean; images: { mediaType: string; data: string }[] }>
 }
 export interface RunnerDeps {
@@ -54,7 +56,7 @@ interface RunCtl {
   web: boolean
   images: Map<string, { mediaType: string; data: string }>
   mcpTools: McpToolRef[]
-  turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number }
+  turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number; delegations?: number }
   prompt: string
   answer: string
 }
@@ -96,6 +98,9 @@ export class AgentRunner {
       id: shortId(), project: req.project, objective: req.prompt.slice(0, 200), mode: req.mode, model: req.model, thinking: req.thinking ?? 'off', status: 'running',
       createdAt: nowIso(), updatedAt: nowIso(), plan: [], changedFiles: [], commandsRun: [], backups: {}, messages: [], transcript: [], iterations: 0, agents: [], log: []
     }
+    // an MCP slash-command focus carries over only when an unfinished turn is resumed (paused/interrupted, or "Continue" after a failure)
+    const unfinished = run.status === 'paused' || run.status === 'interrupted' || (run.status === 'failed' && /^continue$/i.test(req.prompt.trim()))
+    run.mcpServers = req.mcpServers ?? (req.resumeRunId && unfinished ? run.mcpServers : undefined)
     Object.assign(run, { mode: req.mode, model: req.model, thinking: req.thinking ?? run.thinking ?? 'off', status: 'running', lastError: undefined, iterations: 0, backups: {} })
     run.agents ??= []
     run.log ??= []
@@ -110,7 +115,7 @@ export class AgentRunner {
     }
     this.active.set(k, ctl)
     this.addItem(ctl, { kind: 'user', text: req.prompt, attachments: (req.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name })) })
-    this.log(ctl, 'info', `Turn started: mode=${run.mode} model=${run.model} thinking=${run.thinking} web=${ctl.web} attachments=${req.attachments?.length ?? 0}`)
+    this.log(ctl, 'info', `Turn started: mode=${run.mode} model=${run.model} thinking=${run.thinking} web=${ctl.web} attachments=${req.attachments?.length ?? 0}${run.mcpServers ? ` mcp=${run.mcpServers}` : ''}`)
     await store.saveRun(run)
     this.emitRun(ctl)
     void this.runTurn(ctl)
@@ -209,7 +214,8 @@ export class AgentRunner {
     const settings = await this.deps.getSettings()
     if (settings.maintainProgress) await progressStart(run.project, run, ctl.prompt).catch((e) => this.log(ctl, 'error', `PROGRESS.md: ${(e as Error).message}`))
     try {
-      if (this.deps.mcp && run.mode === 'build') ctl.mcpTools = await this.deps.mcp.toolsFor(run.project).catch((e) => (this.log(ctl, 'error', `MCP unavailable: ${(e as Error).message}`), []))
+      // MCP tools are offered in every mode; outside Build, execMcp asks before any tool not marked read-only
+      if (this.deps.mcp) await this.loadMcp(ctl, this.deps.mcp)
       ctl.answer = await this.agentLoop(ctl, lead)
       await this.autoMemory(ctl).catch((e) => this.log(ctl, 'error', `auto-memory failed: ${(e as Error).message}`))
       await this.finish(ctl, 'completed')
@@ -229,6 +235,21 @@ export class AgentRunner {
       this.addItem(ctl, { kind: 'error', text: msg })
       await this.finish(ctl, 'failed')
     }
+  }
+
+  /** Load MCP tools. A slash-command focus loads only the chosen servers and fails the turn clearly when they cannot be used. */
+  private async loadMcp(ctl: RunCtl, mcp: McpBridge): Promise<void> {
+    const focus = ctl.run.mcpServers
+    const only = Array.isArray(focus) ? focus : undefined
+    const problems: string[] = []
+    ctl.mcpTools = await mcp.toolsFor(ctl.run.project, only, problems).catch((e) => (problems.push(`MCP unavailable: ${(e as Error).message}`), []))
+    for (const p of problems) this.log(ctl, 'error', p)
+    if (!focus) return
+    if (only) ctl.mcpTools = ctl.mcpTools.filter((t) => only.includes(t.serverId))
+    const list = problems.map((p) => `- ${p}`).join('\n')
+    if (!ctl.mcpTools.length)
+      throw new Error(`The requested MCP tools are not available, so nothing was run.\n${list || (only ? '- The server is connected but offers no tools.' : '- No MCP server is enabled and connected. Enable one in the Toolbox.')}`)
+    if (problems.length) this.addItem(ctl, { kind: 'status', text: `Some MCP servers are unavailable:\n${list}` })
   }
 
   private allowedTools(ctl: RunCtl, a: AgentCtx): string[] {
@@ -255,6 +276,7 @@ export class AgentRunner {
       role: a.info.role, mode: run.mode, projectName: path.basename(run.project), outline: await projectOutline(run.project), memory,
       plan: run.plan.map((s) => `[${s.status}] ${s.title}`).join('\n'), reasoning, thinking: THINKING_GUIDANCE[run.thinking ?? 'off'],
       task: a.isLead ? undefined : a.info.task, files: a.info.files, mcp: a.isLead ? ctl.mcpTools.map((t) => t.fnName) : [],
+      mcpFocus: !a.isLead || !run.mcpServers ? undefined : run.mcpServers === 'all' ? 'all' : [...new Set(ctl.mcpTools.map((t) => t.serverName))],
       progress: (await this.deps.getSettings()).maintainProgress ? await readProgress(run.project) : ''
     })
   }
@@ -273,6 +295,8 @@ export class AgentRunner {
     while (true) {
       if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
       if (a.isLead && ctl.pauseRequested) throw new PauseSignal('Paused. State is checkpointed; send "Continue" to resume.')
+      // sub-agents stop at their next step so Pause does not wait for (and pay for) every remaining sub-agent step
+      if (!a.isLead && ctl.pauseRequested) return `${lastText}\n[Stopped early: the user paused the task]`
       if (iter >= maxIter) {
         if (a.isLead) throw new PauseSignal(`Step limit (${maxIter}) reached. State is checkpointed; send "Continue" to keep going.`)
         return `${lastText}\n[Stopped after ${maxIter} steps]`
@@ -284,15 +308,24 @@ export class AgentRunner {
       if (!a.isLead) this.emitAgent(ctl, a.info)
       const messages: ChatMessage[] = [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)]
       let streamed = ''
-      const res = await this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
+      const ask = () => this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
         ? {
             onDelta: (t) => ((streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
             onReasoning: (t) => this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t })
           }
         : {})
+      // A sub-agent reply is never streamed to the UI, so a stream cut mid-reply (seen live: "Network error: terminated",
+      // which the router does not retry once bytes arrived) is safe to retry once instead of failing the whole sub-agent.
+      const res = await ask().catch(async (e: unknown) => {
+        if (a.isLead || ctl.abort.signal.aborted || !(e instanceof DahlError) || !['network', 'timeout', 'server'].includes(e.kind)) throw e
+        this.log(ctl, 'error', `${a.info.name}: model call failed (${e.message}); retrying once`)
+        await new Promise((r) => setTimeout(r, 1500))
+        if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
+        return ask()
+      })
       const calls = res.toolCalls ?? []
       let content = cleanModelText(res.content || streamed)
-      let reasoning = trimRepetition(res.reasoning ?? '')
+      let reasoning = stripDashes(trimRepetition(res.reasoning ?? ''))
       // Some models stream their final answer inside reasoning_content and leave content empty: promote it.
       if (!content && !calls.length && reasoning) {
         const parts = reasoning.split(/\n{3,}/)
@@ -326,7 +359,8 @@ export class AgentRunner {
         }
         return content
       }
-      const delegations = calls.filter((c) => c.function.name === 'delegate_agents')
+      // only the lead may delegate: a sub-agent's delegate_agents call goes through execTool and is refused (no nesting)
+      const delegations = a.isLead ? calls.filter((c) => c.function.name === 'delegate_agents') : []
       const pendingImages: ContentPart[] = []
       for (const tc of calls) {
         if (ctl.abort.signal.aborted) {
@@ -376,11 +410,23 @@ export class AgentRunner {
       return { ok: false, text: 'Invalid delegate_agents arguments.' }
     }
     if (!specs.length) return { ok: false, text: 'No agents specified.' }
+    // cost guard: each delegation can run up to 6 agents x many steps, so cap it per user message
+    if ((ctl.turn.delegations ?? 0) >= MAX_DELEGATIONS_PER_TURN) return { ok: false, text: `Delegation limit reached (${MAX_DELEGATIONS_PER_TURN} per request). Finish the task yourself with the reports you already have.` }
+    ctl.turn.delegations = (ctl.turn.delegations ?? 0) + 1
+    // a file given to two write agents would silently go to the last one: refuse so the lead splits the work
+    const owners = new Map<string, number>()
+    for (const [i, s] of specs.entries())
+      if (WRITE_ROLES.includes(s.role)) for (const f of (s.files ?? []).map((x) => leaseKey(String(x)))) {
+        if (owners.has(f) && owners.get(f) !== i) return { ok: false, text: `${f} is assigned to more than one write agent. Give each file to exactly one agent.` }
+        owners.set(f, i)
+      }
+    // the lead is idle while sub-agents run, so its own leases from earlier edits must not block them
+    for (const [f, owner] of ctl.leases) if (owner === 'lead') ctl.leases.delete(f)
     const agents: AgentCtx[] = specs.map((s, i) => {
       const role = (ROLE_INFO[s.role] ? s.role : 'researcher') as AgentRole
       const files = (s.files ?? []).map(String)
       const info: AgentInfo = { id: `${role}-${shortId().slice(0, 4)}`, runId: ctl.run.id, project: ctl.run.project, role, name: `${ROLE_INFO[role].name}${specs.filter((x) => x.role === role).length > 1 ? ` ${i + 1}` : ''}`, task: String(s.task), status: 'thinking', step: 'Starting', toolCount: 0, startedAt: nowIso(), files }
-      if (WRITE_ROLES.includes(role)) for (const f of files) ctl.leases.set(f.replace(/\\/g, '/').toLowerCase(), info.id)
+      if (WRITE_ROLES.includes(role)) for (const f of files) ctl.leases.set(leaseKey(f), info.id)
       return { info, messages: [{ role: 'user', content: `Task from the lead agent:\n${s.task}` }], isLead: false }
     })
     ctl.run.agents!.push(...agents.map((x) => x.info))
@@ -391,7 +437,8 @@ export class AgentRunner {
         try {
           const report = await this.agentLoop(ctl, x)
           Object.assign(x.info, { status: 'done', step: 'Finished', report: report.slice(0, 8000), endedAt: nowIso() })
-          return `## ${x.info.name}\n${report}`
+          // cap what goes back into the lead's context (each report can be long)
+          return `## ${x.info.name}\n${report.length > 12000 ? `${report.slice(0, 12000)}\n[report truncated]` : report}`
         } catch (e) {
           if (ctl.abort.signal.aborted) Object.assign(x.info, { status: 'cancelled', endedAt: nowIso() })
           else Object.assign(x.info, { status: 'failed', step: (e as Error).message.slice(0, 200), endedAt: nowIso() })
@@ -404,7 +451,7 @@ export class AgentRunner {
       })
     )
     if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
-    return { ok: true, text: `Sub-agent reports:\n\n${reports.join('\n\n')}` }
+    return { ok: agents.some((x) => x.info.status === 'done'), text: `Sub-agent reports:\n\n${reports.join('\n\n')}` }
   }
 
   private async requestApproval(ctl: RunCtl, a: AgentCtx, x: Omit<PendingApproval, 'id' | 'runId' | 'project'>): Promise<{ approved: boolean; feedback?: string }> {
@@ -417,6 +464,9 @@ export class AgentRunner {
     if (!a.isLead) this.emitAgent(ctl, a.info)
     await this.setStatus(ctl, 'waiting_approval')
     const d = await p
+    // the agent card must not keep showing "Waiting for approval" while the approved command runs
+    a.info.status = 'tool'
+    if (!a.isLead) this.emitAgent(ctl, a.info)
     if (!ctl.abort.signal.aborted && ctl.approvals.size === 0) await this.setStatus(ctl, 'running')
     this.log(ctl, 'info', `${d.approved ? 'Approved' : 'Rejected'}: ${x.kind} ${x.path ?? x.command ?? x.tool ?? ''}`)
     return d
@@ -478,8 +528,10 @@ export function trimRepetition(s: string): string {
 }
 
 /** Remove leaked special tokens (e.g. DeepSeek DSML tool markers), emoji and degenerate repetition from model text. */
+export const MAX_DELEGATIONS_PER_TURN = 3
+
 export function cleanModelText(s: string): string {
-  return trimRepetition(s)
+  return stripDashes(trimRepetition(s))
     .replace(/<\/?\uFF5C[^>]*?\uFF5C[^>]*>/g, '')
     .replace(/<\uFF5C[^\uFF5C]*\uFF5C>/g, '')
     .replace(/(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u200D(?:\p{Extended_Pictographic}))*/gu, '')

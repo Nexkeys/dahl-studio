@@ -29,7 +29,7 @@ export async function notifyAgentEvent(e: AgentEvent): Promise<void> {
   if (e.type === 'approval' && e.approval) {
     const a = e.approval
     title = `Approval needed in ${project}`
-    body = a.kind === 'write' ? `${a.agent && a.agent !== 'Dahl' ? `${a.agent} wants` : 'Dahl wants'} to change ${a.path}` : a.kind === 'command' ? `Run command: ${a.command}` : `Use connector tool ${a.tool}`
+    body = a.kind === 'write' ? `${a.agent && a.agent !== 'Dahl' ? `${a.agent} wants` : 'Dahl wants'} to change ${a.path}` : a.kind === 'command' ? `Run command: ${a.command}` : a.kind === 'push' ? `Push to ${a.push?.remote ?? 'GitHub'}` : `Use connector tool ${a.tool}`
   } else if (e.type === 'status' && e.status) {
     if (e.status === 'completed') (title = `Dahl finished in ${project}`), (body = 'The task is complete. Review the result and summary.')
     else if (e.status === 'failed') (title = `Dahl hit an error in ${project}`), (body = 'The task stopped with an error. Open Dahl Studio to see it and Continue.')

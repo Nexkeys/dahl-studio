@@ -2,6 +2,7 @@ import { useEffect, useCallback, Suspense } from 'react'
 import { X, Check, Save, GitCompare, Code2 } from 'lucide-react'
 import { addAttachments, api, useStore } from '../store'
 import { languageFor } from '../lang'
+import { RejectButton } from './ApprovalCard'
 import { Editor, DiffEditor } from '../lazyMonaco'
 
 const EditorLoading = () => <div className="empty-state"><span className="spinner" /></div>
@@ -58,9 +59,8 @@ export function EditorArea({ root }: { root: string }) {
     })
   }
 
-  const decide = async (approved: boolean) => {
+  const decide = async (approved: boolean, feedback?: string) => {
     if (!review) return
-    const feedback = approved ? undefined : window.prompt('Optional: tell Dahl why, or what to do instead') ?? undefined
     await api.invoke('agent:approve', review.id, approved, feedback)
     patch(root, (c) => ({ approvals: c.approvals.filter((a) => a.id !== review.id), reviewing: null }))
   }
@@ -96,7 +96,7 @@ export function EditorArea({ root }: { root: string }) {
               {review.reason && <div className="muted small">{review.reason}</div>}
             </div>
             <div className="row-actions">
-              <button className="btn ghost" onClick={() => decide(false)}><X size={14} /> Reject</button>
+              <RejectButton className="btn ghost" onReject={(f) => void decide(false, f)} />
               <button className="btn primary" onClick={() => decide(true)}><Check size={14} /> Approve and apply</button>
             </div>
           </div>

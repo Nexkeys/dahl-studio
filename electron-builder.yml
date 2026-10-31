@@ -1,6 +1,6 @@
 appId: global.dahl.studio
 productName: Dahl Studio
-copyright: Dahl Studio
+copyright: Copyright (c) 2026 NexKeys. All rights reserved.
 directories:
   buildResources: build
   output: release
@@ -8,6 +8,7 @@ files:
   - out/**/*
   - resources/**/*
   - package.json
+  - LICENSE
 extraResources:
   - from: resources/icon.png
     to: icon.png

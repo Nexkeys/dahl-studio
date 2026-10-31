@@ -79,7 +79,7 @@ export async function listModels(fetchImpl: FetchLike = fetch, signal?: AbortSig
   return (json.data ?? []).map((m) => ({ id: String(m.id), ownedBy: m.owned_by }))
 }
 
-/** GET /tokens/current — remaining tokens on that key (provider-reported). */
+/** GET /tokens/current: remaining tokens on that key (provider-reported). */
 export async function getKeyBalance(key: string, fetchImpl: FetchLike = fetch): Promise<{ status: number; body: unknown }> {
   let res: Response
   try {

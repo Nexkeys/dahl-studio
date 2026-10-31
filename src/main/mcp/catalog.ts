@@ -223,8 +223,8 @@ export const CATALOG: McpCatalogEntry[] = [
     id: 'supabase',
     name: 'Supabase',
     publisher: 'Supabase (official)',
-    description: 'Work with your own Supabase project: tables, SQL, migrations, logs. Uses your own Supabase account and access token.',
-    whenUsed: ['Designing schemas and running queries in your Supabase project'],
+    description: 'Work with your own Supabase projects: tables, SQL, migrations, logs, edge functions. Read-only by default; write access is a separate switch on the card.',
+    whenUsed: ['Inspecting schemas, data and logs in your Supabase project', 'Applying migrations or deploying edge functions (only with write access on)'],
     exampleTasks: ['List the tables in my project', 'Create a migration adding a profiles table'],
     runsWhere: 'local',
     needsInternet: 'Yes (Supabase API)',
@@ -234,12 +234,39 @@ export const CATALOG: McpCatalogEntry[] = [
     source: 'https://github.com/supabase/mcp',
     runtime: 'Node.js via npx',
     version: '0.14.0',
-    permissions: ['Read and modify your Supabase database (use --read-only for safety)'],
-    access: 'Your Supabase projects',
+    permissions: [
+      'Read-only (default): list projects, tables, migrations, logs, advisors, edge functions; SQL runs as a read-only database user',
+      'Write access: also execute_sql as a normal user, apply_migration, deploy_edge_function, branch create/merge/reset/delete and (unscoped) create, pause or restore projects'
+    ],
+    access: 'Every project your access token can reach, or one project when a project ref is set',
     dataLeaves: 'Queries and schema go to Supabase; results go to the AI model',
-    risks: ['Can change or delete data; start in read-only mode', 'Token must be kept secret; it is never sent to the AI model'],
+    risks: [
+      'With write access it can change or delete data, schema and edge functions, and create billable projects or branches; every write needs your approval',
+      'A personal access token covers all your organisations and projects; set a project ref to scope it to one',
+      'Token must be kept secret; it is never sent to the AI model'
+    ],
     classification: 'external_account',
     risk: 'high',
-    install: { name: 'Supabase', transport: 'stdio', command: 'npx', args: ['-y', '@supabase/mcp-server-supabase@0.14.0', '--read-only'], env: { SUPABASE_ACCESS_TOKEN: '' }, catalogId: 'supabase' }
+    // the peers (@modelcontextprotocol/server, zod) are named explicitly: with npm's legacy-peer-deps=true, "npx -y <pkg>"
+    // skips them and the server dies with ERR_MODULE_NOT_FOUND. Tunable flags (see @shared/mcpArgs) go after the bin name.
+    install: {
+      name: 'Supabase', transport: 'stdio', command: 'npx',
+      args: ['-y', '-p', '@supabase/mcp-server-supabase@0.14.0', '-p', '@modelcontextprotocol/server@2.4.0', '-p', 'zod@4.6.7', 'mcp-server-supabase', '--read-only'],
+      env: { SUPABASE_ACCESS_TOKEN: '' }, catalogId: 'supabase'
+    },
+    // harmless reads that need a valid token (get_project_url does not: it only formats a URL)
+    capabilityTest: { tool: 'list_projects', args: {}, expect: 'projects' }
   }
 ]
+
+/** Alternative capability tests, used when the main test's tool is not exposed (Supabase scoped to one project has no list_projects). */
+const ALT_TESTS: Record<string, NonNullable<McpCatalogEntry['capabilityTest']>[]> = {
+  supabase: [{ tool: 'list_migrations', args: {}, expect: 'migrations' }]
+}
+
+/** The first capability test whose tool the server lists; otherwise the main test (so a missing tool fails visibly). */
+export function capabilityTestFor(catalogId: string | undefined, tools: string[]): McpCatalogEntry['capabilityTest'] {
+  const entry = CATALOG.find((c) => c.id === catalogId)
+  const all = [...(entry?.capabilityTest ? [entry.capabilityTest] : []), ...(ALT_TESTS[catalogId ?? ''] ?? [])]
+  return all.find((t) => tools.includes(t.tool)) ?? all[0]
+}

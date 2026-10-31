@@ -3,6 +3,15 @@ import { promises as fs } from 'node:fs'
 import type { MemoryEntry, RunState, RunSummary } from '@shared/types'
 import { atomicWrite, nowIso, readJson, shortId, writeJson } from '../util'
 
+// Parallel sub-agents share one store: run each read-modify-write of a file in turn, never interleaved
+const queues = new Map<string, Promise<unknown>>()
+function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const next = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(fn)
+  queues.set(key, next)
+  void next.finally(() => queues.get(key) === next && queues.delete(key)).catch(() => {})
+  return next
+}
+
 /**
  * Per-project state lives in <project>/.dahl:
  *   memory.json        structured memory entries (also mirrored to memory.md for humans)
@@ -38,7 +47,11 @@ export class ProjectStore {
     return readJson<MemoryEntry[]>(this.memFile(), [])
   }
 
-  async saveMemory(entries: MemoryEntry[]): Promise<void> {
+  saveMemory(entries: MemoryEntry[]): Promise<void> {
+    return serial(this.memFile(), () => this.writeMemory(entries))
+  }
+
+  private async writeMemory(entries: MemoryEntry[]): Promise<void> {
     await this.ensure()
     await writeJson(this.memFile(), entries)
     const md = ['# Project memory', '', ...entries.map((e) => `- ${e.text}${e.tags.length ? `  _(${e.tags.join(', ')})_` : ''}`)].join('\n')
@@ -46,11 +59,13 @@ export class ProjectStore {
   }
 
   async addMemory(text: string, tags: string[], source: string): Promise<MemoryEntry> {
-    const all = await this.listMemory()
-    const entry: MemoryEntry = { id: shortId(), text: text.trim().slice(0, 1000), tags, source, createdAt: nowIso() }
-    all.push(entry)
-    await this.saveMemory(all)
-    return entry
+    return serial(this.memFile(), async () => {
+      const all = await this.listMemory()
+      const entry: MemoryEntry = { id: shortId(), text: text.trim().slice(0, 1000), tags, source, createdAt: nowIso() }
+      all.push(entry)
+      await this.writeMemory(all)
+      return entry
+    })
   }
 
   /**
@@ -67,10 +82,12 @@ export class ProjectStore {
     return path.join(this.dir, 'runs', `${id}.json`)
   }
 
-  async saveRun(run: RunState): Promise<void> {
-    await this.ensure()
-    run.updatedAt = nowIso()
-    await writeJson(this.runFile(run.id), run)
+  saveRun(run: RunState): Promise<void> {
+    return serial(this.runFile(run.id), async () => {
+      await this.ensure()
+      run.updatedAt = nowIso()
+      await writeJson(this.runFile(run.id), run)
+    })
   }
 
   async loadRun(id: string): Promise<RunState | null> {
@@ -104,6 +121,8 @@ export class ProjectStore {
         const r = await this.loadRun(s.id)
         if (r) {
           r.status = 'interrupted'
+          // sub-agents that were mid-step would otherwise show as "running" forever in the Agents view
+          for (const a of r.agents ?? []) if (!a.endedAt) Object.assign(a, { status: 'cancelled', step: 'Interrupted', endedAt: r.updatedAt })
           await this.saveRun(r)
           n++
         }

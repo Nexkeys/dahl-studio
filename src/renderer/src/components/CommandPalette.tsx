@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, FileText, Command } from 'lucide-react'
 import type { ThemeId } from '@shared/types'
-import { api, openFile, updateSettings, useStore, type View } from '../store'
+import { fileUrlFor } from '@shared/preview'
+import { api, openFile, openPreview, updateSettings, useStore, type View } from '../store'
 import { THEMES, applyTheme } from '../themes'
 
 interface Item { id: string; label: string; hint?: string; run: () => void; file?: boolean }
@@ -9,6 +10,7 @@ interface Item { id: string; label: string; hint?: string; run: () => void; file
 export function CommandPalette() {
   const open = useStore((s) => s.palette)
   const root = useStore((s) => s.settings?.activeProject ?? null)
+  const activePath = useStore((s) => (root ? s.projects[root]?.active ?? null : null))
   const set = useStore((s) => s.set)
   const [q, setQ] = useState('')
   const [files, setFiles] = useState<string[]>([])
@@ -53,10 +55,14 @@ export function CommandPalette() {
   ], [])
   const items: Item[] = useMemo(() => {
     const lq = q.toLowerCase().trim()
-    const acts = actions.filter((a) => !lq || a.label.toLowerCase().includes(lq))
+    const preview: Item[] = !root ? [] : [
+      { id: 'prev', label: 'Toggle preview browser', run: () => (useStore.getState().showPreview ? set({ showPreview: false }) : openPreview(root), close()) },
+      ...(activePath && /\.(html?|xhtml|svg)$/i.test(activePath) ? [{ id: 'prev-f', label: `Preview this file (${activePath})`, run: () => (openPreview(root, fileUrlFor(`${root}/${activePath}`)), close()) }] : [])
+    ]
+    const acts = [...preview, ...actions].filter((a) => !lq || a.label.toLowerCase().includes(lq))
     const fs = root ? files.filter((f) => !lq || f.toLowerCase().includes(lq)).slice(0, 40).map((f) => ({ id: `f-${f}`, label: f, file: true, run: () => (void openFile(root, f), close()) })) : []
     return lq ? [...fs, ...acts] : [...acts, ...fs.slice(0, 12)]
-  }, [q, files, actions, root])
+  }, [q, files, actions, root, activePath])
 
   if (!open) return null
   return (

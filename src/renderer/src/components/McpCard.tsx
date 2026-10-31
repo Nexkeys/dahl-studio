@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { ChevronDown, Download, Plug, PlugZap, Power, ScrollText, Trash2, FlaskConical, ExternalLink, ShieldAlert, Globe, HardDrive, KeyRound } from 'lucide-react'
 import type { McpCatalogEntry, McpServerConfig, McpStatus } from '@shared/types'
+import { allowsWrites, isReadOnly, projectRef, setProjectRef, setReadOnly } from '@shared/mcpArgs'
 import { api, useStore } from '../store'
+
+const SECRET_LABEL: Record<string, string> = { SUPABASE_ACCESS_TOKEN: 'Supabase access token' }
+const SECRET_HINT: Record<string, { text: string; url: string }> = {
+  SUPABASE_ACCESS_TOKEN: { text: 'Create a personal access token', url: 'https://supabase.com/dashboard/account/tokens' }
+}
+
+type Act = (label: string, fn: () => Promise<unknown>) => Promise<void>
 
 export const CLASS_LABEL: Record<string, string> = {
   included_local: 'Included local tool', optional_local: 'Optional local install', free_online: 'Free online, no API key',
@@ -29,6 +37,7 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
     }
   }
   const state = status?.state ?? 'stopped'
+  const writes = !!cfg && allowsWrites(cfg.catalogId, cfg.args ?? entry?.install?.args)
   return (
     <div className={`mcp-card ${entry?.risk === 'high' ? 'high' : ''} reveal`}>
       <div className="mcp-head">
@@ -71,16 +80,16 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
           <select className="input small" value={cfg.policy} onChange={(e) => act('policy', () => api.invoke('mcp:update', cfg.id, { policy: e.target.value }))} aria-label="Approval policy">
             <option value="ask">Ask before every call</option>
             <option value="readonly">Auto-allow read-only tools</option>
-            <option value="allow">Never ask (trusted)</option>
+            <option value="allow" disabled={writes}>Never ask (trusted){writes ? ': not with write access' : ''}</option>
           </select>
         )}
-        {cfg && Object.keys(cfg.env ?? {}).map((k) => (
-          <button key={k} className="btn small ghost" onClick={() => { const v = window.prompt(`Value for ${k} (stored encrypted, never sent to the AI model)`); if (v) void act('env', () => api.invoke('mcp:update', cfg.id, { env: { [k]: v } })) }}><KeyRound size={12} /> {k}{cfg.env![k] ? ' (set)' : ''}</button>
-        ))}
         {cfg && <button className="icon-btn danger" title="Remove" aria-label="Remove" onClick={() => window.confirm(`Remove ${name}?`) && act('rm', () => api.invoke('mcp:remove', cfg.id))}><Trash2 size={14} /></button>}
         <span className="grow" />
         {entry && <button className="btn small ghost" onClick={() => setOpen(!open)}>Learn more <ChevronDown size={12} className={`chev-d ${open ? 'open' : ''}`} /></button>}
       </div>
+      {/* secrets are typed inline: window.prompt() does not exist in Electron, so the old prompt button could never save a value */}
+      {cfg && Object.keys(cfg.env ?? {}).map((k) => <SecretField key={k} label={SECRET_LABEL[k] ?? k} hint={SECRET_HINT[k]} set={!!cfg.env![k]} busy={!!busy} onSave={(v) => act('env', () => api.invoke('mcp:update', cfg.id, { env: { [k]: v } }))} />)}
+      {cfg && entry?.id === 'supabase' && <SupabaseOptions cfg={cfg} args={cfg.args ?? entry.install?.args ?? []} busy={!!busy} act={act} />}
       {logs && <pre className="mini-pre logs">{logs.join('\n') || 'No logs yet. Logs appear when the server starts.'}</pre>}
       {open && entry && (
         <div className="mcp-more small">
@@ -93,6 +102,48 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
           <div><b>Risks:</b> {entry.risks.join(' ')}</div>
           <div><a href={entry.source} target="_blank" rel="noreferrer">Source <ExternalLink size={11} /></a> · AI responses still use your selected model provider (Dahl API usage applies).</div>
         </div>
+      )}
+    </div>
+  )
+}
+
+/** Password field for one secret env value; stored encrypted by the main process and never shown again. */
+function SecretField({ label, hint, set, busy, onSave }: { label: string; hint?: { text: string; url: string }; set: boolean; busy: boolean; onSave: (v: string) => Promise<void> }) {
+  const [v, setV] = useState('')
+  const save = () => v.trim() && void onSave(v.trim()).then(() => setV(''))
+  return (
+    <div className="row wrap small">
+      <KeyRound size={12} /> <b>{label}</b> <span className={set ? 'muted' : 'c-danger'}>{set ? 'set (stored encrypted)' : 'not set'}</span>
+      <input className="input small grow" type="password" autoComplete="off" spellCheck={false} placeholder={set ? 'Paste a new value to replace it' : 'Paste the value'} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} aria-label={label} />
+      <button className="btn small ghost" disabled={busy || !v.trim()} onClick={save}>Save</button>
+      {hint && <a href={hint.url} target="_blank" rel="noreferrer">{hint.text} <ExternalLink size={11} /></a>}
+    </div>
+  )
+}
+
+/** Supabase: project scope and the read-only switch, both stored as tunable flags in the server's args. */
+function SupabaseOptions({ cfg, args, busy, act }: { cfg: McpServerConfig; args: string[]; busy: boolean; act: Act }) {
+  const ro = isReadOnly(args)
+  const [ref, setRef] = useState(projectRef(args) ?? '')
+  const saveRef = (r: string) => act('ref', async () => api.invoke('mcp:update', cfg.id, { args: setProjectRef(args, r) }))
+  const toggle = () => act('rw', async () => {
+    if (ro && !window.confirm('Allow Dahl to change your Supabase projects?\n\nThe model can then run any SQL (insert, update, delete, drop), apply migrations, deploy edge functions and manage branches' + (projectRef(args) ? '.' : ', and create, pause or restore projects (creating can cost money). Set a project ref first to limit this to one project.') + '\n\nEvery write still asks for your approval. Prefer a development project or branch.')) return
+    await api.invoke('mcp:update', cfg.id, { args: setReadOnly(args, !ro) })
+  })
+  return (
+    <div className="mcp-more small">
+      <div className="row wrap">
+        <b>Project ref</b>
+        <input className="input small grow" placeholder="optional, e.g. abcdefghijklmnopqrst (Project Settings > General)" value={ref} onChange={(e) => setRef(e.target.value.trim())} aria-label="Supabase project ref" />
+        <button className="btn small ghost" disabled={busy || ref === (projectRef(args) ?? '')} onClick={() => void saveRef(ref)}>Save</button>
+        {projectRef(args) && <button className="btn small ghost" disabled={busy} onClick={() => { setRef(''); void saveRef('') }}>Clear</button>}
+      </div>
+      <div className="muted">{projectRef(args) ? `Scoped to project ${projectRef(args)}: account tools (list, create, pause projects) are hidden.` : 'Not scoped: the token reaches every project in every organisation you belong to. Setting a project ref is strongly recommended.'}</div>
+      <label className="check"><input type="checkbox" checked={!ro} disabled={busy} onChange={toggle} /> <b>Allow changes (write access)</b></label>
+      {ro ? (
+        <div>Read-only (default): Dahl can list projects, tables, extensions, migrations, edge functions and branches, read logs and advisors, generate types and run SQL as a read-only database user. Write tools are not offered to the model.</div>
+      ) : (
+        <div className="note c-danger"><ShieldAlert size={14} /> <span>Write access: Dahl can run any SQL (including DELETE and DROP), apply migrations, deploy edge functions, create, merge, reset and delete branches{projectRef(args) ? '' : ', and create, pause or restore projects'}. Each of these asks for your approval (the "Never ask" policy is blocked); approve only statements you have read. Use a development project or branch where possible.</span></div>
       )}
     </div>
   )

@@ -1,11 +1,11 @@
 # Progress / Handoff
 
-Last updated: 2026-10-27 (v0.3.5 released). Read README.md, then CHANGELOG.md, then this file.
+Last updated: 2026-10-31 (v0.3.6 released). Read README.md, then CHANGELOG.md, then this file.
 
 ## Status by area
 | Area | Status |
 |---|---|
-| Electron/React/TS/Monaco foundation, installer | Done. v0.3.5 installer published; v0.2 install/uninstall verified |
+| Electron/React/TS/Monaco foundation, installer | Done. v0.3.6 installer published; v0.2 install/uninstall verified |
 | Auto-update (GitHub Releases, differential download) | Done; verified end to end on the user's PC (0.3.3 to 0.3.4) |
 | Windows notifications (approvals, task status) | Done; verified in the built app |
 | Dahl API (models, SSE, tools, 2-key failover, balance test) | Done; live chat verified in built app |
@@ -16,10 +16,12 @@ Last updated: 2026-10-27 (v0.3.5 released). Read README.md, then CHANGELOG.md, t
 | Attachments (files/folders/images, paste, @mentions, Ctrl+L) | Done |
 | Image understanding (view_image / analyze_image with OCR, max 2 vision candidates) | Done; OCR live-verified |
 | Reasoning panel (default + presets, per project) | Done, unit-tested |
-| Sub-agents + Agents view | Done, unit-tested with scripted model; not yet run against a live model |
+| Sub-agents + Agents view | Done. Live Review run on Dahl verified (0.3.6); 8 bugs fixed; `tests/subagents.test.ts`. Build-mode delegation not run live |
 | Web research (built-in DuckDuckGo search + fetch) | Done, live-verified |
-| MCP manager + Free Toolbox | Done; Filesystem, Playwright, DuckDuckGo, Git, Fetch capability-verified |
-| Source Control view | Done; push not tested against a real remote |
+| MCP manager + Free Toolbox | Done; Filesystem, Playwright, DuckDuckGo, Git, Fetch capability-verified. MCP tools in every mode (approval outside Build); `/<server>` and `/mcp` slash commands (0.3.6) |
+| Supabase connector | 0.3.6: starts again (peer deps pinned), token field, project ref, write-access switch. Not run with a real token |
+| Source Control / GitHub push | 0.3.6: `git_push` agent tool, Publish to GitHub box, optional encrypted token. Tested against local bare repos and an authenticated git http server; no real GitHub push yet |
+| Preview browser (webview) | Done (0.3.6); smoke-verified in the built app |
 | Logs view (per task + app) | Done |
 | App-maintained PROGRESS.md work log for user projects | Done, unit-tested |
 | 10 themes with effects + preview cards | Done; Visual effects setting (Automatic / Full / Reduced) for slow PCs |
@@ -32,7 +34,7 @@ Last updated: 2026-10-27 (v0.3.5 released). Read README.md, then CHANGELOG.md, t
 2. Live-test a delegate_agents run (for example `/review`) on Dahl and check the Agents view.
 3. Capability-test ToolDash (needs npx) and Godot (needs Godot). Supabase needs a user account and token.
 4. Worktree isolation for parallel *write* agents in the same project (currently file leases).
-5. GitHub auth helper (device flow) for push without a pre-configured credential manager.
+5. First real GitHub push from the app (token and Git Credential Manager paths), and a real Supabase token run. Add a Pull button for the unrelated-history case.
 6. Clean-machine install test; code signing certificate.
 7. Not yet observed: a long streamed reply from a real model in the built app with the new batching (it is benchmarked and unit-tested only). Also not done: transcript virtualization for very long chats.
 
@@ -51,3 +53,5 @@ Last updated: 2026-10-27 (v0.3.5 released). Read README.md, then CHANGELOG.md, t
 - Live tests: `$env:DAHL_LIVE=1; npx vitest run tests/live.test.ts` (needs network, uvx and npx).
 - Atom icon on the installed app's taskbar button: look for a Start Menu `.lnk` that carries `System.AppUserModel.ID = global.dahl.studio` but targets `electron.exe`. Electron creates one for notifications. Dev and smoke runs must keep the `.dev` AppUserModelId.
 - Never pipe long-running publish commands through `Select-Object -First` (it killed a release upload). Log to a file instead.
+- `window.prompt()` does not exist in Electron (it throws). Use inline inputs; 0.3.6 removed every use.
+- Product rules: no em or en dashes anywhere (`src/shared/dashes.ts` enforces it on model output and agent writes); ownership notice is NexKeys (LICENSE, build stamp).

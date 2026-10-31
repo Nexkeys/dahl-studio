@@ -9,6 +9,9 @@ export interface Encryptor {
   decryptString(b: Buffer): string
 }
 
+/** Vault slot for the optional GitHub personal access token used for pushing (never sent to the AI model). */
+export const GITHUB_TOKEN_SLOT = 'github_token'
+
 /**
  * Stores Dahl API keys encrypted with Electron safeStorage (Windows DPAPI, bound to the current
  * Windows user). Keys never leave the main process: the renderer only learns whether a slot is set.

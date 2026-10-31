@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, session, shell } from 'electron'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 // services must be imported first: it sets the userData path before anything else touches it
@@ -6,6 +6,7 @@ import { log, mcp, models, procs, settings, win } from './services'
 import { registerIpc } from './ipc'
 import { initUpdater } from './updater'
 import { ProjectStore } from './store/projectStore'
+import { isAllowedPreviewRequest } from '@shared/preview'
 
 if (!process.env.DAHL_SMOKE && !app.requestSingleInstanceLock()) app.quit()
 
@@ -23,7 +24,7 @@ function createWindow(): void {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181b' : '#f7f5f1',
     icon: path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, '../../resources'), 'icon.png'),
     autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+    webPreferences: { preload: path.join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, webviewTag: true }
   })
   win.current = w
   w.setMenuBarVisibility(false)
@@ -33,6 +34,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
   w.webContents.on('will-navigate', (e) => e.preventDefault())
+  hardenPreview(w)
   w.webContents.on('render-process-gone', (_e, d) => void log('error', `renderer gone: ${d.reason}`))
   const consoleErrors: string[] = []
   w.webContents.on('console-message', (e) => {
@@ -75,6 +77,38 @@ function createWindow(): void {
   else void w.loadFile(path.join(__dirname, '../renderer/index.html'))
 }
 
+// Preview browser (<webview> in the renderer). Guests get no preload, no Node, a sandbox and their own session.
+const PREVIEW_PARTITION = 'persist:dahl-preview'
+const openWeb = (url: string): void => void (/^https?:\/\//.test(url) && shell.openExternal(url))
+
+function hardenPreview(w: BrowserWindow): void {
+  w.webContents.on('will-attach-webview', (e, prefs, params) => {
+    delete prefs.preload
+    Object.assign(prefs, { nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, partition: PREVIEW_PARTITION })
+    params.partition = PREVIEW_PARTITION
+    if (!/^(https?|file):/i.test(params.src ?? '')) e.preventDefault()
+  })
+  w.webContents.on('did-attach-webview', (_e, guest) => {
+    // popups open in the system browser (http/https only), never inside the app
+    guest.setWindowOpenHandler(({ url }) => (openWeb(url), { action: 'deny' }))
+    guest.on('will-navigate', (e) => {
+      if (!/^(https?|file):/i.test(e.url)) e.preventDefault()
+    })
+  })
+}
+
+function setupPreviewSession(): void {
+  const ses = session.fromPartition(PREVIEW_PARTITION)
+  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
+  ses.setPermissionCheckHandler(() => false)
+  ses.on('will-download', (e) => e.preventDefault())
+  // every request a previewed page makes: web URLs pass, file: URLs only inside the active project
+  ses.webRequest.onBeforeRequest((d, cb) => {
+    if (!/^file:/i.test(d.url)) return cb({ cancel: !isAllowedPreviewRequest(d.url, null) })
+    settings.get().then((s) => cb({ cancel: !isAllowedPreviewRequest(d.url, s.activeProject) }), () => cb({ cancel: true }))
+  })
+}
+
 app.on('second-instance', () => {
   const w = win.current
   if (w) {
@@ -88,6 +122,7 @@ app.whenReady().then(async () => {
   // id made Windows cache the atom icon for the installed app's taskbar button.
   app.setAppUserModelId(app.isPackaged && !process.env.DAHL_SMOKE ? 'global.dahl.studio' : 'global.dahl.studio.dev')
   registerIpc()
+  setupPreviewSession()
   for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted().catch(() => 0)
   createWindow()
   // Discover models in the background (never blocks the window), then keep the list fresh.

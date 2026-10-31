@@ -6,7 +6,8 @@ import type { Attachment, KeySlot, MemoryEntry, ReasoningProfile, Settings, Star
 import { APP_DIR, LOG_FILE, health, keyInfos, log, mcp, models, procs, reasoning, runner, send, settings, usage, vault, win } from './services'
 import { createEntry, IGNORED_DIRS, listTree, readText, resolveInside, searchText, toRel, writeText } from './fs/workspace'
 import { ProjectStore } from './store/projectStore'
-import { gitBranch, gitCommit, gitInitOrRemote, gitPush, gitShowHead, gitStatus } from './git'
+import { gitBranch, gitCheckRemote, gitCommit, gitInitOrRemote, gitPush, gitShowHead, gitStatus, pushPlan, setGitTokenSource, testGithubToken } from './git'
+import { GITHUB_TOKEN_SLOT } from './secrets'
 import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
@@ -173,8 +174,20 @@ export function registerIpc(): void {
   handle('git:head', async (project: string, rel: string) => gitShowHead(await assertProject(project), rel))
   handle('git:commit', async (project: string, message: string, files: string[] | 'all') => gitCommit(await assertProject(project), message, files))
   handle('git:branch', async (project: string, name: string) => gitBranch(await assertProject(project), name))
-  handle('git:push', async (project: string) => gitPush(await assertProject(project)))
+  handle('git:push', async (project: string, branch?: string) => gitPush(await assertProject(project), { branch }))
   handle('git:remote', async (project: string, url?: string) => gitInitOrRemote(await assertProject(project), url))
+  handle('git:plan', async (project: string, branch?: string) => pushPlan(await assertProject(project), branch))
+  // GitHub token: write-only from the renderer (it only learns whether one is set), stored encrypted like the API keys
+  setGitTokenSource(() => vault.get(GITHUB_TOKEN_SLOT))
+  handle('git:tokenStatus', async () => vault.has(GITHUB_TOKEN_SLOT))
+  handle('git:setToken', async (token: string | null) => (token ? vault.set(GITHUB_TOKEN_SLOT, token) : vault.clear(GITHUB_TOKEN_SLOT)).then(() => vault.has(GITHUB_TOKEN_SLOT)))
+  handle('git:testToken', async (project: string | null) => {
+    const token = await vault.get(GITHUB_TOKEN_SLOT)
+    const parts = token ? [await testGithubToken(token)] : ['No GitHub token saved: pushes use Git Credential Manager.']
+    const root = project ? await assertProject(project).catch(() => null) : null
+    if (root && (await gitStatus(root)).remote) parts.push(await gitCheckRemote(root))
+    return parts.join('\n')
+  })
 
   // ---- terminal ----
   handle('term:start', async (id: string, command: string, project: string) => {

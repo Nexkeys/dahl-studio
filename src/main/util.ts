@@ -7,7 +7,19 @@ export async function atomicWrite(file: string, data: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true })
   const tmp = `${file}.${randomUUID().slice(0, 8)}.tmp`
   await fs.writeFile(tmp, data, 'utf8')
-  await fs.rename(tmp, file)
+  // Windows: a reader or antivirus holding the target briefly makes rename fail with EPERM/EBUSY; retry a few times
+  for (let i = 0; ; i++) {
+    try {
+      return await fs.rename(tmp, file)
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (i >= 5 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) {
+        await fs.rm(tmp, { force: true }).catch(() => {})
+        throw e
+      }
+      await new Promise((r) => setTimeout(r, 25 * 2 ** i))
+    }
+  }
 }
 
 /** Read JSON; returns fallback when missing. Corrupted files are moved aside (.corrupt) instead of crashing. */
@@ -39,6 +51,8 @@ const SECRET_PATTERNS: RegExp[] = [
   /dahl_[A-Za-z0-9_\-]{6,}/g,
   /Bearer\s+[A-Za-z0-9._\-]{8,}/gi,
   /gh[pousr]_[A-Za-z0-9]{20,}/g,
+  /github_pat_[A-Za-z0-9_]{20,}/g,
+  /sbp_[A-Za-z0-9]{20,}/g,
   /sk-[A-Za-z0-9_\-]{16,}/g
 ]
 

@@ -88,13 +88,20 @@ export async function writeText(root: string, rel: string, content: string): Pro
   await atomicWrite(abs, content)
 }
 
+/** Create an empty file or a folder (missing parents included). Refuses an entry that already exists. */
 export async function createEntry(root: string, rel: string, dir: boolean): Promise<void> {
-  const abs = await resolveInside(root, rel)
-  if (dir) await fs.mkdir(abs, { recursive: true })
-  else {
-    await fs.mkdir(path.dirname(abs), { recursive: true })
-    await fs.writeFile(abs, '', { flag: 'wx' })
-  }
+  const name = rel.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+  if (!name.trim()) throw new Error('A file or folder name is required')
+  if (/[<>"|?*]/.test(name) || /:/.test(name.slice(path.isAbsolute(name) ? 2 : 0))) throw new Error(`Invalid characters in name: ${rel}`)
+  const abs = await resolveInside(root, name)
+  if (path.relative(path.resolve(root), abs) === '') throw new Error('A file or folder name is required')
+  const exists = await fs.stat(abs).then(() => true, () => false)
+  if (exists) throw new Error(`${name} already exists`)
+  await fs.mkdir(dir ? abs : path.dirname(abs), { recursive: true })
+  if (!dir)
+    await fs.writeFile(abs, '', { flag: 'wx' }).catch((e: NodeJS.ErrnoException) => {
+      throw e.code === 'EEXIST' ? new Error(`${name} already exists`) : e
+    })
 }
 
 export interface SearchHit {

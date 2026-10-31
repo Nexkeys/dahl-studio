@@ -2,7 +2,8 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import type { McpCatalogEntry, McpServerConfig, McpStatus, McpTool } from '@shared/types'
 import { McpClient, StdioTransport, HttpTransport } from './client'
-import { CATALOG } from './catalog'
+import { CATALOG, capabilityTestFor } from './catalog'
+import { allowsWrites, effectiveArgs } from '@shared/mcpArgs'
 import { childEnv } from '../terminal'
 import { resolveInside } from '../fs/workspace'
 import { nowIso, readJson, shortId, writeJson } from '../util'
@@ -122,9 +123,12 @@ export class McpManager {
     }
     if (patch.enabled !== undefined) s.enabled = patch.enabled
     if (patch.policy) s.policy = patch.policy
-    if (patch.args) s.args = patch.args
+    if (patch.args) s.args = patch.args.map(String)
     if (patch.url) s.url = patch.url
-    if (patch.enabled === false) this.stopServer(id)
+    // a server that can make changes (e.g. Supabase without --read-only) is never "Never ask": writes always need approval
+    if (s.policy === 'allow' && allowsWrites(s.catalogId, this.runArgs(s))) s.policy = 'readonly'
+    // new arguments or secrets only apply to a fresh process
+    if (patch.enabled === false || patch.args || patch.env) this.stopServer(id)
     await this.save()
   }
 
@@ -158,6 +162,12 @@ export class McpManager {
     if (!command || command.startsWith('${bundled:')) return null
     const exe = command.split(/[\\/]/).pop()!
     return new Promise((resolve) => execFile('where', [exe], { windowsHide: true }, (err) => resolve(err ? `${exe} was not found on this computer. Install it first (see the card's requirements).` : null)))
+  }
+
+  /** Arguments the server really runs with: catalogue servers use the pinned catalogue args plus their tunable flags. */
+  runArgs(cfg: McpServerConfig): string[] {
+    const cat = CATALOG.find((x) => x.id === cfg.catalogId)
+    return !cfg.custom && cat?.install?.args ? effectiveArgs(cfg.catalogId, cat.install.args, cfg.args) : (cfg.args ?? [])
   }
 
   private instKey(cfg: McpServerConfig, project: string | null): string {
@@ -200,14 +210,16 @@ export class McpManager {
           const pre = await this.checkPrereq(cfg.command)
           if (pre) throw new Error(pre)
           const env = childEnv() // never contains Dahl or other AI provider keys
+          const cat = CATALOG.find((x) => x.id === cfg.catalogId)
           for (const k of Object.keys(cfg.env ?? {})) {
             const v = await this.deps.getSecret(`mcp:${cfg.id}:${k}`)
             if (v) env[k] = v
+            // catalogue env values are required (e.g. SUPABASE_ACCESS_TOKEN); say so instead of a bare "exited (code 1)"
+            else if (!cfg.custom && cat?.install?.env && k in cat.install.env) throw new Error(`${k} is not set. Enter it on the ${cfg.name} card in the Toolbox.`)
           }
           let command = cfg.command!
-          // catalogue servers always use the current (pinned) catalogue arguments
-          const cat = CATALOG.find((x) => x.id === cfg.catalogId)
-          let args = ((!cfg.custom && cat?.install?.args) || cfg.args || []).map(sub)
+          // catalogue servers always use the current (pinned) catalogue arguments plus their tunable flags
+          let args = this.runArgs(cfg).map(sub)
           const bundled = /^\$\{bundled:([a-z-]+)\}$/.exec(command)
           if (bundled) {
             const entry = this.deps.bundledEntry(bundled[1])
@@ -268,14 +280,24 @@ export class McpManager {
     return [...this.inst.values()].filter((i) => i.serverId === id).flatMap((i) => i.logs)
   }
 
-  /** Enabled servers' tools for a project; starts enabled servers on demand (bounded wait). */
-  async toolsFor(project: string): Promise<{ serverId: string; serverName: string; policy: McpServerConfig['policy']; tool: McpTool; fnName: string }[]> {
+  /**
+   * Enabled servers' tools for a project; starts enabled servers on demand (bounded wait).
+   * `only` limits this to those server ids (the others are not started or waited for);
+   * `problems` collects a readable reason for each server that is missing, disabled or not connected.
+   */
+  async toolsFor(project: string, only?: string[], problems?: string[]): Promise<{ serverId: string; serverName: string; policy: McpServerConfig['policy']; tool: McpTool; fnName: string }[]> {
     const d = await this.load()
     const out: { serverId: string; serverName: string; policy: McpServerConfig['policy']; tool: McpTool; fnName: string }[] = []
+    for (const id of only ?? []) {
+      const s = d.servers.find((x) => x.id === id)
+      if (!s) problems?.push(`MCP server "${id}" is not configured (it may have been removed in the Toolbox).`)
+      else if (!s.enabled) problems?.push(`MCP server "${s.name}" is disabled. Enable it in the Toolbox.`)
+    }
     await Promise.all(
-      d.servers.filter((s) => s.enabled).map(async (s) => {
+      d.servers.filter((s) => s.enabled && (!only || only.includes(s.id))).map(async (s) => {
         const i = await Promise.race([this.start(s.id, project), new Promise<null>((r) => setTimeout(() => r(null), 45000))])
-        if (!i || i.status.state !== 'connected') return
+        if (!i) return void problems?.push(`MCP server "${s.name}" did not start within 45 s.`)
+        if (i.status.state !== 'connected') return void problems?.push(`MCP server "${s.name}" failed to start: ${i.status.error ?? i.status.state}`)
         for (const t of i.status.tools) out.push({ serverId: s.id, serverName: s.name, policy: s.policy, tool: t, fnName: `mcp__${sanitizeName(s.id)}__${sanitizeName(t.name)}`.slice(0, 64) })
       })
     )
@@ -320,7 +342,8 @@ export class McpManager {
     if (i.status.state !== 'connected' || !i.client) result = { ok: false, at: nowIso(), tools: 0, error: i.status.error }
     else {
       result = { ok: true, at: nowIso(), tools: i.status.tools.length, connectMs: Date.now() - t0 }
-      const ct = CATALOG.find((c) => c.id === cfg.catalogId)?.capabilityTest
+      // the test must fit the tools this configuration exposes (e.g. Supabase scoped to one project has no list_projects)
+      const ct = capabilityTestFor(cfg.catalogId, i.status.tools.map((t) => t.name))
       if (ct) {
         const args = JSON.parse(JSON.stringify(ct.args).split('${project}').join((project ?? '').replace(/\\/g, '\\\\')))
         try {

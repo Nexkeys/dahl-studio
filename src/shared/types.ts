@@ -160,8 +160,10 @@ export interface PendingApproval {
   id: string
   runId: string
   project: string
-  kind: 'write' | 'command' | 'mcp'
+  kind: 'write' | 'command' | 'mcp' | 'push'
   agent?: string
+  /** kind 'push': what will be published (always asked, regardless of auto-approve settings) */
+  push?: { remote: string; branch: string; target: string; commits: number; commitMessage?: string; pending: number; auth: string }
   path?: string
   before?: string
   after?: string
@@ -194,6 +196,8 @@ export interface RunState {
   iterations: number
   agents?: AgentInfo[]
   log?: { at: string; level: 'info' | 'error'; text: string }[]
+  /** MCP focus of the current turn (see StartRunRequest.mcpServers); kept when a paused turn continues */
+  mcpServers?: string[] | 'all'
 }
 
 export interface RunSummary {
@@ -266,6 +270,8 @@ export interface StartRunRequest {
   web?: boolean
   attachments?: Attachment[]
   resumeRunId?: string
+  /** MCP slash command: server ids to load (only these, with a focus line), or 'all' for /mcp */
+  mcpServers?: string[] | 'all'
 }
 
 export interface ReasoningProfile {

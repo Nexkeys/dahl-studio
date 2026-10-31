@@ -15,6 +15,8 @@ const SWITCH_KEY: DahlError['kind'][] = ['auth', 'exhausted', 'rate_key']
 /** Transient errors -> bounded retry with backoff on the same key, then fail over. */
 const RETRY: DahlError['kind'][] = ['server', 'timeout', 'network', 'rate_model']
 export const MAX_RETRIES_PER_KEY = 2
+/** How often the last available key waits out a per-key rate/parallel limit before giving up (about 2 minutes in total). */
+export const MAX_RATE_WAITS = 6
 
 export function otherSlot(s: 'primary' | 'secondary'): 'primary' | 'secondary' {
   return s === 'primary' ? 'secondary' : 'primary'
@@ -47,6 +49,7 @@ export class DahlRouter {
     let attempts = 0
     for (const slot of order) {
       const key = (await this.deps.getKey(slot))!
+      let rateWaits = 0
       for (let retry = 0; retry <= MAX_RETRIES_PER_KEY; retry++) {
         attempts++
         let started = false
@@ -92,6 +95,14 @@ export class DahlRouter {
           lastErr = err
           this.deps.onUsage?.(slot, { ok: false, lastModel: req.model, lastLatencyMs: Date.now() - t0 })
           if (started) throw err
+          // Per-key parallel/rate limit with no other key to switch to (e.g. parallel sub-agents on one key): wait it out
+          if (err.kind === 'rate_key' && slot === order[order.length - 1] && rateWaits < MAX_RATE_WAITS) {
+            await this.sleep(Math.min(err.retryAfterMs ?? 2000 * 2 ** rateWaits, 30_000) + Math.floor(Math.random() * 1000))
+            if (signal.aborted) throw new DahlError('cancelled', 'Request cancelled')
+            rateWaits++
+            retry--
+            continue
+          }
           if (SWITCH_KEY.includes(err.kind)) {
             this.deps.onHealth?.(slot, err.kind === 'auth' ? 'auth_failed' : err.kind === 'exhausted' ? 'exhausted' : 'rate_limited', err.message)
             break // next key

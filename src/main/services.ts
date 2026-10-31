@@ -154,5 +154,5 @@ export const runner = new AgentRunner({
   modelVision: async (m) => (await models.find(m))?.vision ?? false,
   web: { search: (q, max, sig) => webSearch(q, sig, max), fetch: (u, sig) => webFetch(u, sig) },
   analyzeImage,
-  mcp: { toolsFor: (p) => mcp.toolsFor(p), call: (s, p, t, a) => mcp.call(s, p, t, a) }
+  mcp: { toolsFor: (p, only, problems) => mcp.toolsFor(p, only, problems), call: (s, p, t, a) => mcp.call(s, p, t, a) }
 })

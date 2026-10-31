@@ -166,6 +166,7 @@ export function SettingsView() {
         </label>
       </section>
       {info && <p className="muted small">Dahl Studio {info.version}. App data: {info.appDataDir}</p>}
+      <p className="muted small" style={{ opacity: 0.6 }}>&copy; 2026 NexKeys. All rights reserved.</p>
     </div>
   )
 }
