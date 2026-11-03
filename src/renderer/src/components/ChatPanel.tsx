@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Square, Pause, Bookmark, Plus, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText } from 'lucide-react'
-import type { RunState, StartRunRequest } from '@shared/types'
+import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText } from 'lucide-react'
+import type { RunSummary, StartRunRequest } from '@shared/types'
 import { api, useStore } from '../store'
+import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from '../chats'
+import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
 import { LiveMarkdown } from './Markdown'
@@ -36,6 +38,8 @@ export function ChatPanel({ root }: { root: string }) {
   const stick = useRef(true)
   const running = p?.status === 'running' || p?.status === 'waiting_approval'
 
+  useEffect(() => restoreChats(root), [root])
+
   useEffect(() => {
     const el = scroller.current
     if (el && stick.current) el.scrollTop = el.scrollHeight
@@ -47,13 +51,18 @@ export function ChatPanel({ root }: { root: string }) {
     const provider = settings.defaultModel.split(':')[0]
     const hasKey = provider === 'dahl' ? keys.some((k) => k.provider === 'dahl' && k.configured) : keys.some((k) => k.provider === provider && k.configured)
     if (!hasKey) return notify(`Add a ${provider} API key in Settings first.`, 'error')
+    const busy = otherBusyChat(root)
+    if (busy) return notify(`"${busy.title}" is still working in this project. Wait for it to finish or cancel it first.`, 'error')
     const attachments = p?.attachments ?? []
     patchProject(root, { attachments: [], turnStartedAt: Date.now() })
     stick.current = true
+    const chat = beginRun(root, text)
     try {
       const resumable = p?.runId && p.status && p.status !== 'running'
-      await api.invoke('agent:start', { project: root, prompt: text, mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined, mcpServers })
+      const run = await api.invoke<RunSummary>('agent:start', { project: root, prompt: text, mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined, mcpServers })
+      attachRun(root, chat, run?.id ?? null)
     } catch (e) {
+      attachRun(root, chat, null)
       notify((e as Error).message, 'error')
       patchProject(root, { attachments })
     }
@@ -73,9 +82,9 @@ export function ChatPanel({ root }: { root: string }) {
           {running && <button className="icon-btn" title="Save checkpoint" aria-label="Save checkpoint" onClick={() => api.invoke('agent:checkpoint', root)}><Bookmark size={15} /></button>}
           {running && <button className="icon-btn" title="Pause after current step" aria-label="Pause" onClick={() => api.invoke('agent:pause', root)}><Pause size={15} /></button>}
           {running && <button className="icon-btn danger" title="Cancel task" aria-label="Cancel" onClick={() => api.invoke('agent:cancel', root)}><Square size={14} /></button>}
-          <button className="icon-btn" title="New conversation" aria-label="New conversation" disabled={running} onClick={() => patchProject(root, { runId: null, status: null, transcript: [], plan: [], live: '', liveReasoning: '', agents: {} })}><Plus size={16} /></button>
         </div>
       </div>
+      <ChatTabs root={root} />
 
       {p?.plan.length ? (
         <div className="plan">
@@ -122,8 +131,5 @@ function statusLabel(s: string | null): string {
   return ({ running: 'Working', waiting_approval: 'Waiting for approval', paused: 'Paused', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', interrupted: 'Interrupted' } as Record<string, string>)[s ?? ''] ?? 'Idle'
 }
 
-export async function loadRunIntoChat(root: string, id: string): Promise<void> {
-  const run = await api.invoke<RunState | null>('agent:loadRun', root, id)
-  if (!run) return
-  useStore.getState().patchProject(root, { runId: run.id, status: run.status, transcript: run.transcript, plan: run.plan, live: '', liveReasoning: '', agents: Object.fromEntries((run.agents ?? []).map((a) => [a.id, a])) })
-}
+/** Open a saved run (from Tasks) in its own chat tab. */
+export const loadRunIntoChat = (root: string, id: string): Promise<void> => openRunInChat(root, id)

@@ -4,6 +4,8 @@ import { LayoutPanelLeft, ListChecks, Brain, BrainCircuit, Settings as SettingsI
 import type { KeyInfo, KeyUsageLocal, ModelInfo, Settings } from '@shared/types'
 import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, openPreview, PROVIDER_NAMES, updateSettings, useStore, type View } from './store'
 import { applyEffects, applyTheme, detectLowEnd } from './themes'
+import { overallStatus } from './chatState'
+import { onLayoutKey, panels } from './layout'
 import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
 import { EditorArea } from './components/EditorArea'
@@ -48,7 +50,7 @@ async function openProject(): Promise<void> {
 function StatusBar({ root }: { root: string | null }) {
   const keys = useStore((s) => s.keys)
   const model = useStore((s) => s.models.find((m) => m.key === s.settings?.defaultModel))
-  const status = useStore((s) => (root ? s.projects[root]?.status : null))
+  const status = useStore((s) => (root ? overallStatus(s.projects[root]) : null))
   const agents = useStore((s) => (root ? Object.values(s.projects[root]?.agents ?? {}).filter((a) => !a.endedAt).length : 0))
   const showTerminal = useStore((s) => s.showTerminal)
   const showPreview = useStore((s) => s.showPreview)
@@ -131,7 +133,8 @@ export default function App() {
       api.on('app:focusProject' as never, (p: string) => (set({ view: 'workspace' }), void updateSettings({ activeProject: p }))),
       api.on('models:changed' as never, (models: ModelInfo[]) => (set({ models }), void ensureDefaultModel(models)))
     ]
-    return () => offs.forEach((o) => o())
+    window.addEventListener('keydown', onLayoutKey, true)
+    return () => (offs.forEach((o) => o()), window.removeEventListener('keydown', onLayoutKey, true))
   }, [set])
 
   const root = settings?.activeProject ?? null
@@ -176,7 +179,7 @@ export default function App() {
         <div className="content" key={view}>
           {view === 'workspace' && (root ? (
             <Group orientation="horizontal" className="split" id="ws-h">
-              <Panel defaultSize="17%" minSize={180} collapsible collapsedSize={0} id="explorer"><Explorer root={root} key={root} /></Panel>
+              <Panel defaultSize="17%" minSize={180} collapsible collapsedSize={0} id="explorer" panelRef={(h) => void (panels.explorer = h)}><Explorer root={root} key={root} /></Panel>
               <Separator className="sep v" />
               <Panel minSize={320} id="center">
                 <Group orientation="vertical" id="ws-v">
@@ -197,7 +200,7 @@ export default function App() {
                 </Group>
               </Panel>
               <Separator className="sep v" />
-              <Panel defaultSize="34%" minSize={340} collapsible collapsedSize={0} id="chat"><ChatPanel root={root} /></Panel>
+              <Panel defaultSize="34%" minSize={340} collapsible collapsedSize={0} id="chat" panelRef={(h) => void (panels.chat = h)}><ChatPanel root={root} /></Panel>
             </Group>
           ) : <Welcome onOpen={openProject} />)}
           {view === 'git' && <GitView />}
@@ -235,6 +238,6 @@ function UpdateBadge() {
 }
 
 function ProjectDot({ root }: { root: string }) {
-  const status = useStore((s) => s.projects[root]?.status)
+  const status = useStore((s) => overallStatus(s.projects[root]))
   return <span className={`pdot ${status ?? 'idle'}`} />
 }

@@ -5,6 +5,20 @@ Format: date, what changed, why, and evidence (the commands and results actually
 
 ---
 
+## Unreleased (2026-11-03)
+
+### Added
+- **Two themes: Blueprint and Ink & Paper** (`themes-e.ts`, effects `grid` and `ink` in `ui-themes.css`). Blueprint is drafting navy with cyan lines, a 24px grid behind the app and empty states, mono panel labels and dashed header rules. Ink & Paper is black on white with one red accent, serif headings, black header rules and an offset shadow on primary buttons. Both drive the Monaco theme like the others. Smoke-verified in the built app (`data-theme` set, no console errors, screenshots checked).
+- **Chat tabs.** Several conversations per project, one tab each, under the chat header (`ChatTabs.tsx`). New chat reuses an empty tab, at most 10 tabs. A tab shows its status dot; middle click or the x closes it (refused while it is working). The active chat keeps its fields on `ProjectUI`, so existing components did not change; other chats keep a snapshot, and agent events are routed by run id (`chatState.ts` `patchChat`), so a chat keeps streaming while another one is on screen. Streamed token buffers are keyed by project and run. Open tabs (title and run id) are kept per project in localStorage and restored after a restart, loading each conversation from its run checkpoint when the tab is opened. Opening a task from Tasks focuses its tab or opens it in a new one. The project dot and status bar show a working background chat. Only one chat per project can run at a time (the runner's existing rule): sending in another tab says which chat is still working. "New conversation" no longer clears the Agents view. Tests: `tests/chats.test.ts` (routing, a run started by a chat you switched away from, background streaming through the real store). Smoke: two restored tabs, the saved run loaded (3 messages), switching both ways.
+- **Editor tabs and IDE shortcuts** (`EditorTabs.tsx`, `layout.ts`). Drag tabs to reorder; middle click closes; right click menu: Close, Close others, Close to the right, Close saved, Close all, Copy relative path (one unsaved-changes prompt for several files). Ctrl+W closes the tab (and no longer reaches the hidden window menu, where it closed the app), Ctrl+Tab and Ctrl+Shift+Tab cycle, Ctrl+Shift+T reopens the last closed tab, Ctrl+P opens the palette as Go to file. A bar under the tabs shows the path, cursor line and column (and selection length) and the language. Ctrl+B toggles the explorer, Ctrl+Alt+B the chat panel, Ctrl+J or Ctrl+` the terminal; all are also in the command palette, plus New chat tab. Smoke-verified: two tabs, breadcrumbs `README.md / Ln 1, Col 1 / Markdown`, context menu items. The keyboard shortcuts were not exercised in the built app.
+
+### Verification
+- `npm run typecheck`: exit 0.
+- `npx vitest run`: 111 passed, 9 skipped; 7 failures, all in `tests/git.test.ts`, each a 5 s timeout (6 to 12 s per test on this machine under parallel load). `npx vitest run tests/git.test.ts --testTimeout=30000`: 11 of 11 passed. No git code changed.
+- `npx electron-vite build`, then two smoke runs of the built app (Blueprint, then Ink & Paper with the same profile).
+
+---
+
 ## 0.3.6 (2026-10-31)
 
 ### Fixed

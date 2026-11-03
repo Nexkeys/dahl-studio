@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AgentEvent, AgentInfo, AgentMode, Attachment, KeyInfo, KeyUsageLocal, ModelInfo, PendingApproval, PlanStep, ProviderId, RunStatus, RunSummary, Settings, TranscriptItem
 } from '@shared/types'
+import { newTab, patchChat, type ChatFields } from './chatState'
 
 export const api = window.dahl
 
@@ -13,7 +14,7 @@ export interface Tab {
   saved: string
 }
 
-export interface ProjectUI {
+export interface ProjectUI extends ChatFields {
   tabs: Tab[]
   active: string | null
   runId: string | null
@@ -30,9 +31,13 @@ export interface ProjectUI {
   turnStartedAt: number | null
 }
 
-const emptyProject = (): ProjectUI => ({
-  tabs: [], active: null, runId: null, status: null, transcript: [], live: '', liveReasoning: '', plan: [], approvals: [], reviewing: null, treeVersion: 0, attachments: [], agents: {}, turnStartedAt: null
-})
+const emptyProject = (): ProjectUI => {
+  const chat = newTab()
+  return {
+    tabs: [], active: null, runId: null, status: null, transcript: [], live: '', liveReasoning: '', plan: [], approvals: [], reviewing: null, treeVersion: 0, attachments: [], agents: {}, turnStartedAt: null,
+    chats: [chat], chat: chat.key, startingChat: null
+  }
+}
 
 interface State {
   ready: boolean
@@ -48,6 +53,8 @@ interface State {
   toast: { kind: 'info' | 'error'; text: string } | null
   showTerminal: boolean
   palette: boolean
+  /** Ctrl+P: the palette lists files only */
+  paletteFiles: boolean
   composerInsert: string | null
   showPreview: boolean
   /** last Preview URL per project root (also kept in localStorage) */
@@ -74,6 +81,7 @@ export const useStore = create<State>((set, get) => ({
   toast: null,
   showTerminal: true,
   palette: false,
+  paletteFiles: false,
   composerInsert: null,
   showPreview: false,
   previewUrls: loadPreviewUrls(),
@@ -180,25 +188,29 @@ export function addAttachments(root: string, atts: Attachment[]): void {
 // Streamed tokens arrive as one IPC message each (often 30-80 per second). They are buffered and applied at most
 // every FLUSH_MS, so a long reply re-renders the chat about 16 times a second instead of once per token.
 const FLUSH_MS = 60
-const pendingDeltas = new Map<string, { live: string; reasoning: string }>()
+// keyed by project and run, because a chat in the background can stream while another one is on screen
+const pendingDeltas = new Map<string, { root: string; runId: string; live: string; reasoning: string }>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 
-function flushDeltas(): void {
+export function flushDeltas(): void {
   if (flushTimer) clearTimeout(flushTimer)
   flushTimer = null
   if (!pendingDeltas.size) return
   const st = useStore.getState()
-  for (const [root, d] of pendingDeltas) st.patchProject(root, (c) => ({ live: c.live + d.live, liveReasoning: c.liveReasoning + d.reasoning }))
+  for (const d of pendingDeltas.values())
+    st.patchProject(d.root, (c) => patchChat(c, d.runId, (s) => ({ runId: d.runId, live: s.live + d.live, liveReasoning: s.liveReasoning + d.reasoning })))
   pendingDeltas.clear()
 }
 
 export function handleAgentEvent(e: AgentEvent): void {
   const root = e.project
   if (e.type === 'delta' || e.type === 'reasoning_delta') {
-    const d = pendingDeltas.get(root) ?? { live: '', reasoning: '' }
+    const key = `${root}
+${e.runId}`
+    const d = pendingDeltas.get(key) ?? { root, runId: e.runId, live: '', reasoning: '' }
     if (e.type === 'delta') d.live += e.delta ?? ''
     else d.reasoning += e.delta ?? ''
-    pendingDeltas.set(root, d)
+    pendingDeltas.set(key, d)
     flushTimer ??= setTimeout(flushDeltas, FLUSH_MS)
     return
   }
@@ -208,12 +220,12 @@ export function handleAgentEvent(e: AgentEvent): void {
   switch (e.type) {
     case 'transcript': {
       const item = e.item!
-      st.patchProject(root, (c) => ({
-        transcript: [...c.transcript, item],
-        live: item.kind === 'assistant' ? '' : c.live,
-        liveReasoning: item.kind === 'reasoning' ? '' : c.liveReasoning,
+      st.patchProject(root, (c) => patchChat(c, e.runId, (s) => ({
+        transcript: [...s.transcript, item],
+        live: item.kind === 'assistant' ? '' : s.live,
+        liveReasoning: item.kind === 'reasoning' ? '' : s.liveReasoning,
         runId: e.runId
-      }))
+      })))
       if (item.kind === 'tool' && item.tool?.ok && /^(write_file|edit_file|append_file)$/.test(item.tool.name)) {
         try {
           void reloadOpenFile(root, JSON.parse(item.tool.args).path as string)
@@ -225,7 +237,7 @@ export function handleAgentEvent(e: AgentEvent): void {
       break
     }
     case 'plan':
-      st.patchProject(root, { plan: e.plan ?? [] })
+      st.patchProject(root, (c) => patchChat(c, e.runId, () => ({ plan: e.plan ?? [], runId: e.runId })))
       break
     case 'approval':
       st.patchProject(root, (c) => ({ approvals: [...c.approvals, e.approval!], reviewing: e.approval!.kind === 'write' ? e.approval!.id : c.reviewing }))
@@ -236,13 +248,13 @@ export function handleAgentEvent(e: AgentEvent): void {
     case 'status':
     case 'run': {
       const running = e.status === 'running' || e.status === 'waiting_approval'
-      st.patchProject(root, (c) => ({
-        status: e.status ?? c.status,
+      st.patchProject(root, (c) => patchChat(c, e.runId, (s) => ({
+        status: e.status ?? s.status,
         runId: e.runId,
-        live: running ? c.live : '',
-        liveReasoning: running ? c.liveReasoning : '',
-        turnStartedAt: running ? c.turnStartedAt ?? Date.now() : null
-      }))
+        live: running ? s.live : '',
+        liveReasoning: running ? s.liveReasoning : '',
+        turnStartedAt: running ? s.turnStartedAt ?? Date.now() : null
+      })))
       break
     }
   }

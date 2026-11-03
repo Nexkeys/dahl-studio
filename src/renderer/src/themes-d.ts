@@ -1,4 +1,5 @@
 import type { Palette } from './themes'
+import { PALETTES_E } from './themes-e'
 
 export const PALETTES_D: Palette[] = [
   {
@@ -24,5 +25,6 @@ export const PALETTES_D: Palette[] = [
     selection: '#4d2c14', addBg: '#22351a', delBg: '#4a1a14', editorBg: '#170f0a', lineHl: '#21160e',
     syn: { keyword: '#ff7a1a', string: '#ffd27a', number: '#ffc233', comment: '#80634e', type: '#ff9f7a', func: '#ffb84d', variable: '#fbe9d9', punct: '#c09a7d' },
     radius: '10px', effect: 'glow', glass: 'rgba(29,19,13,0.84)'
-  }
+  },
+  ...PALETTES_E
 ]

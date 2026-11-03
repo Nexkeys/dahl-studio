@@ -46,9 +46,9 @@ src/main/                    Electron main process (all privileged work)
   mcp/client.ts|manager.ts|catalog.ts   MCP STDIO and HTTP client; lifecycle, policies, tests; curated Free Toolbox
   store/projectStore.ts      <project>/.dahl memory and runs; store/reasoning.ts reasoning profiles
 src/preload/index.ts         window.dahl.invoke + allow-listed events
-src/renderer/src/            React UI: App (rail, views, palette), store.ts (zustand), themes*.ts (10 themes),
+src/renderer/src/            React UI: App (rail, views, palette), store.ts (zustand), themes*.ts (12 themes), chatState.ts + chats.ts (chat tabs), layout.ts (panel shortcuts),
                              components/ (ChatPanel, Transcript, Composer, ApprovalCard, AgentsView, SettingsView,
-                             ReasoningView, ToolboxView, McpCard, GitView, LogsView, CommandPalette, EditorArea, Explorer,
+                             ReasoningView, ToolboxView, McpCard, GitView, LogsView, CommandPalette, EditorArea, EditorTabs, ChatTabs, Explorer,
                              TerminalPanel, Views), ui-*.css. Monaco loads lazily: lazyMonaco.ts -> monaco.ts
                              (only those two may import monaco-editor at runtime; lang.ts maps file names to languages)
 tests/                       dahl / agent / features / render (unit); live.test.ts (real network, DAHL_LIVE=1)

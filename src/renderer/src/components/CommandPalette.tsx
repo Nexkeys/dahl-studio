@@ -3,12 +3,15 @@ import { Search, FileText, Command } from 'lucide-react'
 import type { ThemeId } from '@shared/types'
 import { fileUrlFor } from '@shared/preview'
 import { api, openFile, openPreview, updateSettings, useStore, type View } from '../store'
+import { newChat } from '../chats'
+import { togglePanel } from '../layout'
 import { THEMES, applyTheme } from '../themes'
 
 interface Item { id: string; label: string; hint?: string; run: () => void; file?: boolean }
 
 export function CommandPalette() {
   const open = useStore((s) => s.palette)
+  const filesOnly = useStore((s) => s.paletteFiles)
   const root = useStore((s) => s.settings?.activeProject ?? null)
   const activePath = useStore((s) => (root ? s.projects[root]?.active ?? null : null))
   const set = useStore((s) => s.set)
@@ -21,12 +24,17 @@ export function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || (e.shiftKey && e.key.toLowerCase() === 'p'))) {
         e.preventDefault()
-        set({ palette: !useStore.getState().palette })
+        set({ palette: !useStore.getState().palette, paletteFiles: false })
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        // Ctrl+P: go to file
+        e.preventDefault()
+        e.stopPropagation()
+        set({ palette: true, paletteFiles: true })
       }
       if (e.key === 'Escape' && useStore.getState().palette) set({ palette: false })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [set])
   useEffect(() => {
     if (!open) return
@@ -47,7 +55,9 @@ export function CommandPalette() {
     { id: 'v-mem', label: 'Open Memory', run: go('memory') },
     { id: 'v-log', label: 'Open Logs', run: go('logs') },
     { id: 'v-set', label: 'Open Settings / API keys', run: go('settings') },
-    { id: 'term', label: 'Toggle terminal', run: () => (set({ showTerminal: !useStore.getState().showTerminal }), close()) },
+    { id: 'expl', label: 'Toggle explorer (Ctrl+B)', run: () => (togglePanel('explorer'), close()) },
+    { id: 'chatp', label: 'Toggle chat panel (Ctrl+Alt+B)', run: () => (togglePanel('chat'), close()) },
+    { id: 'term', label: 'Toggle terminal (Ctrl+J)', run: () => (set({ showTerminal: !useStore.getState().showTerminal }), close()) },
     { id: 'mode-b', label: 'Mode: Build', run: () => (set({ mode: 'build' }), close()) },
     { id: 'mode-p', label: 'Mode: Plan', run: () => (set({ mode: 'plan' }), close()) },
     { id: 'mode-r', label: 'Mode: Review', run: () => (set({ mode: 'review' }), close()) },
@@ -56,20 +66,22 @@ export function CommandPalette() {
   const items: Item[] = useMemo(() => {
     const lq = q.toLowerCase().trim()
     const preview: Item[] = !root ? [] : [
+      { id: 'chat-new', label: 'New chat tab', run: () => (newChat(root), close()) },
       { id: 'prev', label: 'Toggle preview browser', run: () => (useStore.getState().showPreview ? set({ showPreview: false }) : openPreview(root), close()) },
       ...(activePath && /\.(html?|xhtml|svg)$/i.test(activePath) ? [{ id: 'prev-f', label: `Preview this file (${activePath})`, run: () => (openPreview(root, fileUrlFor(`${root}/${activePath}`)), close()) }] : [])
     ]
-    const acts = [...preview, ...actions].filter((a) => !lq || a.label.toLowerCase().includes(lq))
+    const acts = filesOnly ? [] : [...preview, ...actions].filter((a) => !lq || a.label.toLowerCase().includes(lq))
     const fs = root ? files.filter((f) => !lq || f.toLowerCase().includes(lq)).slice(0, 40).map((f) => ({ id: `f-${f}`, label: f, file: true, run: () => (void openFile(root, f), close()) })) : []
+    if (filesOnly) return fs
     return lq ? [...fs, ...acts] : [...acts, ...fs.slice(0, 12)]
-  }, [q, files, actions, root, activePath])
+  }, [q, files, actions, root, activePath, filesOnly])
 
   if (!open) return null
   return (
     <div className="palette-backdrop" onMouseDown={close}>
       <div className="palette" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Command palette">
         <div className="palette-input"><Search size={15} />
-          <input ref={input} value={q} placeholder="Search files and commands" onChange={(e) => (setQ(e.target.value), setIdx(0))}
+          <input ref={input} value={q} placeholder={filesOnly ? 'Go to file' : 'Search files and commands'} onChange={(e) => (setQ(e.target.value), setIdx(0))}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') (e.preventDefault(), setIdx((i) => Math.min(i + 1, items.length - 1)))
               if (e.key === 'ArrowUp') (e.preventDefault(), setIdx((i) => Math.max(i - 1, 0)))

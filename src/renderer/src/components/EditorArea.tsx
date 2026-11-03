@@ -1,9 +1,10 @@
 import { useEffect, useCallback, Suspense } from 'react'
-import { X, Check, Save, GitCompare, Code2 } from 'lucide-react'
-import { addAttachments, api, useStore } from '../store'
+import { Check, Save, Code2 } from 'lucide-react'
+import { addAttachments, api, openFile, useStore } from '../store'
 import { languageFor } from '../lang'
 import { RejectButton } from './ApprovalCard'
 import { Editor, DiffEditor } from '../lazyMonaco'
+import { closeTabs, cycleTab, EditorCrumbs, EditorTabs, emitCursor, popClosedTab } from './EditorTabs'
 
 const EditorLoading = () => <div className="empty-state"><span className="spinner" /></div>
 
@@ -39,25 +40,21 @@ export function EditorArea({ root }: { root: string }) {
     }
   }, [root])
 
+  // capture phase, so these win over Monaco's own bindings while the editor has focus
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        void save()
-      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      const k = e.key.toLowerCase()
+      const hit = (fn: () => void) => (e.preventDefault(), e.stopPropagation(), fn())
+      if (k === 's' && !e.shiftKey) return hit(() => void save())
+      // Ctrl+W must never reach the window menu (it would close the app)
+      if (k === 'w' && !e.shiftKey) return hit(() => { const a = useStore.getState().project(root).active; if (a) closeTabs(root, [a]) })
+      if (k === 'tab') return hit(() => cycleTab(root, e.shiftKey ? -1 : 1))
+      if (k === 't' && e.shiftKey) return hit(() => { const p = popClosedTab(root); if (p) void openFile(root, p) })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [save])
-
-  const close = (path: string) => {
-    const t = tabs.find((x) => x.path === path)
-    if (t && t.content !== t.saved && !window.confirm(`${path} has unsaved changes. Close anyway?`)) return
-    patch(root, (c) => {
-      const rest = c.tabs.filter((x) => x.path !== path)
-      return { tabs: rest, active: c.active === path ? rest[rest.length - 1]?.path ?? null : c.active }
-    })
-  }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [save, root])
 
   const decide = async (approved: boolean, feedback?: string) => {
     if (!review) return
@@ -67,26 +64,9 @@ export function EditorArea({ root }: { root: string }) {
 
   return (
     <div className="panel editor-area">
-      <div className="tabs" role="tablist">
-        {review && (
-          <div className="tab active review-tab" role="tab">
-            <GitCompare size={13} />
-            <span>Review: {review.path}</span>
-          </div>
-        )}
-        {tabs.map((t) => (
-          <div key={t.path} role="tab" aria-selected={!review && t.path === activePath} className={`tab ${!review && t.path === activePath ? 'active' : ''}`}
-            onClick={() => patch(root, { active: t.path, reviewing: null })} title={t.path}>
-            <span>{t.path.split('/').pop()}</span>
-            {t.content !== t.saved && <span className="dirty" aria-label="unsaved" />}
-            <button className="tab-close" aria-label={`Close ${t.path}`} onClick={(e) => { e.stopPropagation(); close(t.path) }}><X size={12} /></button>
-          </div>
-        ))}
-        <div className="tabs-spacer" />
-        {!review && active && active.content !== active.saved && (
-          <button className="btn small ghost" onClick={save} title="Save (Ctrl+S)"><Save size={13} /> Save</button>
-        )}
-      </div>
+      <EditorTabs root={root} reviewPath={review?.path ?? null} saveButton={!review && active && active.content !== active.saved
+        ? <button className="btn small ghost" onClick={save} title="Save (Ctrl+S)"><Save size={13} /> Save</button> : null} />
+      {!review && active && <EditorCrumbs key={active.path} path={active.path} />}
 
       {review ? (
         <div className="review">
@@ -122,6 +102,11 @@ export function EditorArea({ root }: { root: string }) {
               theme={theme}
               onChange={(v) => patch(root, (c) => ({ tabs: c.tabs.map((t) => (t.path === active.path ? { ...t, content: v ?? '' } : t)) }))}
               onMount={(ed, monaco) => {
+                ed.onDidChangeCursorSelection((e) => {
+                  const sel = e.selection
+                  const model = ed.getModel()
+                  emitCursor({ line: sel.positionLineNumber, col: sel.positionColumn, sel: model && !sel.isEmpty() ? model.getValueInRange(sel).length : 0 })
+                })
                 // Ctrl+L: send the selection (or current line) to the chat as an attachment
                 ed.addAction({
                   id: 'dahl.askSelection',
