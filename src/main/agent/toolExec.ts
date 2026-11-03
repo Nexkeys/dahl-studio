@@ -9,6 +9,9 @@ import { gitCommit, gitInitOrRemote, gitPush, gitTokenSaved, isGithubHttps, norm
 import { mediaTypeFor } from './history'
 import type { RunnerDeps, McpToolRef } from './runner'
 import type { RunResult } from '../terminal'
+import { execAskUser } from './askUser'
+import { execGit } from './gitTools'
+import { execGithub } from './githubTool'
 
 export interface ToolResult {
   ok: boolean
@@ -145,6 +148,12 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
       }
       case 'git_push':
         return await execGitPush(c, a ?? {})
+      case 'git':
+        return await execGit(c, a ?? {}, settings)
+      case 'github':
+        return await execGithub(c, a ?? {})
+      case 'ask_user':
+        return await execAskUser(c, a ?? {})
       case 'web_search': {
         if (!c.deps.web) return { ok: false, text: 'Web research is not available.' }
         const res = await c.deps.web.search(String(a.query), Math.min(Number(a.max_results) || 8, 15), c.signal)

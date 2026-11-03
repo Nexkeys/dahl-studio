@@ -53,6 +53,9 @@ interface State {
   toast: { kind: 'info' | 'error'; text: string } | null
   showTerminal: boolean
   palette: boolean
+  /** What's New dialog: since = last version seen (notes after it), or null for the current version's notes */
+  whatsNew: { since: string | null } | null
+  appVersion: string
   /** Ctrl+P: the palette lists files only */
   paletteFiles: boolean
   composerInsert: string | null
@@ -81,6 +84,8 @@ export const useStore = create<State>((set, get) => ({
   toast: null,
   showTerminal: true,
   palette: false,
+  whatsNew: null,
+  appVersion: '',
   paletteFiles: false,
   composerInsert: null,
   showPreview: false,
@@ -222,8 +227,8 @@ ${e.runId}`
       const item = e.item!
       st.patchProject(root, (c) => patchChat(c, e.runId, (s) => ({
         transcript: [...s.transcript, item],
-        live: item.kind === 'assistant' ? '' : s.live,
-        liveReasoning: item.kind === 'reasoning' ? '' : s.liveReasoning,
+        live: item.kind === 'assistant' || item.resetLive ? '' : s.live,
+        liveReasoning: item.kind === 'reasoning' || item.resetLive ? '' : s.liveReasoning,
         runId: e.runId
       })))
       if (item.kind === 'tool' && item.tool?.ok && /^(write_file|edit_file|append_file)$/.test(item.tool.name)) {

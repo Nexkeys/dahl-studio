@@ -333,6 +333,9 @@ export async function streamChat(
         if (choice.finish_reason) result.finishReason = choice.finish_reason
       }
     }
+    // A stream that just stops, with neither [DONE] nor a finish_reason, was cut (seen live on the Dahl API under load:
+    // a report ended mid-sentence and was saved as the finished answer). Report it as a dropped connection instead.
+    if (!done && !result.finishReason) throw new DahlError('network', 'The connection closed before the reply finished (the stream ended early).')
     result.toolCalls = calls
       .filter((c) => c && c.name)
       .map((c, i) => ({ id: c.id || `call_${i}_${Date.now()}`, type: 'function', function: { name: c.name, arguments: c.args || '{}' } }))

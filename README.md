@@ -96,7 +96,7 @@ Every fs, terminal and agent call checks that the project is in `settings.openPr
 - Installed apps check GitHub Releases for updates (electron-updater, `src/main/updater.ts`) and install them on restart.
 - To publish a new version:
   1. Bump `version` in package.json.
-  2. Add a CHANGELOG entry.
+  2. Add a CHANGELOG entry, and a user-facing entry at the top of `src/renderer/src/whatsNew.ts` (it is what users see in the What's New dialog after the update; keep it short and in their words).
   3. Run `npm run typecheck; npm test; npx electron-vite build`.
   4. Run `npx electron-builder --win nsis --publish never`.
   5. Generate `release/latest.yml` (version, sha512 in base64, size; see the 0.3.3 CHANGELOG entry for the exact format).

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ShieldCheck, Plug, X } from 'lucide-react'
+import { ShieldCheck, Plug, X, GitPullRequest } from 'lucide-react'
 import { api, useStore } from '../store'
+import { QuestionCard } from './QuestionCard'
 
 /**
  * Reject with optional feedback, typed inline (window.prompt() does not exist in Electron; it threw, so Reject did nothing).
@@ -24,6 +25,7 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
   const approval = useStore((s) => s.projects[root]?.approvals.find((a) => a.id === id))
   const patch = useStore((s) => s.patchProject)
   if (!approval) return null
+  if (approval.kind === 'question') return <QuestionCard root={root} approval={approval} />
   const decide = async (ok: boolean, feedback?: string) => {
     await api.invoke('agent:approve', id, ok, feedback)
     patch(root, (c) => ({ approvals: c.approvals.filter((a) => a.id !== id), reviewing: c.reviewing === id ? null : c.reviewing }))
@@ -31,7 +33,7 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
   return (
     <div className="approval-card reveal">
       <div className="approval-head">
-        {approval.kind === 'mcp' ? <Plug size={14} /> : <ShieldCheck size={14} />}
+        {approval.kind === 'mcp' ? <Plug size={14} /> : approval.kind === 'github' ? <GitPullRequest size={14} /> : <ShieldCheck size={14} />}
         Approval needed{approval.agent && approval.agent !== 'Dahl' ? ` from ${approval.agent}` : ''}
       </div>
       {approval.kind === 'command' && <pre className="approval-cmd">{approval.command}</pre>}
@@ -46,6 +48,12 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
           <pre className="approval-cmd">{approval.args}</pre>
         </>
       )}
+      {approval.kind === 'github' && (
+        <>
+          <div className="small"><b>{approval.tool}</b> (always asked, whatever the auto-approve settings)</div>
+          <pre className="approval-cmd">{approval.args}</pre>
+        </>
+      )}
       {approval.kind === 'push' && approval.push && (
         <>
           <div className="small">Publish to GitHub (never force-pushed)</div>
@@ -55,7 +63,7 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
       {approval.reason && <div className="muted small">{approval.reason}</div>}
       <div className="row-actions end">
         <RejectButton onReject={(f) => void decide(false, f)} />
-        <button className="btn small primary" onClick={() => decide(true)}>{approval.kind === 'command' ? 'Run command' : approval.kind === 'mcp' ? 'Allow' : approval.kind === 'push' ? 'Push' : 'Apply change'}</button>
+        <button className="btn small primary" onClick={() => decide(true)}>{approval.kind === 'command' ? 'Run command' : approval.kind === 'mcp' ? 'Allow' : approval.kind === 'push' ? 'Push' : approval.kind === 'github' ? 'Go ahead' : 'Apply change'}</button>
       </div>
     </div>
   )

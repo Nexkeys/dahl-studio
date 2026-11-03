@@ -308,21 +308,28 @@ export class AgentRunner {
       if (!a.isLead) this.emitAgent(ctl, a.info)
       const messages: ChatMessage[] = [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)]
       let streamed = ''
-      const ask = () => this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
+      const ask = () => ((streamed = ''), this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
         ? {
             onDelta: (t) => ((streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
             onReasoning: (t) => this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t })
           }
-        : {})
-      // A sub-agent reply is never streamed to the UI, so a stream cut mid-reply (seen live: "Network error: terminated",
-      // which the router does not retry once bytes arrived) is safe to retry once instead of failing the whole sub-agent.
-      const res = await ask().catch(async (e: unknown) => {
-        if (a.isLead || ctl.abort.signal.aborted || !(e instanceof DahlError) || !['network', 'timeout', 'server'].includes(e.kind)) throw e
-        this.log(ctl, 'error', `${a.info.name}: model call failed (${e.message}); retrying once`)
-        await new Promise((r) => setTimeout(r, 1500))
-        if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
-        return ask()
-      })
+        : {}))
+      // A stream cut mid-reply (seen live: "Network error: terminated", or a stream that just stops) is not retried by
+      // the router once bytes arrived. Nothing from a failed attempt enters the conversation, so the step is safe to
+      // repeat: the lead clears the partial text on screen first, so nothing shows twice. Sub-agents get one retry.
+      const tries = a.isLead ? 2 : 1
+      let res: Awaited<ReturnType<typeof ask>> | null = null
+      for (let attempt = 0; !res; attempt++) {
+        try {
+          res = await ask()
+        } catch (e) {
+          if (attempt >= tries || ctl.abort.signal.aborted || !(e instanceof DahlError) || !['network', 'timeout', 'server'].includes(e.kind)) throw e
+          this.log(ctl, 'error', `${a.info.name}: model call failed (${e.message}); retrying (${attempt + 1} of ${tries})`)
+          if (a.isLead) this.addItem(ctl, { kind: 'status', text: `The connection dropped mid-reply. Retrying (${attempt + 1} of ${tries})`, resetLive: true })
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+          if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
+        }
+      }
       const calls = res.toolCalls ?? []
       let content = cleanModelText(res.content || streamed)
       let reasoning = stripDashes(trimRepetition(res.reasoning ?? ''))
@@ -458,7 +465,7 @@ export class AgentRunner {
     if (ctl.abort.signal.aborted) return { approved: false, feedback: 'Run cancelled' }
     const approval: PendingApproval = { id: shortId(), runId: ctl.run.id, project: ctl.run.project, ...x }
     const p = new Promise<{ approved: boolean; feedback?: string }>((resolve) => ctl.approvals.set(approval.id, { approval, resolve }))
-    this.addItem(ctl, { kind: 'approval', text: x.kind === 'write' ? `Approve change to ${x.path}?` : x.kind === 'command' ? `Approve command: ${x.command}` : `Approve ${x.tool}?`, approvalId: approval.id })
+    this.addItem(ctl, { kind: 'approval', text: x.kind === 'write' ? `Approve change to ${x.path}?` : x.kind === 'command' ? `Approve command: ${x.command}` : x.kind === 'question' ? `Question: ${x.questions?.[0]?.question ?? ''}` : `Approve ${x.tool}?`, approvalId: approval.id })
     this.deps.emit({ runId: ctl.run.id, project: ctl.run.project, type: 'approval', approval })
     a.info.status = 'waiting_approval'
     if (!a.isLead) this.emitAgent(ctl, a.info)

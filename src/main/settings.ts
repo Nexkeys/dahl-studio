@@ -17,7 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   webResearch: true,
   openProjects: [],
   activeProject: null,
-  projectReasoning: {}
+  projectReasoning: {},
+  lastSeenVersion: null
 }
 
 export class SettingsStore {
@@ -34,6 +35,8 @@ export class SettingsStore {
       const s: Settings = { ...DEFAULT_SETTINGS, ...stored, keyNames: { ...DEFAULT_SETTINGS.keyNames, ...(stored.keyNames ?? {}) }, projectReasoning: stored.projectReasoning ?? {} }
       // migrate pre-0.3 model ids (no provider prefix) to the Dahl provider
       if (s.defaultModel && !s.defaultModel.includes(':')) s.defaultModel = `dahl:${s.defaultModel}`
+      // settings saved by a version before What's New existed: that user upgraded, so show them what is new
+      if (stored.lastSeenVersion === undefined && Object.keys(stored).length) s.lastSeenVersion = '0.0.0'
       this.cache = s
     }
     return this.cache

@@ -165,7 +165,8 @@ export function SettingsView() {
           </select>
         </label>
       </section>
-      {info && <p className="muted small">Dahl Studio {info.version}. App data: {info.appDataDir}</p>}
+      {info && <p className="muted small">Dahl Studio {info.version}. App data: {info.appDataDir}{' '}
+        <button className="link" onClick={() => useStore.getState().set({ whatsNew: { since: null } })}>What's new</button></p>}
       <p className="muted small" style={{ opacity: 0.6 }}>&copy; 2026 NexKeys. All rights reserved.</p>
     </div>
   )

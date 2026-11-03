@@ -1,0 +1,38 @@
+/* What's New dialog. Every colour, font and corner comes from the theme variables, so it matches the active theme. */
+.wn-backdrop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); animation: fade .18s both; }
+.wn { width: min(680px, 100%); max-height: min(88vh, 760px); display: flex; flex-direction: column; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: calc(var(--radius) + 6px); box-shadow: 0 24px 64px rgba(0,0,0,.28), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); overflow: hidden; animation: wn-in .26s cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes wn-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+.wn-hero { position: relative; display: flex; gap: 16px; align-items: flex-start; padding: 26px 28px 22px; border-bottom: 1px solid var(--border);
+  background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%), var(--surface); }
+.wn-logo { width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent); }
+.wn-heading { display: grid; gap: 6px; min-width: 0; padding-right: 28px; }
+.wn-eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.wn-date { color: var(--muted); font-weight: 500; letter-spacing: .02em; text-transform: none; }
+.wn-heading h2 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: -.01em; text-wrap: balance; }
+.wn-heading p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 56ch; }
+.wn-x { position: absolute; top: 14px; right: 14px; }
+.wn-body { padding: 20px 28px; overflow-y: auto; display: grid; gap: 18px; }
+.wn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.wn-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+.wn-ico { width: 34px; height: 34px; border-radius: calc(var(--radius) - 1px); flex-shrink: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.wn-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.wn-text { display: grid; gap: 3px; min-width: 0; }
+.wn-text b { font-size: 13.5px; }
+.wn-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.wn-older { border-top: 1px solid var(--border); padding-top: 14px; font-size: 12.5px; }
+.wn-older summary { cursor: pointer; color: var(--muted); font-weight: 500; }
+.wn-older summary:hover { color: var(--text); }
+.wn-older section { margin-top: 12px; }
+.wn-older h3 { margin: 0 0 6px; font-size: 13px; }
+.wn-older ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); line-height: 1.5; }
+.wn-older li b { color: var(--text); font-weight: 600; }
+.wn-foot { display: flex; align-items: center; gap: 12px; padding: 14px 28px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.wn-foot .link { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+.wn-foot .grow { flex: 1; }
+.wn-foot .btn { min-width: 96px; justify-content: center; }
+@media (max-width: 620px) { .wn-grid { grid-template-columns: minmax(0, 1fr); } .wn-hero, .wn-body, .wn-foot { padding-left: 18px; padding-right: 18px; } }
+[data-lite] .wn-backdrop { backdrop-filter: none; background: color-mix(in srgb, var(--bg) 75%, transparent); }
+[data-effect='ink'] .wn-heading h2 { font-family: Georgia, 'Times New Roman', serif; }
+[data-effect='grid'] .wn-eyebrow, [data-effect='grid'] .wn-date { font-family: var(--mono); }
+[data-effect='scanlines'] .wn-heading h2 { text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent); }
+[data-effect='tactical'] .wn-heading h2 { text-transform: uppercase; letter-spacing: .05em; font-size: 19px; }

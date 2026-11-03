@@ -50,3 +50,23 @@
 .suggestions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; width: 100%; }
 .suggestion { text-align: left; border: 1px solid var(--border); background: var(--glass); border-radius: var(--radius); padding: 8px 11px; font-size: 12px; color: var(--muted); transition: border-color .15s, color .15s, transform .15s; }
 .suggestion:hover { border-color: var(--accent); color: var(--text); transform: translateX(2px); }
+
+/* ask_user questions in the chat */
+.question-card { border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--surface); border-radius: var(--radius); padding: 14px; display: grid; gap: 14px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); }
+.q-head { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; color: var(--accent); }
+.q-block { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.q-block legend { padding: 0; margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; }
+.q-chip { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.q-text { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.q-hint { font-size: 11.5px; color: var(--muted); }
+.q-options { display: grid; gap: 6px; }
+.q-opt { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; transition: border-color .12s, background .12s; }
+.q-opt:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.q-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.q-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.q-opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.q-key { width: 20px; height: 20px; flex-shrink: 0; display: grid; place-items: center; border-radius: 5px; border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface); font-variant-numeric: tabular-nums; }
+.q-opt.on .q-key { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.q-opt-text { display: grid; gap: 2px; min-width: 0; font-size: 13px; }
+.q-opt-text span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.q-other { width: 100%; font-size: 12.5px; }

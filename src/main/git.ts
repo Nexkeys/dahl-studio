@@ -125,9 +125,11 @@ export function setGitTokenSource(fn: () => Promise<string | null>): void {
   tokenSource = fn
 }
 export const gitTokenSaved = async (): Promise<boolean> => !!(await tokenSource().catch(() => null))
+/** The saved GitHub token, for the GitHub API (agent github tool). Never logged or sent anywhere but GitHub. */
+export const gitToken = (): Promise<string | null> => tokenSource().catch(() => null)
 
 /** Run a git command that talks to `url`; uses the saved token for https://github.com remotes, else the user's credential helper. */
-async function remoteGit(cwd: string, url: string, args: string[], o: RemoteOpts = {}) {
+export async function remoteGit(cwd: string, url: string, args: string[], o: RemoteOpts = {}) {
   const token = o.token !== undefined ? o.token : await tokenSource().catch(() => null)
   const useToken = !!token && (isGithubHttps(url) || !!o.allowLocal)
   // without a token GCM may open a sign-in window; give the user time to finish it, but never wait forever

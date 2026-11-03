@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
@@ -10,6 +10,10 @@ import { execTool, type ExecCtx } from '../src/main/agent/toolExec'
 import { toolsFor } from '../src/main/agent/tools'
 import { DEFAULT_SETTINGS } from '../src/main/settings'
 import type { PendingApproval } from '../src/shared/types'
+
+// Each test starts dozens of real git processes. On Windows (Defender scanning every spawn) one test took 36 s while
+// the rest of the suite ran in parallel, so the default 5 s limit made `npm run dist` fail at random.
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 })
 
 // Everything runs against temporary local repositories; nothing talks to GitHub.
 const L = { allowLocal: true, token: null }

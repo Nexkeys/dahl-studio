@@ -173,6 +173,8 @@ export async function anthropicStream(
     if (e instanceof DahlError) throw e
     throw new DahlError('network', `Stream error: ${(e as Error).message}`)
   }
+  // every complete Messages stream carries a stop_reason; without one the connection was cut mid-reply
+  if (!result.finishReason) throw new DahlError('network', 'The connection closed before the reply finished (the stream ended early).')
   const calls: ToolCall[] = []
   for (const b of blocks.filter(Boolean)) {
     const { _json, _invalid, ...clean } = b

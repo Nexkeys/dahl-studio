@@ -55,6 +55,7 @@ export function CommandPalette() {
     { id: 'v-mem', label: 'Open Memory', run: go('memory') },
     { id: 'v-log', label: 'Open Logs', run: go('logs') },
     { id: 'v-set', label: 'Open Settings / API keys', run: go('settings') },
+    { id: 'wn', label: "What's new in Dahl Studio", run: () => (set({ whatsNew: { since: null } }), close()) },
     { id: 'expl', label: 'Toggle explorer (Ctrl+B)', run: () => (togglePanel('explorer'), close()) },
     { id: 'chatp', label: 'Toggle chat panel (Ctrl+Alt+B)', run: () => (togglePanel('chat'), close()) },
     { id: 'term', label: 'Toggle terminal (Ctrl+J)', run: () => (set({ showTerminal: !useStore.getState().showTerminal }), close()) },

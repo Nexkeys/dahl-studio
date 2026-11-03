@@ -87,6 +87,8 @@ export interface Settings {
   activeProject: string | null
   /** project root -> reasoning profile id (overrides the global active profile) */
   projectReasoning: Record<string, string>
+  /** last app version whose What's New the user has seen; null on a fresh install, '0.0.0' for installs older than 0.3.7 */
+  lastSeenVersion: string | null
 }
 
 export interface TreeNode {
@@ -155,13 +157,26 @@ export interface TranscriptItem {
   attachments?: { kind: Attachment['kind']; name: string }[]
   summary?: TurnSummary
   agentIds?: string[]
+  /** a model call is being retried: drop the partly streamed reply on screen (it is not part of the conversation) */
+  resetLive?: boolean
+}
+
+/** A multiple-choice question the agent asks with ask_user (the user can always type their own answer). */
+export interface AskQuestion {
+  question: string
+  /** short chip label, a few words */
+  header?: string
+  options: { label: string; description?: string }[]
+  multiSelect?: boolean
 }
 
 export interface PendingApproval {
   id: string
   runId: string
   project: string
-  kind: 'write' | 'command' | 'mcp' | 'push'
+  kind: 'write' | 'command' | 'mcp' | 'push' | 'question' | 'github'
+  /** kind 'question': what the agent asks; the answers come back as JSON in the approval feedback */
+  questions?: AskQuestion[]
   agent?: string
   /** kind 'push': what will be published (always asked, regardless of auto-approve settings) */
   push?: { remote: string; branch: string; target: string; commits: number; commitMessage?: string; pending: number; auth: string }

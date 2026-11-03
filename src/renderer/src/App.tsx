@@ -6,6 +6,7 @@ import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, openPr
 import { applyEffects, applyTheme, detectLowEnd } from './themes'
 import { overallStatus } from './chatState'
 import { onLayoutKey, panels } from './layout'
+import { notesSince } from './whatsNew'
 import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
 import { EditorArea } from './components/EditorArea'
@@ -22,6 +23,7 @@ import { CommandPalette } from './components/CommandPalette'
 import iconUrl from './assets/icon.png'
 
 // the preview browser (and its <webview>) loads only when the panel is first opened
+const WhatsNew = lazy(() => import('./components/WhatsNew').then((m) => ({ default: m.WhatsNew })))
 const PreviewPanel = lazy(() => import('./components/PreviewPanel').then((m) => ({ default: m.PreviewPanel })))
 
 const NAV: { id: View; label: string; icon: typeof Brain }[] = [
@@ -105,6 +107,7 @@ export default function App() {
   const toast = useStore((s) => s.toast)
   const showTerminal = useStore((s) => s.showTerminal)
   const showPreview = useStore((s) => s.showPreview)
+  const whatsNew = useStore((s) => s.whatsNew)
   const set = useStore((s) => s.set)
 
   useEffect(() => {
@@ -113,11 +116,16 @@ export default function App() {
         const s = await api.invoke<Settings>('settings:get')
         applyTheme(s.theme)
         const [keys, usage, info] = await Promise.all([
-          api.invoke<KeyInfo[]>('keys:list'), api.invoke<Record<string, KeyUsageLocal>>('usage:get'), api.invoke<{ gpu: string; cpus: number }>('app:info')
+          api.invoke<KeyInfo[]>('keys:list'), api.invoke<Record<string, KeyUsageLocal>>('usage:get'), api.invoke<{ gpu: string; cpus: number; version: string }>('app:info')
         ])
         detectLowEnd(info)
         applyEffects(s.effects)
-        set({ settings: s, keys, usage, ready: true, web: s.webResearch })
+        set({ settings: s, keys, usage, ready: true, web: s.webResearch, appVersion: info.version })
+        // after an update, show what is new once; a fresh install just records the version
+        if (s.lastSeenVersion !== info.version) {
+          if (s.lastSeenVersion && notesSince(s.lastSeenVersion, info.version).length) set({ whatsNew: { since: s.lastSeenVersion } })
+          else void updateSettings({ lastSeenVersion: info.version })
+        }
         void loadModels()
         // parse the editor bundle once the window is up and idle, so opening the first file is instant
         setTimeout(() => requestIdleCallback(preloadMonaco), 1500)
@@ -216,6 +224,7 @@ export default function App() {
         <StatusBar root={root} />
       </div>
       <CommandPalette />
+      {whatsNew && <Suspense fallback={null}><WhatsNew /></Suspense>}
       {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'error' && <CircleAlert size={14} />} {toast.text}</div>}
     </div>
   )

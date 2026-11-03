@@ -160,8 +160,9 @@ describe('agent approval flow', () => {
       expect(h.runner.isActive(other)).toBe(true)
       await h.done()
     } finally {
-      await new Promise((r) => setTimeout(r, 100))
-      await fs.rm(other, { recursive: true, force: true })
+      // h.done() only waits for the first project; wait for the other run too, or its last checkpoint write races the delete
+      while (h.runner.isActive(other)) await new Promise((r) => setTimeout(r, 10))
+      await fs.rm(other, { recursive: true, force: true, maxRetries: 5 })
     }
   })
 
