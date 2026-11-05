@@ -10,6 +10,8 @@ import { mediaTypeFor } from './history'
 import type { RunnerDeps, McpToolRef } from './runner'
 import type { RunResult } from '../terminal'
 import { execAskUser } from './askUser'
+import { parseToolArgs } from './args'
+import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
 
@@ -67,15 +69,11 @@ async function applyWrite(c: ExecCtx, rel: string, before: string | null, after:
 export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowed: string[]): Promise<ToolResult> {
   const root = c.run.project
   if (!allowed.includes(name)) return { ok: false, text: `Tool ${name} is not available to this agent in ${c.run.mode} mode.` }
-  let a: any
-  try {
-    a = JSON.parse(rawArgs || '{}')
-  } catch {
-    return {
-      ok: false,
-      text: 'Your tool call arguments were not valid JSON - most likely the output was cut off because it was too long. Split large content: create the file with write_file (under ~250 lines), then add the rest with append_file in several calls.'
-    }
-  }
+  // repaired against the tool's schema: weaker models send arrays as JSON strings, numbers as text and so on
+  const schema = (TOOL_DEFS as Record<string, { function: { parameters: object } }>)[name]?.function.parameters ?? (c.mcpTools.find((t) => t.fnName === name)?.tool.inputSchema as object | undefined)
+  const parsed = parseToolArgs(rawArgs, schema as never)
+  if (!parsed.ok) return { ok: false, text: parsed.error }
+  const a: any = parsed.args
   if (a?._invalid_arguments) return { ok: false, text: 'Previous arguments were invalid; re-issue the call with smaller content.' }
   const settings = await c.deps.getSettings()
   try {

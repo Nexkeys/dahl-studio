@@ -1,12 +1,56 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, GitCompare, ChevronRight } from 'lucide-react'
-import { useStore } from '../store'
+import { api, useStore } from '../store'
 import { languageFor } from '../lang'
 
 // Editor tab strip and the bar under it. Tabs reorder by drag, close with the middle button, and have a context
 // menu. Closed tabs are remembered for Ctrl+Shift+T.
 
 const closedTabs = new Map<string, string[]>()
+
+// Open tabs, the active one and unsaved edits are kept per project in localStorage, so a restart (an update, a
+// crash) brings them back. Unsaved text is kept for files under 512 KB, up to 3 MB per project.
+const tabsKey = (root: string): string => `dahl.editorTabs:${root}`
+const restoredTabs = new Set<string>()
+
+export function persistTabs(root: string): void {
+  const { tabs, active } = useStore.getState().project(root)
+  let budget = 3 * 1024 * 1024
+  const list = tabs.map((t) => {
+    const dirty = t.content !== t.saved && t.content.length < 512 * 1024 && (budget -= t.content.length) > 0
+    return dirty ? { path: t.path, dirty: t.content } : { path: t.path }
+  })
+  try {
+    localStorage.setItem(tabsKey(root), JSON.stringify({ active, tabs: list }))
+  } catch {
+    /* storage full: the tabs are simply not remembered */
+  }
+}
+
+/** Reopen last session's tabs once per project (only when none are open yet). Unsaved edits come back as unsaved. */
+export async function restoreTabs(root: string): Promise<void> {
+  if (restoredTabs.has(root)) return
+  restoredTabs.add(root)
+  let saved: { active?: string | null; tabs?: { path: string; dirty?: string }[] } | null = null
+  try {
+    saved = JSON.parse(localStorage.getItem(tabsKey(root)) ?? 'null')
+  } catch {
+    saved = null
+  }
+  if (!saved?.tabs?.length || useStore.getState().project(root).tabs.length) return
+  const loaded = await Promise.all(saved.tabs.slice(0, 30).map(async (t) => {
+    try {
+      const disk = await api.invoke<string>('fs:read', root, t.path)
+      return { path: t.path, saved: disk, content: typeof t.dirty === 'string' ? t.dirty : disk }
+    } catch {
+      return null // deleted or moved since
+    }
+  }))
+  const tabs = loaded.filter((t): t is NonNullable<typeof t> => !!t)
+  if (!tabs.length) return
+  const active = tabs.some((t) => t.path === saved!.active) ? saved!.active! : tabs[0].path
+  useStore.getState().patchProject(root, (c) => (c.tabs.length ? {} : { tabs, active }))
+}
 
 /** Close tabs, asking once if any of them has unsaved changes. */
 export function closeTabs(root: string, paths: string[]): void {

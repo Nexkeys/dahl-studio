@@ -114,7 +114,8 @@ export class ProjectStore {
   }
 
   /** On startup: any run left "running"/"waiting_approval" was interrupted by a crash or exit. Never auto-resume. */
-  async markInterrupted(): Promise<number> {
+  /** Runs left running by the last session become 'interrupted'. `found` receives each one (for the resume offer). */
+  async markInterrupted(found?: (r: RunState) => void): Promise<number> {
     let n = 0
     for (const s of await this.listRuns()) {
       if (s.status === 'running' || s.status === 'waiting_approval') {
@@ -124,6 +125,7 @@ export class ProjectStore {
           // sub-agents that were mid-step would otherwise show as "running" forever in the Agents view
           for (const a of r.agents ?? []) if (!a.endedAt) Object.assign(a, { status: 'cancelled', step: 'Interrupted', endedAt: r.updatedAt })
           await this.saveRun(r)
+          found?.(r)
           n++
         }
       }

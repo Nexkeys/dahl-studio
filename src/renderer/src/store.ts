@@ -3,6 +3,7 @@ import type {
   AgentEvent, AgentInfo, AgentMode, Attachment, KeyInfo, KeyUsageLocal, ModelInfo, PendingApproval, PlanStep, ProviderId, RunStatus, RunSummary, Settings, TranscriptItem
 } from '@shared/types'
 import { newTab, patchChat, type ChatFields } from './chatState'
+import type { ResumeOffer } from './resume'
 
 export const api = window.dahl
 
@@ -56,6 +57,8 @@ interface State {
   /** What's New dialog: since = last version seen (notes after it), or null for the current version's notes */
   whatsNew: { since: string | null } | null
   appVersion: string
+  /** tasks interrupted by a quit or crash, offered by the ResumeCard */
+  resumeOffer: ResumeOffer | null
   /** Ctrl+P: the palette lists files only */
   paletteFiles: boolean
   composerInsert: string | null
@@ -86,6 +89,7 @@ export const useStore = create<State>((set, get) => ({
   palette: false,
   whatsNew: null,
   appVersion: '',
+  resumeOffer: null,
   paletteFiles: false,
   composerInsert: null,
   showPreview: false,
@@ -190,16 +194,27 @@ export function addAttachments(root: string, atts: Attachment[]): void {
   useStore.getState().patchProject(root, (c) => ({ attachments: [...c.attachments, ...atts].slice(0, 20) }))
 }
 
-// Streamed tokens arrive as one IPC message each (often 30-80 per second). They are buffered and applied at most
-// every FLUSH_MS, so a long reply re-renders the chat about 16 times a second instead of once per token.
-const FLUSH_MS = 60
+// Streamed tokens arrive in small batches from the main process (every 16 ms). They are applied once per screen frame
+// (requestAnimationFrame), so text appears as fast as the model sends it without re-rendering per token. A hidden
+// window gets no animation frames, so it falls back to a timer, and everything is flushed when it becomes visible.
+const FLUSH_MS = 33
+const hasRaf = typeof requestAnimationFrame === 'function' && typeof document !== 'undefined'
+let flushFrame: number | null = null
+function scheduleFlush(): void {
+  if (flushTimer || flushFrame !== null) return
+  if (hasRaf && document.visibilityState === 'visible') flushFrame = requestAnimationFrame(() => flushDeltas())
+  else flushTimer = setTimeout(flushDeltas, FLUSH_MS)
+}
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => flushDeltas())
 // keyed by project and run, because a chat in the background can stream while another one is on screen
 const pendingDeltas = new Map<string, { root: string; runId: string; live: string; reasoning: string }>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 
 export function flushDeltas(): void {
   if (flushTimer) clearTimeout(flushTimer)
+  if (flushFrame !== null) cancelAnimationFrame(flushFrame)
   flushTimer = null
+  flushFrame = null
   if (!pendingDeltas.size) return
   const st = useStore.getState()
   for (const d of pendingDeltas.values())
@@ -216,7 +231,7 @@ ${e.runId}`
     if (e.type === 'delta') d.live += e.delta ?? ''
     else d.reasoning += e.delta ?? ''
     pendingDeltas.set(key, d)
-    flushTimer ??= setTimeout(flushDeltas, FLUSH_MS)
+    scheduleFlush()
     return
   }
   // buffered text must land before an event that ends or replaces the live text

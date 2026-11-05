@@ -47,7 +47,7 @@ function KeyCard({ k }: { k: KeyInfo }) {
     }
   }
   const clear = async () => {
-    if (!window.confirm(`Remove the ${k.name} key from this computer?`)) return
+    if (!window.confirm(`Delete the ${k.name} key from this computer? Dahl Studio stops using it right away. You can add it again any time.`)) return
     set({ keys: await api.invoke<KeyInfo[]>('keys:clear', k.slot) })
     setResult(null)
   }
@@ -64,7 +64,7 @@ function KeyCard({ k }: { k: KeyInfo }) {
         <input type="password" className="input grow" placeholder={k.configured ? 'Stored securely. Paste a new key to replace it.' : 'Paste API key'} value={value} onChange={(e) => setValue(e.target.value)} autoComplete="off" spellCheck={false} />
         <button className="btn primary" onClick={save} disabled={busy || (!value.trim() && name === k.name)}>Save</button>
         <button className="btn ghost" onClick={test} disabled={busy || !k.configured}>{busy ? <span className="spinner" /> : null} Test</button>
-        {k.configured && <button className="icon-btn danger" title="Remove key" aria-label="Remove key" onClick={clear}><Trash2 size={15} /></button>}
+        {k.configured && <button className="btn ghost key-remove" title="Delete this key from this computer" onClick={clear}><Trash2 size={14} /> Remove</button>}
       </div>
       {result && (
         <div className={`test-result ${result.ok ? 'ok' : 'bad'} reveal`}>

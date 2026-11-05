@@ -238,6 +238,24 @@ describe('persistence helpers', () => {
     await expect(noEnc.set('secondary', 'dahl_x')).rejects.toThrow(/refusing/)
   })
 
+  it('removing a key or a connector secret deletes it from this computer', async () => {
+    const enc = { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s.split('').reverse().join('')), decryptString: (b: Buffer) => b.toString().split('').reverse().join('') }
+    const v = new SecretVault(dir, enc)
+    await v.set('openai', 'sk-test123456')
+    await v.clear('openai')
+    await expect(fs.access(path.join(dir, 'secrets', 'openai.bin'))).rejects.toThrow()
+    expect(await new SecretVault(dir, enc).get('openai')).toBeNull()
+    // connector secrets: saving an empty value from the Remove button must delete the vault entry too
+    const { McpManager } = await import('../src/main/mcp/manager')
+    const m = new McpManager({ appDir: dir, bundledEntry: () => null, getSecret: (k) => v.get(k), setSecret: (k, x) => v.set(k, x), onChange: () => {} })
+    const sb = await m.installFromCatalog('supabase')
+    await m.update(sb.id, { env: { SUPABASE_ACCESS_TOKEN: 'sbp_secret123' } })
+    expect(await v.get(`mcp:${sb.id}:SUPABASE_ACCESS_TOKEN`)).toBe('sbp_secret123')
+    await m.update(sb.id, { env: { SUPABASE_ACCESS_TOKEN: '' } })
+    expect(await new SecretVault(dir, enc).get(`mcp:${sb.id}:SUPABASE_ACCESS_TOKEN`)).toBeNull()
+    expect((await m.list()).servers.find((x) => x.id === sb.id)!.env!.SUPABASE_ACCESS_TOKEN).toBe('')
+  })
+
   it('redacts credential patterns', () => {
     expect(redact('key dahl_abcdef123456 and Bearer abc.def.ghi123')).toBe('key [REDACTED] and [REDACTED]')
   })

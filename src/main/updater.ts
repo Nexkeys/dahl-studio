@@ -13,6 +13,8 @@ export interface UpdateStatus {
   percent?: number
   error?: string
   current: string
+  /** the user chose to install once the running tasks finish */
+  waiting?: boolean
 }
 
 let status: UpdateStatus = { state: 'idle', current: app.getVersion() }
@@ -52,6 +54,10 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     set({ state: 'error', error: (e as Error).message.slice(0, 300) })
   }
   return status
+}
+
+export function setInstallWaiting(waiting: boolean): void {
+  set({ waiting })
 }
 
 export function installUpdate(): void {

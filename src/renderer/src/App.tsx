@@ -7,6 +7,9 @@ import { applyEffects, applyTheme, detectLowEnd } from './themes'
 import { overallStatus } from './chatState'
 import { onLayoutKey, panels } from './layout'
 import { notesSince } from './whatsNew'
+import { handleResumeOffer } from './resume'
+import { isBusy } from './chatState'
+import { ResumeCard } from './components/ResumeCard'
 import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
 import { EditorArea } from './components/EditorArea'
@@ -126,6 +129,8 @@ export default function App() {
           if (s.lastSeenVersion && notesSince(s.lastSeenVersion, info.version).length) set({ whatsNew: { since: s.lastSeenVersion } })
           else void updateSettings({ lastSeenVersion: info.version })
         }
+        // tasks a restart interrupted: continue them after an update, offer to after a quit or crash
+        void handleResumeOffer()
         void loadModels()
         // parse the editor bundle once the window is up and idle, so opening the first file is instant
         setTimeout(() => requestIdleCallback(preloadMonaco), 1500)
@@ -225,24 +230,41 @@ export default function App() {
       </div>
       <CommandPalette />
       {whatsNew && <Suspense fallback={null}><WhatsNew /></Suspense>}
+      <ResumeCard />
       {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'error' && <CircleAlert size={14} />} {toast.text}</div>}
     </div>
   )
 }
 
-interface UpdateStatus { state: string; version?: string; percent?: number; error?: string; current: string }
+interface UpdateStatus { state: string; version?: string; percent?: number; error?: string; current: string; waiting?: boolean }
 
 /** Shows auto-update progress from GitHub Releases; installing only happens when the user clicks Restart. */
 function UpdateBadge() {
   const [u, setU] = useState<UpdateStatus | null>(null)
+  const [ask, setAsk] = useState(false)
+  const busy = useStore((s) => Object.values(s.projects).some((p) => isBusy(overallStatus(p))))
   useEffect(() => {
     void api.invoke<UpdateStatus>('update:status').then(setU)
     return api.on('update:status' as never, (s: UpdateStatus) => setU(s))
   }, [])
   if (!u || u.state === 'dev' || u.state === 'idle' || u.state === 'none' || u.state === 'checking') return null
   if (u.state === 'downloading') return <span className="sb-item">Downloading update {u.version} {u.percent ?? 0}%</span>
+  if (u.state === 'ready' && u.waiting)
+    return <span className="sb-item">Update {u.version} installs when your tasks finish <button className="link" onClick={() => api.invoke('update:install', 'cancel')}>Cancel</button></span>
   if (u.state === 'ready')
-    return <button className="sb-btn sb-item update-ready" onClick={() => api.invoke('update:install')}>Update {u.version} ready. Restart to install</button>
+    return (
+      <span className="update-wrap">
+        <button className="sb-btn sb-item update-ready" onClick={() => (busy ? setAsk(!ask) : void api.invoke('update:install', 'now'))}>Update {u.version} ready. Restart to install</button>
+        {ask && busy && (
+          <span className="update-pop" role="dialog" aria-label="Install update">
+            <b>A task is still running.</b>
+            <span className="muted">Its progress is saved either way.</span>
+            <button className="btn small ghost" onClick={() => (setAsk(false), void api.invoke('update:install', 'idle'))}>Install when tasks finish</button>
+            <button className="btn small primary" onClick={() => (setAsk(false), void api.invoke('update:install', 'now'))}>Restart now and continue them</button>
+          </span>
+        )}
+      </span>
+    )
   return <span className="sb-item" title={u.error}>Update check failed</span>
 }
 

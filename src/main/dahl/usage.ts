@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { KeyUsageLocal } from '@shared/types'
-import { appendJsonl, nowIso, readJson, writeJson } from '../util'
+import { appendJsonl, nowIso, readJson, redact, writeJson } from '../util'
 
 const EMPTY: KeyUsageLocal = { requests: 0, errors: 0, promptTokens: 0, completionTokens: 0, estimated: false }
 
@@ -32,6 +32,7 @@ export class UsageLedger {
     cur.lastUsedAt = nowIso()
     if (u.lastModel) cur.lastModel = u.lastModel
     if (u.lastLatencyMs !== undefined) cur.lastLatencyMs = u.lastLatencyMs
+    if (!u.ok && u.lastError) cur.lastError = u.lastError = redact(u.lastError)
     this.saving = this.saving
       .then(() => writeJson(this.file, all))
       .then(() => appendJsonl(this.log, { at: cur.lastUsedAt, slot, ...u }))

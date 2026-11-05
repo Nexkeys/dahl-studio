@@ -25,6 +25,7 @@ Last updated: 2026-10-31 (v0.3.6 released). Read README.md, then CHANGELOG.md, t
 | Logs view (per task + app) | Done |
 | App-maintained PROGRESS.md work log for user projects | Done, unit-tested |
 | 12 themes with effects + preview cards | Done; Visual effects setting (Automatic / Full / Reduced) for slow PCs. Blueprint and Ink & Paper added (unreleased), smoke-verified |
+| Work survives restarts and updates (tasks continue after an update, crash resume card, editor tabs with unsaved edits, terminal Run again) | Done (0.3.7, unreleased); smoke-verified with a simulated interrupted run. Install-when-tasks-finish not exercised with a real update |
 | What's New dialog after updates | Done (0.3.7, unreleased); smoke-verified (shows once, Got it saves, themes). Not yet seen through a real auto-update |
 | ask_user questions | Done (0.3.7, unreleased); unit-tested. The card has not been seen with a live model |
 | Agent git tool (pull, merge, branch, stash, tag, clone, commit) | Done (0.3.7, unreleased); tested against real local repos including a merge conflict |

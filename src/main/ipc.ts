@@ -10,7 +10,8 @@ import { gitBranch, gitCheckRemote, gitCommit, gitInitOrRemote, gitPush, gitShow
 import { GITHUB_TOKEN_SLOT } from './secrets'
 import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
-import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
+import { checkForUpdates, getUpdateStatus } from './updater'
+import { installWhen, takeResumeOffer } from './restart'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -78,6 +79,8 @@ export function registerIpc(): void {
   handle('settings:get', () => settings.get())
   handle('settings:update', async (patch: Partial<Settings>) => {
     const { openProjects: _o, ...safe } = patch
+    // switching projects: start its connectors now, so its first task does not wait for cold starts
+    if (safe.activeProject) void mcp.warm(safe.activeProject).catch(() => {})
     return settings.update(safe)
   })
 
@@ -120,7 +123,8 @@ export function registerIpc(): void {
     const list = s.openProjects.filter((p) => path.resolve(p).toLowerCase() !== abs.toLowerCase())
     if (list.length >= 4) throw new Error('Close a project first (max 4 open).')
     await settings.update({ openProjects: [...list, abs], activeProject: abs })
-    await new ProjectStore(abs).markInterrupted()
+    if (!runner.isActive(abs)) await new ProjectStore(abs).markInterrupted()
+    void mcp.warm(abs).catch(() => {})
     return settings.get()
   })
   handle('project:close', async (dir: string) => {
@@ -290,7 +294,8 @@ export function registerIpc(): void {
   handle('notify:test', async () => (await import('./notify')).testNotification())
   handle('update:status', () => getUpdateStatus())
   handle('update:check', () => checkForUpdates())
-  handle('update:install', () => installUpdate())
+  handle('update:install', (mode?: 'now' | 'idle' | 'cancel') => installWhen(mode ?? 'now'))
+  handle('app:resume', () => takeResumeOffer())
   handle('app:info', () => ({
     version: app.getVersion(), appDataDir: APP_DIR, encryption: safeStorage.isEncryptionAvailable(),
     // used by the renderer's 'auto' effects mode

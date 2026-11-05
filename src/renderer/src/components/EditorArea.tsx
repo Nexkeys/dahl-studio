@@ -4,7 +4,7 @@ import { addAttachments, api, openFile, useStore } from '../store'
 import { languageFor } from '../lang'
 import { RejectButton } from './ApprovalCard'
 import { Editor, DiffEditor } from '../lazyMonaco'
-import { closeTabs, cycleTab, EditorCrumbs, EditorTabs, emitCursor, popClosedTab } from './EditorTabs'
+import { closeTabs, cycleTab, EditorCrumbs, EditorTabs, emitCursor, persistTabs, popClosedTab, restoreTabs } from './EditorTabs'
 
 const EditorLoading = () => <div className="empty-state"><span className="spinner" /></div>
 
@@ -39,6 +39,13 @@ export function EditorArea({ root }: { root: string }) {
       st.notify((e as Error).message, 'error')
     }
   }, [root])
+
+  useEffect(() => void restoreTabs(root), [root])
+  // remember open tabs and unsaved edits (debounced: content changes on every keystroke)
+  useEffect(() => {
+    const t = setTimeout(() => persistTabs(root), 400)
+    return () => clearTimeout(t)
+  }, [root, tabs, activePath])
 
   // capture phase, so these win over Monaco's own bindings while the editor has focus
   useEffect(() => {

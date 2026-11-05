@@ -1,6 +1,13 @@
 import type { Attachment, ChatMessage, ContentPart, RunState, RunSummary } from '@shared/types'
 
-export const MAX_CONTEXT_CHARS = 320_000
+// Measured on the user's machine: median requests of 32,000 to 52,000 input tokens on Dahl models, which slows the
+// first token and raises failures. History is trimmed in two passes (see compact).
+export const MAX_CONTEXT_CHARS = 160_000
+/** the newest messages always stay word for word */
+const KEEP_RECENT = 12
+const OLD_RESULT_CHARS = 2000
+/** arguments that carry whole file contents; once applied, the file itself holds them */
+const BULK_ARGS = ['content', 'new_string', 'old_string']
 
 export function summary(r: RunState): RunSummary {
   return { id: r.id, project: r.project, objective: r.objective, status: r.status, updatedAt: r.updatedAt, mode: r.mode, changedFiles: r.changedFiles ?? [] }
@@ -97,12 +104,40 @@ export function isValidJson(s: string): boolean {
   }
 }
 
-/** Keep context bounded: shrink old tool outputs and drop old images first; newest messages stay intact. */
+/** File contents in old write/edit calls become a short note (the file already has them). */
+function shrinkCallArgs(args: string): string {
+  try {
+    const a = JSON.parse(args) as Record<string, unknown>
+    let changed = false
+    for (const k of BULK_ARGS)
+      if (typeof a[k] === 'string' && (a[k] as string).length > 400) {
+        a[k] = `[${(a[k] as string).split('\n').length} lines, ${(a[k] as string).length} chars; already applied]`
+        changed = true
+      }
+    return changed ? JSON.stringify(a) : args
+  } catch {
+    return args
+  }
+}
+
+/**
+ * Keep context small. Pass 1 always runs on everything but the newest KEEP_RECENT messages: long tool results keep
+ * their head and tail, and file contents in old write/edit calls become a note. Pass 2 runs only when the total is
+ * still above maxChars: older images are dropped and old tool results cut to 600 characters. Messages carrying
+ * provider blocks (Anthropic thinking signatures) are never changed, because those must be replayed exactly.
+ */
 export function compact(messages: ChatMessage[], maxChars = MAX_CONTEXT_CHARS): ChatMessage[] {
   const sizeOf = (m: ChatMessage): number => (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length) + JSON.stringify(m.tool_calls ?? '').length
-  let size = messages.reduce((a, m) => a + sizeOf(m), 0)
-  if (size <= maxChars) return messages
   const out = messages.map((m) => ({ ...m }))
+  for (let i = 0; i < out.length - KEEP_RECENT; i++) {
+    const m = out[i]
+    if (m.providerBlocks?.length) continue
+    if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > OLD_RESULT_CHARS)
+      m.content = `${m.content.slice(0, 1300)}\n[older output shortened to save context]\n${m.content.slice(-500)}`
+    if (m.role === 'assistant' && m.tool_calls?.length) m.tool_calls = m.tool_calls.map((tc) => ({ ...tc, function: { ...tc.function, arguments: shrinkCallArgs(tc.function.arguments) } }))
+  }
+  let size = out.reduce((a, m) => a + sizeOf(m), 0)
+  if (size <= maxChars) return out
   for (let i = 0; i < out.length - 6 && size > maxChars; i++) {
     const m = out[i]
     if (Array.isArray(m.content) && m.content.some((p) => p.type === 'image')) {

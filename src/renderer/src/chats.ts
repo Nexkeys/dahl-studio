@@ -115,7 +115,13 @@ export async function openRunInChat(root: string, runId: string): Promise<void> 
   const st = useStore.getState()
   const c = st.project(root)
   const open = c.chats.find((t) => (t.key === c.chat ? c.runId : t.runId) === runId)
-  if (open) return switchChat(root, open.key)
+  if (open) {
+    switchChat(root, open.key)
+    // a restored tab may still be loading: make sure its history is on screen before the caller continues the run
+    const now = useStore.getState().project(root)
+    if (now.chat === open.key && now.runId === runId && !now.transcript.length) await fillFromRun(root, open.key, runId)
+    return
+  }
   const active = c.chats.find((t) => t.key === c.chat)
   if (!(active && isEmpty(c, active)) && !newChat(root)) return
   const key = useStore.getState().project(root).chat

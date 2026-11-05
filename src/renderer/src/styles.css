@@ -248,3 +248,17 @@ h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; display: flex; gap: 8px
 .crumb.last { color: var(--text); }
 .crumbs .grow { flex: 1; }
 .crumb-info { font-variant-numeric: tabular-nums; padding-left: 12px; text-transform: capitalize; }
+
+/* update install choice while tasks run, and the resume card after a quit or crash */
+.update-wrap { position: relative; display: inline-flex; }
+.update-pop { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 120; width: 270px; display: grid; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0,0,0,.2); font-size: 12.5px; color: var(--text); }
+.update-pop .btn { justify-content: center; }
+.resume-card { position: fixed; right: 18px; bottom: 42px; z-index: 150; width: min(380px, calc(100vw - 36px)); display: grid; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: calc(var(--radius) + 2px); box-shadow: 0 14px 40px rgba(0,0,0,.22); }
+.resume-head { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.resume-head b { color: var(--text); flex: 1; }
+.resume-card p { margin: 0; }
+.resume-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.resume-list li { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); font-size: 12.5px; min-width: 0; }
+.resume-list li .ellipsis { flex: 1; min-width: 0; }
+.term-resume { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 8px 10px; border-radius: 6px; background: var(--accent-soft); font-size: 12.5px; }
+.term-resume code { font-family: var(--mono); }

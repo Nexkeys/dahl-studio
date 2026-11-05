@@ -17,6 +17,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: '0.3.7', date: '2026-11-03', title: 'Tabs, questions and Git that does it all',
     summary: 'Work on several conversations at once, let Dahl ask before it guesses, and run your whole Git and GitHub flow from the chat.',
     items: [
+      { icon: 'sparkles', title: 'Picks up where you left off', text: 'Updating no longer stops your work. Install when your tasks finish, or restart now and they continue on their own. After a crash, Dahl offers to continue, and your open files, unsaved edits and dev server command come back.' },
       { icon: 'chats', title: 'Chat tabs', text: 'Keep several conversations open per project. A chat keeps working in the background while you read another, and your tabs come back after a restart.' },
       { icon: 'question', title: 'Dahl asks when it matters', text: 'When a choice is yours to make, Dahl shows a short set of questions with options to pick from, instead of guessing.' },
       { icon: 'git', title: 'Full Git in the chat', text: 'Ask Dahl to pull, fetch, branch, switch, merge, stash, tag or commit. It shows conflicts and resolves them with you. It never force-pushes.' },

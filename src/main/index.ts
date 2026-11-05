@@ -6,6 +6,9 @@ import { log, mcp, models, procs, settings, win } from './services'
 import { registerIpc } from './ipc'
 import { initUpdater } from './updater'
 import { ProjectStore } from './store/projectStore'
+import { buildResumeOffer, saveForResume } from './restart'
+import { probeEnvironment } from './envProbe'
+import type { RunState } from '@shared/types'
 import { isAllowedPreviewRequest } from '@shared/preview'
 
 if (!process.env.DAHL_SMOKE && !app.requestSingleInstanceLock()) app.quit()
@@ -123,17 +126,26 @@ app.whenReady().then(async () => {
   app.setAppUserModelId(app.isPackaged && !process.env.DAHL_SMOKE ? 'global.dahl.studio' : 'global.dahl.studio.dev')
   registerIpc()
   setupPreviewSession()
-  for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted().catch(() => 0)
+  const interrupted: RunState[] = []
+  for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted((r) => interrupted.push(r)).catch(() => 0)
+  await buildResumeOffer(interrupted)
   createWindow()
   // Discover models in the background (never blocks the window), then keep the list fresh.
   void models.refresh().catch((e) => log('error', `model refresh: ${(e as Error).message}`))
   models.startAutoRefresh()
   initUpdater()
+  // connectors for the active project start in the background, so the first task does not wait for them
+  void settings.get().then((s) => mcp.warm(s.activeProject)).catch(() => {})
+  void probeEnvironment().catch(() => '') // cached for the agent's "what you can do here" section
+
   void log('info', `started v${app.getVersion()}`)
 })
 
 app.on('window-all-closed', () => {
-  procs.stopAll()
-  mcp.stopAll()
-  app.quit()
+  // closing with a task running: checkpoint it first, so the next start can offer to continue it
+  void saveForResume('quit').catch(() => 0).finally(() => {
+    procs.stopAll()
+    mcp.stopAll()
+    app.quit()
+  })
 })

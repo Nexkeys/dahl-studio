@@ -93,7 +93,7 @@ export class DahlRouter {
           const err = e instanceof DahlError ? e : new DahlError('network', String(e))
           if (err.kind === 'cancelled') throw err
           lastErr = err
-          this.deps.onUsage?.(slot, { ok: false, lastModel: req.model, lastLatencyMs: Date.now() - t0 })
+          this.deps.onUsage?.(slot, { ok: false, lastModel: req.model, lastLatencyMs: Date.now() - t0, lastError: `${err.kind}: ${err.message}`.slice(0, 300) })
           if (started) throw err
           // Per-key parallel/rate limit with no other key to switch to (e.g. parallel sub-agents on one key): wait it out
           if (err.kind === 'rate_key' && slot === order[order.length - 1] && rateWaits < MAX_RATE_WAITS) {

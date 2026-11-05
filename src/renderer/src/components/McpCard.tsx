@@ -88,7 +88,8 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
         {entry && <button className="btn small ghost" onClick={() => setOpen(!open)}>Learn more <ChevronDown size={12} className={`chev-d ${open ? 'open' : ''}`} /></button>}
       </div>
       {/* secrets are typed inline: window.prompt() does not exist in Electron, so the old prompt button could never save a value */}
-      {cfg && Object.keys(cfg.env ?? {}).map((k) => <SecretField key={k} label={SECRET_LABEL[k] ?? k} hint={SECRET_HINT[k]} set={!!cfg.env![k]} busy={!!busy} onSave={(v) => act('env', () => api.invoke('mcp:update', cfg.id, { env: { [k]: v } }))} />)}
+      {cfg && Object.keys(cfg.env ?? {}).map((k) => <SecretField key={k} label={SECRET_LABEL[k] ?? k} hint={SECRET_HINT[k]} set={!!cfg.env![k]} busy={!!busy} onSave={(v) => act('env', () => api.invoke('mcp:update', cfg.id, { env: { [k]: v } }))}
+        onRemove={() => window.confirm(`Delete the saved ${SECRET_LABEL[k] ?? k} from this computer?`) && act('env', () => api.invoke('mcp:update', cfg.id, { env: { [k]: '' } }))} />)}
       {cfg && entry?.id === 'supabase' && <SupabaseOptions cfg={cfg} args={cfg.args ?? entry.install?.args ?? []} busy={!!busy} act={act} />}
       {logs && <pre className="mini-pre logs">{logs.join('\n') || 'No logs yet. Logs appear when the server starts.'}</pre>}
       {open && entry && (
@@ -108,7 +109,7 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
 }
 
 /** Password field for one secret env value; stored encrypted by the main process and never shown again. */
-function SecretField({ label, hint, set, busy, onSave }: { label: string; hint?: { text: string; url: string }; set: boolean; busy: boolean; onSave: (v: string) => Promise<void> }) {
+function SecretField({ label, hint, set, busy, onSave, onRemove }: { label: string; hint?: { text: string; url: string }; set: boolean; busy: boolean; onSave: (v: string) => Promise<void>; onRemove: () => void }) {
   const [v, setV] = useState('')
   const save = () => v.trim() && void onSave(v.trim()).then(() => setV(''))
   return (
@@ -116,6 +117,7 @@ function SecretField({ label, hint, set, busy, onSave }: { label: string; hint?:
       <KeyRound size={12} /> <b>{label}</b> <span className={set ? 'muted' : 'c-danger'}>{set ? 'set (stored encrypted)' : 'not set'}</span>
       <input className="input small grow" type="password" autoComplete="off" spellCheck={false} placeholder={set ? 'Paste a new value to replace it' : 'Paste the value'} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} aria-label={label} />
       <button className="btn small ghost" disabled={busy || !v.trim()} onClick={save}>Save</button>
+      {set && <button className="btn small ghost" disabled={busy} onClick={onRemove}><Trash2 size={12} /> Remove</button>}
       {hint && <a href={hint.url} target="_blank" rel="noreferrer">{hint.text} <ExternalLink size={11} /></a>}
     </div>
   )

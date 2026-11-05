@@ -15,6 +15,8 @@ import { McpManager } from './mcp/manager'
 import { webFetch, webSearch } from './tools/web'
 import { formatBreakdown, PIXEL_ANALYSIS_JS, windowsOcr } from './tools/image'
 import { appendJsonl, nowIso, redact } from './util'
+import { probeEnvironment } from './envProbe'
+import { batchDeltas } from './eventBatch'
 
 export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
 // Smoke tests use an isolated profile so they never touch the user's real settings and can run beside the installed app
@@ -141,12 +143,13 @@ async function visionCandidates(): Promise<{ key: string; label: string }[]> {
   return out.slice(0, 2)
 }
 
+const sendAgentEvent = batchDeltas((e) => send('agent:event', e))
 export const runner = new AgentRunner({
   backend: models,
   getSettings: () => settings.get(),
   emit: (e) => {
-    send('agent:event', e)
-    void import('./notify').then((m) => m.notifyAgentEvent(e)).catch(() => {})
+    sendAgentEvent(e)
+    if (e.type !== 'delta' && e.type !== 'reasoning_delta') void import('./notify').then((m) => m.notifyAgentEvent(e)).catch(() => {})
   },
   runCommand: (cmd, cwd, t, sig) => procs.run(cmd, cwd, t, sig),
   secrets: () => vault.allValues(),
@@ -154,5 +157,11 @@ export const runner = new AgentRunner({
   modelVision: async (m) => (await models.find(m))?.vision ?? false,
   web: { search: (q, max, sig) => webSearch(q, sig, max), fetch: (u, sig) => webFetch(u, sig) },
   analyzeImage,
-  mcp: { toolsFor: (p, only, problems) => mcp.toolsFor(p, only, problems), call: (s, p, t, a) => mcp.call(s, p, t, a) }
+  environment: () => probeEnvironment(),
+  mcp: {
+    toolsFor: (p, only, problems, waitMs) => mcp.toolsFor(p, only, problems, waitMs),
+    connectors: (p) => mcp.connectors(p),
+    ensure: (id, p) => mcp.ensure(id, p),
+    call: (s, p, t, a) => mcp.call(s, p, t, a)
+  }
 })

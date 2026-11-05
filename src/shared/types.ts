@@ -34,6 +34,8 @@ export interface KeyUsageLocal {
   lastUsedAt?: string
   lastModel?: string
   lastLatencyMs?: number
+  /** why the last failed request failed: error kind and a short message (the usage log keeps one per request) */
+  lastError?: string
 }
 
 export interface KeyTestResult {
@@ -159,6 +161,8 @@ export interface TranscriptItem {
   agentIds?: string[]
   /** a model call is being retried: drop the partly streamed reply on screen (it is not part of the conversation) */
   resetLive?: boolean
+  /** assistant replies: how fast the model answered (time to first token, generation speed), shown under the reply */
+  stats?: { ttftMs: number; tokensPerSec: number; tokens: number; estimated: boolean; model: string }
 }
 
 /** A multiple-choice question the agent asks with ask_user (the user can always type their own answer). */
@@ -356,6 +360,25 @@ export interface McpTool {
   inputSchema?: unknown
   readOnly?: boolean
   destructive?: boolean
+}
+
+/** One connector tool as the agent sees it (fnName is what the model calls). */
+export interface McpToolRef {
+  serverId: string
+  serverName: string
+  policy: 'ask' | 'readonly' | 'allow'
+  tool: { name: string; description?: string; inputSchema?: unknown; readOnly?: boolean }
+  fnName: string
+}
+
+/** An enabled connector and whether its tools can be used right now. */
+export interface McpConnectorInfo {
+  id: string
+  name: string
+  description: string
+  state: 'ready' | 'starting' | 'needs_setup' | 'failed'
+  tools: number
+  error?: string
 }
 
 export interface McpStatus {

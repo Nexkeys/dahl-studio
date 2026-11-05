@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { execFile } from 'node:child_process'
-import type { McpCatalogEntry, McpServerConfig, McpStatus, McpTool } from '@shared/types'
+import type { McpCatalogEntry, McpConnectorInfo, McpServerConfig, McpStatus, McpTool, McpToolRef } from '@shared/types'
 import { McpClient, StdioTransport, HttpTransport } from './client'
 import { CATALOG, capabilityTestFor } from './catalog'
 import { allowsWrites, effectiveArgs } from '@shared/mcpArgs'
@@ -26,6 +26,8 @@ interface Instance {
   key: string
   serverId: string
   client: McpClient | null
+  /** the process/connection as soon as it exists: a server stuck while starting must still be stoppable */
+  transport?: { close(): void }
   status: McpStatus
   logs: string[]
   starting?: Promise<void>
@@ -117,7 +119,8 @@ export class McpManager {
     if (!s) throw new Error('Unknown server')
     if (patch.env) {
       for (const [k, v] of Object.entries(patch.env)) {
-        if (v && v !== '(stored securely)') await this.deps.setSecret(`mcp:${id}:${k}`, v)
+        // an empty value removes the secret from the vault (the encrypted file is deleted, not just hidden)
+        if (v !== '(stored securely)') await this.deps.setSecret(`mcp:${id}:${k}`, v ?? '')
         s.env = { ...(s.env ?? {}), [k]: v ? 'secret' : '' }
       }
     }
@@ -234,6 +237,7 @@ export class McpManager {
           // servers run from Dahl's own folder so they do not litter the project (e.g. Playwright snapshots)
           transport = new StdioTransport(command, args, env, work, (l) => this.log(inst, l))
         }
+        inst.transport = transport
         transport.onClose = (reason) => {
           this.log(inst, `disconnected: ${reason}`)
           inst.client = null
@@ -248,7 +252,9 @@ export class McpManager {
         inst.status = { id: key, state: 'connected', tools, pid: transport instanceof StdioTransport ? transport.pid : undefined, startedAt: nowIso() }
         this.log(inst, `connected in ${Date.now() - t0} ms, ${tools.length} tools`)
       } catch (e) {
-        inst.client?.transport.close()
+        // before this, a server that failed to initialise kept running (client was still null, so nothing was closed)
+        inst.transport?.close()
+        inst.transport = undefined
         inst.client = null
         inst.status = { id: key, state: 'error', tools: [], error: (e as Error).message }
         this.log(inst, `error: ${(e as Error).message}`)
@@ -264,8 +270,9 @@ export class McpManager {
   stopServer(id: string): void {
     for (const [k, i] of this.inst) {
       if (i.serverId !== id) continue
-      i.client?.transport.close()
+      ;(i.client?.transport ?? i.transport)?.close()
       i.client = null
+      i.transport = undefined
       i.status = { id: k, state: 'stopped', tools: [] }
       this.log(i, 'stopped by user')
     }
@@ -273,7 +280,7 @@ export class McpManager {
   }
 
   stopAll(): void {
-    for (const i of this.inst.values()) i.client?.transport.close()
+    for (const i of this.inst.values()) (i.client?.transport ?? i.transport)?.close()
   }
 
   logs(id: string): string[] {
@@ -285,9 +292,43 @@ export class McpManager {
    * `only` limits this to those server ids (the others are not started or waited for);
    * `problems` collects a readable reason for each server that is missing, disabled or not connected.
    */
-  async toolsFor(project: string, only?: string[], problems?: string[]): Promise<{ serverId: string; serverName: string; policy: McpServerConfig['policy']; tool: McpTool; fnName: string }[]> {
+  /** A catalogue server whose required secret is not set (for example Supabase without its token) is not started. */
+  private needsSetup(cfg: McpServerConfig): string | null {
+    if (cfg.custom) return null
+    const cat = CATALOG.find((x) => x.id === cfg.catalogId)
+    const missing = Object.keys(cat?.install?.env ?? {}).filter((k) => !cfg.env?.[k])
+    return missing.length ? `${missing.join(', ')} not set. Enter it on the ${cfg.name} card in the Toolbox.` : null
+  }
+
+  /** Start every enabled, set-up server for a project in the background, so a task never waits for cold starts. */
+  async warm(project: string | null): Promise<void> {
     const d = await this.load()
-    const out: { serverId: string; serverName: string; policy: McpServerConfig['policy']; tool: McpTool; fnName: string }[] = []
+    for (const s of d.servers) if (s.enabled && !this.needsSetup(s)) void this.start(s.id, project).catch(() => {})
+  }
+
+  /** Every enabled server and whether its tools can be used right now (shown to the model as a short list). */
+  async connectors(project: string): Promise<McpConnectorInfo[]> {
+    const d = await this.load()
+    return d.servers.filter((s) => s.enabled).map((s) => {
+      const setup = this.needsSetup(s)
+      const i = this.inst.get(this.instKey(s, project))
+      const cat = CATALOG.find((x) => x.id === s.catalogId)
+      const state: McpConnectorInfo['state'] = setup ? 'needs_setup' : i?.status.state === 'connected' ? 'ready' : i?.status.state === 'error' ? 'failed' : 'starting'
+      return { id: s.id, name: s.name, description: cat?.description ?? '', state, tools: i?.status.tools.length ?? 0, error: setup ?? (state === 'failed' ? i?.status.error : undefined) }
+    })
+  }
+
+  private refs(s: McpServerConfig, tools: McpTool[]): McpToolRef[] {
+    return tools.map((t) => ({ serverId: s.id, serverName: s.name, policy: s.policy, tool: t, fnName: `mcp__${sanitizeName(s.id)}__${sanitizeName(t.name)}`.slice(0, 64) }))
+  }
+
+  /**
+   * Tools of enabled servers. Servers still starting get at most `waitMs` (they keep starting in the background and
+   * can be loaded later with use_connector); servers missing a required secret are skipped without an error.
+   */
+  async toolsFor(project: string, only?: string[], problems?: string[], waitMs = 45000): Promise<McpToolRef[]> {
+    const d = await this.load()
+    const out: McpToolRef[] = []
     for (const id of only ?? []) {
       const s = d.servers.find((x) => x.id === id)
       if (!s) problems?.push(`MCP server "${id}" is not configured (it may have been removed in the Toolbox).`)
@@ -295,13 +336,29 @@ export class McpManager {
     }
     await Promise.all(
       d.servers.filter((s) => s.enabled && (!only || only.includes(s.id))).map(async (s) => {
-        const i = await Promise.race([this.start(s.id, project), new Promise<null>((r) => setTimeout(() => r(null), 45000))])
-        if (!i) return void problems?.push(`MCP server "${s.name}" did not start within 45 s.`)
+        const setup = this.needsSetup(s)
+        if (setup) return void (only && problems?.push(`MCP server "${s.name}" needs setup: ${setup}`))
+        const i = await Promise.race([this.start(s.id, project).catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), waitMs))])
+        if (!i) return void (waitMs >= 45000 && problems?.push(`MCP server "${s.name}" did not start within ${Math.round(waitMs / 1000)} s.`))
         if (i.status.state !== 'connected') return void problems?.push(`MCP server "${s.name}" failed to start: ${i.status.error ?? i.status.state}`)
-        for (const t of i.status.tools) out.push({ serverId: s.id, serverName: s.name, policy: s.policy, tool: t, fnName: `mcp__${sanitizeName(s.id)}__${sanitizeName(t.name)}`.slice(0, 64) })
+        out.push(...this.refs(s, i.status.tools))
       })
     )
     return out
+  }
+
+  /** Start one server (waiting up to 45 s) and return its tools, for use_connector. */
+  async ensure(id: string, project: string): Promise<McpToolRef[]> {
+    const d = await this.load()
+    const s = d.servers.find((x) => x.id === id)
+    if (!s) throw new Error(`Connector "${id}" is not configured.`)
+    if (!s.enabled) throw new Error(`Connector "${s.name}" is turned off. Ask the user to enable it in the Free Toolbox.`)
+    const setup = this.needsSetup(s)
+    if (setup) throw new Error(`Connector "${s.name}" needs setup: ${setup}`)
+    const i = await Promise.race([this.start(id, project), new Promise<null>((r) => setTimeout(() => r(null), 45000))])
+    if (!i) throw new Error(`Connector "${s.name}" did not start within 45 s.`)
+    if (i.status.state !== 'connected') throw new Error(`Connector "${s.name}" failed to start: ${i.status.error ?? i.status.state}`)
+    return this.refs(s, i.status.tools)
   }
 
   /** Enforce the project boundary on path-like arguments before any MCP call. */

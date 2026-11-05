@@ -281,7 +281,7 @@ export class ModelRegistry {
         const err = e instanceof DahlError ? e : new DahlError('network', String(e))
         if (err.kind === 'cancelled' || started) throw err
         lastErr = err
-        this.deps.onUsage(slot, { ok: false, lastModel: req.model, lastLatencyMs: Date.now() - t0 })
+        this.deps.onUsage(slot, { ok: false, lastModel: req.model, lastLatencyMs: Date.now() - t0, lastError: `${err.kind}: ${err.message}`.slice(0, 300) })
         // A model that rejects a reasoning parameter: retry once without it.
         if (err.kind === 'bad_request' && Object.keys(ex).length) {
           ex = {}

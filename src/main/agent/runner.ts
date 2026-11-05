@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { promises as fsp } from 'node:fs'
-import type { AgentEvent, AgentInfo, AgentRole, ChatMessage, ContentPart, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
+import type { AgentEvent, AgentInfo, AgentRole, ChatMessage, ContentPart, McpConnectorInfo, McpToolRef, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
 import { DahlError, type ChatRequest, type ChatResult, type StreamCallbacks } from '../dahl/client'
 import { projectOutline, resolveInside, writeText } from '../fs/workspace'
 import { ProjectStore } from '../store/projectStore'
@@ -9,6 +9,7 @@ import { stripDashes } from '@shared/dashes'
 import { ROLE_INFO, systemPrompt, THINKING_GUIDANCE, TOOL_DEFS, toolsFor, WRITE_ROLES } from './tools'
 import { buildUserContent, compact, repairHistory, summariseTool, summary } from './history'
 import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
+import { parseToolArgs } from './args'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
 
@@ -17,16 +18,14 @@ export { repairHistory, closeDanglingToolCalls, compact } from './history'
 export interface ChatBackend {
   chat(req: ChatRequest & { thinking?: StartRunRequest['thinking'] }, signal: AbortSignal, cb?: StreamCallbacks): Promise<Pick<ChatResult, 'content' | 'reasoning' | 'toolCalls'> & Partial<ChatResult> & { slot?: string }>
 }
-export interface McpToolRef {
-  serverId: string
-  serverName: string
-  policy: 'ask' | 'readonly' | 'allow'
-  tool: { name: string; description?: string; inputSchema?: unknown; readOnly?: boolean }
-  fnName: string
-}
+export type { McpToolRef } from '@shared/types'
 export interface McpBridge {
   /** `only`: load just these server ids; `problems`: receives a readable reason per unusable server */
-  toolsFor(project: string, only?: string[], problems?: string[]): Promise<McpToolRef[]>
+  toolsFor(project: string, only?: string[], problems?: string[], waitMs?: number): Promise<McpToolRef[]>
+  /** enabled connectors and their state, for the short list in the prompt (optional: test bridges may omit it) */
+  connectors?(project: string): Promise<McpConnectorInfo[]>
+  /** start one connector and return its tools (use_connector) */
+  ensure?(serverId: string, project: string): Promise<McpToolRef[]>
   call(serverId: string, project: string, tool: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean; images: { mediaType: string; data: string }[] }>
 }
 export interface RunnerDeps {
@@ -44,6 +43,8 @@ export interface RunnerDeps {
   analyzeImage?(name: string, mediaType: string, data: string, signal: AbortSignal): Promise<string>
   mcp?: McpBridge
   maxIterations?: number
+  /** installed developer tools on this PC, one line (see envProbe.ts) */
+  environment?(): Promise<string>
 }
 
 interface RunCtl {
@@ -56,6 +57,9 @@ interface RunCtl {
   web: boolean
   images: Map<string, { mediaType: string; data: string }>
   mcpTools: McpToolRef[]
+  /** connectors whose tools are sent to the model; the rest are listed by name and loaded with use_connector */
+  mcpActive: Set<string>
+  connectors: McpConnectorInfo[]
   turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number; delegations?: number }
   prompt: string
   answer: string
@@ -66,6 +70,17 @@ interface AgentCtx {
   isLead: boolean
 }
 class PauseSignal extends Error {}
+
+/** Up to this many connector tools in total are always sent; above it, connectors are loaded on demand (use_connector). */
+const MCP_ALWAYS_LOADED = 15
+const USE_CONNECTOR = {
+  type: 'function',
+  function: {
+    name: 'use_connector',
+    description: 'Load the tools of one connector (MCP server) listed under "Connectors", so you can call them from your next step. Use it only when the task needs that connector.',
+    parameters: { type: 'object', properties: { name: { type: 'string', description: 'Connector name as listed' } }, required: ['name'] }
+  }
+} as const
 
 export class AgentRunner {
   private active = new Map<string, RunCtl>()
@@ -79,6 +94,14 @@ export class AgentRunner {
   }
   activeRunId(p: string): string | null {
     return this.active.get(this.key(p))?.run.id ?? null
+  }
+  /** Every task running right now, in any project (one per project). */
+  activeRuns(): { project: string; runId: string }[] {
+    return [...this.active.values()].map((c) => ({ project: c.run.project, runId: c.run.id }))
+  }
+  /** Save every running task's state, so a restart can continue from here. */
+  async checkpointAll(): Promise<void> {
+    await Promise.all([...this.active.values()].map((c) => c.store.saveRun(c.run).catch(() => {})))
   }
   pendingApprovals(): PendingApproval[] {
     return [...this.active.values()].flatMap((c) => [...c.approvals.values()].map((a) => a.approval))
@@ -110,7 +133,7 @@ export class AgentRunner {
     const images = new Map<string, { mediaType: string; data: string }>()
     run.messages.push({ role: 'user', content: buildUserContent(req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
-      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], prompt: req.prompt, answer: '',
+      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], prompt: req.prompt, answer: '',
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
@@ -217,8 +240,10 @@ export class AgentRunner {
       // MCP tools are offered in every mode; outside Build, execMcp asks before any tool not marked read-only
       if (this.deps.mcp) await this.loadMcp(ctl, this.deps.mcp)
       ctl.answer = await this.agentLoop(ctl, lead)
-      await this.autoMemory(ctl).catch((e) => this.log(ctl, 'error', `auto-memory failed: ${(e as Error).message}`))
+      // the answer is on screen: mark the task done now and learn from it afterwards. The memory call is one more
+      // model request (15 to 27 s on Dahl models), and the task used to keep spinning until it returned.
       await this.finish(ctl, 'completed')
+      void this.autoMemory(ctl).catch((e) => this.log(ctl, 'error', `auto-memory failed: ${(e as Error).message}`))
     } catch (e) {
       if (e instanceof PauseSignal) {
         this.addItem(ctl, { kind: 'status', text: e.message })
@@ -242,8 +267,13 @@ export class AgentRunner {
     const focus = ctl.run.mcpServers
     const only = Array.isArray(focus) ? focus : undefined
     const problems: string[] = []
-    ctl.mcpTools = await mcp.toolsFor(ctl.run.project, only, problems).catch((e) => (problems.push(`MCP unavailable: ${(e as Error).message}`), []))
+    // Without a slash-command focus a turn never waits for cold starts: servers get a short budget and keep starting in
+    // the background (each task used to wait up to 45 s for all of them before the first model call)
+    ctl.mcpTools = await mcp.toolsFor(ctl.run.project, only, problems, focus ? 45000 : 2500).catch((e) => (problems.push(`MCP unavailable: ${(e as Error).message}`), []))
+    ctl.connectors = (await mcp.connectors?.(ctl.run.project).catch(() => [])) ?? []
     for (const p of problems) this.log(ctl, 'error', p)
+    // a few tools cost little, so they stay loaded; a large set is listed by name only and loaded on demand
+    if (focus || ctl.mcpTools.length <= MCP_ALWAYS_LOADED) for (const t of ctl.mcpTools) ctl.mcpActive.add(t.serverId)
     if (!focus) return
     if (only) ctl.mcpTools = ctl.mcpTools.filter((t) => only.includes(t.serverId))
     const list = problems.map((p) => `- ${p}`).join('\n')
@@ -254,16 +284,62 @@ export class AgentRunner {
 
   private allowedTools(ctl: RunCtl, a: AgentCtx): string[] {
     const base: string[] = toolsFor(a.info.role, ctl.run.mode, ctl.web)
-    if (a.isLead) base.push(...ctl.mcpTools.map((t) => t.fnName))
+    if (a.isLead) base.push(...this.activeMcp(ctl).map((t) => t.fnName), ...(this.loadableConnectors(ctl).length ? ['use_connector'] : []))
     return base
   }
 
   private toolDefs(ctl: RunCtl, a: AgentCtx): unknown[] {
     const defs: unknown[] = toolsFor(a.info.role, ctl.run.mode, ctl.web).map((n) => TOOL_DEFS[n])
-    if (a.isLead)
-      for (const t of ctl.mcpTools)
+    if (a.isLead) {
+      for (const t of this.activeMcp(ctl))
         defs.push({ type: 'function', function: { name: t.fnName, description: `[MCP ${t.serverName}] ${t.tool.description ?? t.tool.name}`.slice(0, 1000), parameters: t.tool.inputSchema ?? { type: 'object', properties: {} } } })
+      if (this.loadableConnectors(ctl).length) defs.push(USE_CONNECTOR)
+    }
     return defs
+  }
+
+  private activeMcp(ctl: RunCtl): McpToolRef[] {
+    return ctl.mcpTools.filter((t) => ctl.mcpActive.has(t.serverId))
+  }
+
+  /** Connectors the model can still load: enabled, set up, and not already active. */
+  private loadableConnectors(ctl: RunCtl): McpConnectorInfo[] {
+    const known = new Map(ctl.connectors.map((c) => [c.id, c]))
+    for (const t of ctl.mcpTools) if (!known.has(t.serverId)) known.set(t.serverId, { id: t.serverId, name: t.serverName, description: '', state: 'ready', tools: 0 })
+    return [...known.values()].filter((c) => !ctl.mcpActive.has(c.id) && (c.state === 'ready' || c.state === 'starting'))
+  }
+
+  /** One line per enabled connector for the prompt, so the model knows what it can load without every schema. */
+  private connectorLines(ctl: RunCtl): string[] {
+    const counts = new Map<string, number>()
+    for (const t of ctl.mcpTools) counts.set(t.serverId, (counts.get(t.serverId) ?? 0) + 1)
+    return ctl.connectors.map((c) => {
+      const n = counts.get(c.id) ?? c.tools
+      const state = ctl.mcpActive.has(c.id) ? 'loaded' : c.state === 'needs_setup' ? `needs setup (${c.error})` : c.state === 'failed' ? `unavailable (${c.error ?? 'failed to start'})` : c.state === 'starting' ? 'starting' : 'ready'
+      return `${c.name} [${state}${n ? `, ${n} tools` : ''}]${c.description ? `: ${c.description.slice(0, 160)}` : ''}`
+    })
+  }
+
+  /** use_connector: load one connector's tools for the rest of this task (waits for it to start if needed). */
+  private async useConnector(ctl: RunCtl, raw: string): Promise<ToolResult> {
+    const parsed = parseToolArgs(raw, USE_CONNECTOR.function.parameters as never)
+    const want = parsed.ok ? String(parsed.args.name ?? '').trim().toLowerCase() : ''
+    const all = [...ctl.connectors, ...ctl.mcpTools.map((t) => ({ id: t.serverId, name: t.serverName }))]
+    const hit = all.find((c) => c.id.toLowerCase() === want || c.name.toLowerCase() === want) ?? all.find((c) => want.length >= 3 && c.name.toLowerCase().includes(want))
+    if (!hit) return { ok: false, text: `No connector called "${want}". Available: ${ctl.connectors.map((c) => c.name).join(', ') || 'none'}.` }
+    const info = ctl.connectors.find((c) => c.id === hit.id)
+    if (info?.state === 'needs_setup') return { ok: false, text: `${info.name} needs setup first: ${info.error} Tell the user.` }
+    if (!ctl.mcpTools.some((t) => t.serverId === hit.id)) {
+      if (!this.deps.mcp?.ensure) return { ok: false, text: `${hit.name} is not connected.` }
+      try {
+        ctl.mcpTools.push(...(await this.deps.mcp.ensure(hit.id, ctl.run.project)))
+      } catch (e) {
+        return { ok: false, text: (e as Error).message }
+      }
+    }
+    ctl.mcpActive.add(hit.id)
+    const tools = ctl.mcpTools.filter((t) => t.serverId === hit.id)
+    return { ok: true, text: `Loaded ${tools.length} tools from ${hit.name}. You can call them from your next step:\n${tools.map((t) => `- ${t.fnName}: ${(t.tool.description ?? '').split('\n')[0].slice(0, 140)}`).join('\n')}` }
   }
 
   private async system(ctl: RunCtl, a: AgentCtx): Promise<string> {
@@ -275,7 +351,9 @@ export class AgentRunner {
     return systemPrompt({
       role: a.info.role, mode: run.mode, projectName: path.basename(run.project), outline: await projectOutline(run.project), memory,
       plan: run.plan.map((s) => `[${s.status}] ${s.title}`).join('\n'), reasoning, thinking: THINKING_GUIDANCE[run.thinking ?? 'off'],
-      task: a.isLead ? undefined : a.info.task, files: a.info.files, mcp: a.isLead ? ctl.mcpTools.map((t) => t.fnName) : [],
+      task: a.isLead ? undefined : a.info.task, files: a.info.files, mcp: a.isLead ? this.activeMcp(ctl).map((t) => t.fnName) : [],
+      connectors: a.isLead ? this.connectorLines(ctl) : [],
+      environment: this.deps.environment ? await this.deps.environment().catch(() => '') : '',
       mcpFocus: !a.isLead || !run.mcpServers ? undefined : run.mcpServers === 'all' ? 'all' : [...new Set(ctl.mcpTools.map((t) => t.serverName))],
       progress: (await this.deps.getSettings()).maintainProgress ? await readProgress(run.project) : ''
     })
@@ -308,10 +386,12 @@ export class AgentRunner {
       if (!a.isLead) this.emitAgent(ctl, a.info)
       const messages: ChatMessage[] = [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)]
       let streamed = ''
-      const ask = () => ((streamed = ''), this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
+      let t0 = 0
+      let firstAt = 0
+      const ask = () => ((streamed = ''), (t0 = Date.now()), (firstAt = 0), this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
         ? {
-            onDelta: (t) => ((streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
-            onReasoning: (t) => this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t })
+            onDelta: (t) => ((firstAt ||= Date.now()), (streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
+            onReasoning: (t) => ((firstAt ||= Date.now()), this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t }))
           }
         : {}))
       // A stream cut mid-reply (seen live: "Network error: terminated", or a stream that just stops) is not retried by
@@ -343,7 +423,14 @@ export class AgentRunner {
       lastText = content
       if (a.isLead && reasoning) this.addItem(ctl, { kind: 'reasoning', text: reasoning })
       a.messages.push({ role: 'assistant', content: content || null, ...(calls.length ? { tool_calls: calls } : {}), ...(res.providerBlocks?.length ? { providerBlocks: res.providerBlocks } : {}) })
-      if (a.isLead && content.trim()) this.addItem(ctl, { kind: 'assistant', text: content })
+      if (a.isLead && content.trim()) {
+        // speed is shown under the reply, so a slow provider is visible instead of feeling like the app is slow
+        const end = Date.now()
+        const tokens = res.usage?.completion_tokens ?? Math.ceil(((res.content ?? '') + (res.reasoning ?? '')).length / 4)
+        const genMs = Math.max(1, end - (firstAt || t0))
+        const stats = { ttftMs: (firstAt || end) - t0, tokensPerSec: Math.round((tokens / genMs) * 10000) / 10, tokens, estimated: !res.usage?.completion_tokens, model: run.model }
+        this.addItem(ctl, { kind: 'assistant', text: content, stats })
+      }
       if (res.finishReason === 'length') this.log(ctl, 'error', `${a.info.name}: model output hit the length limit (finish_reason=length)`)
       if (!calls.length) {
         // "Lazy" models announce work ("Here it comes", "Let me...") and stop without calling a tool. Nudge them (max 2x).
@@ -368,6 +455,7 @@ export class AgentRunner {
       }
       // only the lead may delegate: a sub-agent's delegate_agents call goes through execTool and is refused (no nesting)
       const delegations = a.isLead ? calls.filter((c) => c.function.name === 'delegate_agents') : []
+      const connectorCalls = a.isLead ? calls.filter((c) => c.function.name === 'use_connector') : []
       const pendingImages: ContentPart[] = []
       for (const tc of calls) {
         if (ctl.abort.signal.aborted) {
@@ -379,7 +467,15 @@ export class AgentRunner {
         a.info.toolCount++
         ctl.turn.toolCount++
         if (!a.isLead) this.emitAgent(ctl, a.info)
-        const result: ToolResult = delegations.includes(tc) ? await this.delegate(ctl, tc.function.arguments) : await execTool(this.execCtx(ctl, a), tc.function.name, tc.function.arguments, this.allowedTools(ctl, a))
+        // a tool that throws must never end the task: the model gets the error and can correct its call
+        let result: ToolResult
+        try {
+          result = delegations.includes(tc) ? await this.delegate(ctl, tc.function.arguments) : connectorCalls.includes(tc) ? await this.useConnector(ctl, tc.function.arguments) : await execTool(this.execCtx(ctl, a), tc.function.name, tc.function.arguments, this.allowedTools(ctl, a))
+        } catch (e) {
+          if (e instanceof DahlError && e.kind === 'cancelled') throw e
+          if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
+          result = { ok: false, text: `The ${tc.function.name} tool failed: ${(e as Error).message}. Check the arguments and try again, or take another approach.` }
+        }
         const safe = redact(result.text, await this.deps.secrets())
         if (!result.ok) this.log(ctl, 'error', `${a.info.name} ${tc.function.name} failed: ${safe.slice(0, 800)}`)
         // keep invalid arguments out of history so later requests are not rejected
@@ -410,12 +506,12 @@ export class AgentRunner {
 
   /** Run sub-agents in parallel. Write-capable agents get file leases so they cannot overwrite each other. */
   private async delegate(ctl: RunCtl, raw: string): Promise<ToolResult> {
-    let specs: { role: AgentRole; task: string; files?: string[] }[]
-    try {
-      specs = (JSON.parse(raw).agents ?? []).slice(0, 6)
-    } catch {
-      return { ok: false, text: 'Invalid delegate_agents arguments.' }
-    }
+    const parsed = parseToolArgs(raw, TOOL_DEFS.delegate_agents.function.parameters as never)
+    if (!parsed.ok) return { ok: false, text: parsed.error }
+    const list: unknown = parsed.args.agents
+    if (!Array.isArray(list)) return { ok: false, text: 'agents must be a list of {role, task, files} objects, for example {"agents": [{"role": "researcher", "task": "..."}]}.' }
+    const specs = list.filter((s): s is { role: AgentRole; task: string; files?: string[] } => !!s && typeof s === 'object' && typeof (s as { task?: unknown }).task === 'string').slice(0, 6)
+    if (!specs.length) return { ok: false, text: 'Each agent needs a role and a task, for example {"agents": [{"role": "researcher", "task": "..."}]}.' }
     if (!specs.length) return { ok: false, text: 'No agents specified.' }
     // cost guard: each delegation can run up to 6 agents x many steps, so cap it per user message
     if ((ctl.turn.delegations ?? 0) >= MAX_DELEGATIONS_PER_TURN) return { ok: false, text: `Delegation limit reached (${MAX_DELEGATIONS_PER_TURN} per request). Finish the task yourself with the reports you already have.` }

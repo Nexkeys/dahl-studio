@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText } from 'lucide-react'
+import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText, Hammer } from 'lucide-react'
 import type { RunSummary, StartRunRequest } from '@shared/types'
 import { api, useStore } from '../store'
 import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from '../chats'
@@ -45,7 +45,7 @@ export function ChatPanel({ root }: { root: string }) {
     if (el && stick.current) el.scrollTop = el.scrollHeight
   }, [p?.transcript.length, p?.live, p?.liveReasoning])
 
-  const send = async (text: string, mcpServers?: StartRunRequest['mcpServers']) => {
+  const send = async (text: string, mcpServers?: StartRunRequest['mcpServers'], modeOverride?: StartRunRequest['mode']) => {
     if (running) return
     if (!settings?.defaultModel) return notify('Select a model first.', 'error')
     const provider = settings.defaultModel.split(':')[0]
@@ -59,7 +59,7 @@ export function ChatPanel({ root }: { root: string }) {
     const chat = beginRun(root, text)
     try {
       const resumable = p?.runId && p.status && p.status !== 'running'
-      const run = await api.invoke<RunSummary>('agent:start', { project: root, prompt: text, mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined, mcpServers })
+      const run = await api.invoke<RunSummary>('agent:start', { project: root, prompt: text, mode: modeOverride ?? mode, web, attachments, thinking: settings.thinking, model: settings.defaultModel, resumeRunId: resumable ? p!.runId : undefined, mcpServers })
       attachRun(root, chat, run?.id ?? null)
     } catch (e) {
       attachRun(root, chat, null)
@@ -70,6 +70,9 @@ export function ChatPanel({ root }: { root: string }) {
 
   const transcript = p?.transcript ?? []
   const canContinue = p?.runId && (p.status === 'paused' || p.status === 'interrupted' || p.status === 'failed')
+  // a Plan or Review answer that says the work needs Build mode: one click switches and continues
+  const lastAnswer = [...transcript].reverse().find((t) => t.kind === 'assistant')?.text ?? ''
+  const offerBuild = !running && mode !== 'build' && p?.status === 'completed' && /Build mode|switch to Build/i.test(lastAnswer)
 
   return (
     <div className="panel chat">
@@ -115,9 +118,15 @@ export function ChatPanel({ root }: { root: string }) {
           </div>
         )}
         {p?.status === 'running' && !p.live && !p.liveReasoning && <div className="status-line working"><span className="shimmer">Working</span></div>}
+        {offerBuild && (
+          <div className="continue-bar reveal">
+            <span className="small">Dahl needs Build mode to make these changes or run commands.</span>
+            <button className="btn small primary" onClick={() => (set({ mode: 'build' }), void send('Switched to Build mode. Go ahead and do it.', undefined, 'build'))}><Hammer size={13} /> Switch to Build and continue</button>
+          </div>
+        )}
         {canContinue && (
           <div className="continue-bar reveal">
-            <span className="small">This task is {p!.status}. Its state is saved locally.</span>
+            <span className="small">{p!.status === 'failed' ? 'This task stopped with an error.' : p!.status === 'paused' ? 'This task is paused.' : 'This task was interrupted.'} Its progress is saved, so it can pick up from here.</span>
             <button className="btn small primary" onClick={() => send('Continue')}><Play size={13} /> Continue</button>
           </div>
         )}
