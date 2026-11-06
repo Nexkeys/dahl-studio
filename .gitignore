@@ -8,3 +8,5 @@ release/
 # research working notes and reports (kept locally)
 research_notes/
 reports/
+# agent worktrees (temporary)
+.claude/worktrees/
