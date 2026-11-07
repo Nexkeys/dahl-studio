@@ -17,6 +17,7 @@ import { formatBreakdown, PIXEL_ANALYSIS_JS, windowsOcr } from './tools/image'
 import { appendJsonl, nowIso, redact } from './util'
 import { probeEnvironment } from './envProbe'
 import { batchDeltas } from './eventBatch'
+import { configureChief } from './chief/tools'
 
 export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
 // Smoke tests use an isolated profile so they never touch the user's real settings and can run beside the installed app
@@ -165,3 +166,6 @@ export const runner = new AgentRunner({
     call: (s, p, t, a) => mcp.call(s, p, t, a)
   }
 })
+
+// Chief of Staff tools read approvals and running tasks from the runner and keep their data in the app data folder
+configureChief({ appDir: APP_DIR, approvals: () => runner.pendingApprovals(), activeRuns: () => runner.activeRuns(), startTask: (req) => runner.start(req) })

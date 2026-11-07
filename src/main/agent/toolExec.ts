@@ -14,6 +14,7 @@ import { parseToolArgs } from './args'
 import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
+import { execChief } from '../chief/tools'
 
 export interface ToolResult {
   ok: boolean
@@ -152,6 +153,11 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return await execGithub(c, a ?? {})
       case 'ask_user':
         return await execAskUser(c, a ?? {})
+      case 'chief_briefing':
+      case 'chief_followups':
+      case 'chief_goals':
+      case 'chief_delegate':
+        return await execChief(c, name, a ?? {})
       case 'web_search': {
         if (!c.deps.web) return { ok: false, text: 'Web research is not available.' }
         const res = await c.deps.web.search(String(a.query), Math.min(Number(a.max_results) || 8, 15), c.signal)

@@ -12,6 +12,8 @@ import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { allPrereqs } from './mcp/prereqs'
+import { runMobileChecks } from './mobileCheck'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -253,6 +255,9 @@ export function registerIpc(): void {
   handle('mcp:export', () => mcp.exportConfig())
   handle('mcp:import', (json: string) => mcp.importConfig(json))
   handle('mcp:prereq', (cmd: string) => mcp.checkPrereq(cmd))
+  // catalogue connector requirements (REA's Node version, Maestro's CLI and Java, adb) and the mobile setup checker: read-only
+  handle('mcp:prereqs', (fresh?: boolean) => allPrereqs(!!fresh))
+  handle('mobile:check', () => runMobileChecks())
 
   // ---- storage & logs ----
   handle('storage:report', async (): Promise<StorageReport> => {
