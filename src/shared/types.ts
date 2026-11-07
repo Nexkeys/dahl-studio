@@ -165,6 +165,8 @@ export interface TranscriptItem {
   agentIds?: string[]
   /** a model call is being retried: drop the partly streamed reply on screen (it is not part of the conversation) */
   resetLive?: boolean
+  /** user messages sent while the agent was working: the id the composer gave it, so its pending chip can be cleared */
+  steerId?: string
   /** assistant replies: how fast the model answered (time to first token, generation speed), shown under the reply */
   stats?: { ttftMs: number; tokensPerSec: number; tokens: number; estimated: boolean; model: string }
 }

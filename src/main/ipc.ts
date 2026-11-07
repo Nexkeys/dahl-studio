@@ -206,6 +206,7 @@ export function registerIpc(): void {
     return runner.start(req)
   })
   handle('agent:pause', (project: string) => runner.pause(project))
+  handle('agent:steer', async (project: string, id: string, text: string) => runner.steer(await assertProject(project), String(id), String(text)))
   handle('agent:cancel', (project: string) => runner.cancel(project))
   handle('agent:checkpoint', (project: string) => runner.checkpoint(project))
   handle('agent:approve', (id: string, approved: boolean, feedback?: string) => runner.resolveApproval(id, approved, feedback))

@@ -59,6 +59,8 @@ interface RunCtl {
   mcpTools: McpToolRef[]
   /** connectors whose tools are sent to the model; the rest are listed by name and loaded with use_connector */
   mcpActive: Set<string>
+  /** messages the user sent while the task was running; delivered to the lead at its next step */
+  steers: { id: string; text: string }[]
   connectors: McpConnectorInfo[]
   turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number; delegations?: number }
   prompt: string
@@ -133,7 +135,7 @@ export class AgentRunner {
     const images = new Map<string, { mediaType: string; data: string }>()
     run.messages.push({ role: 'user', content: buildUserContent(req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
-      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], prompt: req.prompt, answer: '',
+      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '',
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
@@ -143,6 +145,31 @@ export class AgentRunner {
     this.emitRun(ctl)
     void this.runTurn(ctl)
     return summary(run)
+  }
+
+  /**
+   * A message sent while the task runs. It reaches the lead agent at its next step (after the tools in flight finish,
+   * before the next model call), inside the same task. Never counts as approving anything. Returns false when no
+   * task is running here, so the caller can start a normal turn instead.
+   */
+  steer(p: string, id: string, text: string): boolean {
+    const c = this.active.get(this.key(p))
+    if (!c || !text.trim()) return false
+    c.steers.push({ id, text: text.trim() })
+    this.log(c, 'info', 'User message queued for the next step')
+    return true
+  }
+
+  /** Deliver waiting messages into the lead's conversation and the transcript. */
+  private drainSteers(ctl: RunCtl, a: AgentCtx): boolean {
+    if (!a.isLead || !ctl.steers.length) return false
+    for (const s of ctl.steers.splice(0)) {
+      a.messages.push({ role: 'user', content: `${s.text}
+
+(Sent by the user while you were working. Take it into account from now on, and say in your final answer how you handled it.)` })
+      this.addItem(ctl, { kind: 'user', text: s.text, steerId: s.id })
+    }
+    return true
   }
 
   pause(p: string): void {
@@ -373,6 +400,7 @@ export class AgentRunner {
     while (true) {
       if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
       if (a.isLead && ctl.pauseRequested) throw new PauseSignal('Paused. State is checkpointed; send "Continue" to resume.')
+      this.drainSteers(ctl, a)
       // sub-agents stop at their next step so Pause does not wait for (and pay for) every remaining sub-agent step
       if (!a.isLead && ctl.pauseRequested) return `${lastText}\n[Stopped early: the user paused the task]`
       if (iter >= maxIter) {
@@ -433,6 +461,8 @@ export class AgentRunner {
       }
       if (res.finishReason === 'length') this.log(ctl, 'error', `${a.info.name}: model output hit the length limit (finish_reason=length)`)
       if (!calls.length) {
+        // a message arrived while this reply was being written: take one more step so it is answered in this task
+        if (a.isLead && ctl.steers.length) continue
         // "Lazy" models announce work ("Here it comes", "Let me...") and stop without calling a tool. Nudge them (max 2x).
         if (run.mode === 'build' && nudges < 2 && announcesWork(content)) {
           nudges++
