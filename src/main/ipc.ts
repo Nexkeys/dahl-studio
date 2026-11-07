@@ -12,6 +12,7 @@ import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { registerPtyIpc } from './pty/ipc'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -199,6 +200,8 @@ export function registerIpc(): void {
     return true
   })
   handle('term:stop', (id: string) => procs.stop(id))
+  // the terminal panel: real shells in a PTY host (pty/)
+  registerPtyIpc(handle, assertProject)
 
   // ---- agent ----
   handle('agent:start', async (req: StartRunRequest) => {

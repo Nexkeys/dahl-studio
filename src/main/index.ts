@@ -8,6 +8,7 @@ import { initUpdater } from './updater'
 import { ProjectStore } from './store/projectStore'
 import { buildResumeOffer, saveForResume } from './restart'
 import { probeEnvironment } from './envProbe'
+import { ptys } from './pty/ipc'
 import type { RunState } from '@shared/types'
 import { isAllowedPreviewRequest } from '@shared/preview'
 
@@ -143,7 +144,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // closing with a task running: checkpoint it first, so the next start can offer to continue it
-  void saveForResume('quit').catch(() => 0).finally(() => {
+  void saveForResume('quit').catch(() => 0).then(() => ptys.dispose()).catch(() => 0).finally(() => {
     procs.stopAll()
     mcp.stopAll()
     app.quit()
