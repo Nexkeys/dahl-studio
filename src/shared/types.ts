@@ -77,6 +77,10 @@ export interface Settings {
   keyNames: Record<KeySlot, string>
   autoApproveWrites: boolean
   autoApproveCommands: boolean
+  /** "Never ask": file changes, commands, connector tools and git run without approval cards, in every mode */
+  autoApproveAll: boolean
+  /** with autoApproveAll on, still ask before pushing to GitHub, pull requests and releases */
+  askBeforePublishing: boolean
   autoMemory: boolean
   /** keep an app-maintained PROGRESS.md work log in the project root */
   maintainProgress: boolean
