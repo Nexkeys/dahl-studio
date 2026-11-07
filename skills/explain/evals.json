@@ -1,0 +1,67 @@
+{
+  "skill": "explain",
+  "evals": [
+    {
+      "id": "explain-express-project",
+      "prompt": "/explain",
+      "mode": "review",
+      "fixture": {
+        "description": "Small Node HTTP API: src/server.js starts the server and mounts src/routes/users.js, which reads from src/db.js (an in-memory store). package.json has dev and start scripts but no test script and there are no tests.",
+        "files": {
+          "package.json": "{\n  \"name\": \"users-api\",\n  \"type\": \"module\",\n  \"main\": \"src/server.js\",\n  \"scripts\": {\n    \"dev\": \"node --watch src/server.js\",\n    \"start\": \"node src/server.js\"\n  }\n}\n",
+          "src/server.js": "import http from 'node:http'\nimport { handleUsers } from './routes/users.js'\n\nconst port = Number(process.env.PORT || 3000)\n\nhttp.createServer((req, res) => {\n  if (req.url.startsWith('/users')) return handleUsers(req, res)\n  res.writeHead(404).end()\n}).listen(port)\n",
+          "src/routes/users.js": "import { listUsers, getUser } from '../db.js'\n\nexport function handleUsers(req, res) {\n  const id = req.url.split('/')[2]\n  const body = id ? getUser(id) : listUsers()\n  if (!body) return res.writeHead(404).end()\n  res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body))\n}\n",
+          "src/db.js": "const users = new Map([['1', { id: '1', name: 'Ann' }]])\n\nexport const listUsers = () => [...users.values()]\nexport const getUser = (id) => users.get(id)\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "package\\.json", "description": "Read the manifest" },
+        { "check": "answer_matches", "pattern": "routes/users\\.js", "description": "Cites the users route file" },
+        { "check": "answer_matches", "pattern": "PORT", "description": "Mentions the PORT environment variable" },
+        { "check": "answer_matches", "pattern": "no (automated )?tests?|no test (script|runner|command)|(does not|doesn't) have (a |any )?tests?|without (a |any )?tests?", "flags": "i", "description": "Says there is no test script instead of inventing one" },
+        { "check": "file_unchanged", "path": "src/server.js", "description": "Nothing was edited" }
+      ]
+    },
+    {
+      "id": "explain-module-callers",
+      "prompt": "What does src/lib/rateLimit.ts do and where is it used?",
+      "mode": "review",
+      "fixture": {
+        "description": "TypeScript project with a token bucket rate limiter in src/lib/rateLimit.ts, used by src/api/handler.ts. The model should read the module and find its caller.",
+        "files": {
+          "src/lib/rateLimit.ts": "const buckets = new Map<string, { tokens: number; last: number }>()\n\nexport function allow(key: string, perMinute = 60, now = Date.now()): boolean {\n  const b = buckets.get(key) ?? { tokens: perMinute, last: now }\n  const refill = ((now - b.last) / 60000) * perMinute\n  b.tokens = Math.min(perMinute, b.tokens + refill)\n  b.last = now\n  buckets.set(key, b)\n  if (b.tokens < 1) return false\n  b.tokens -= 1\n  return true\n}\n",
+          "src/api/handler.ts": "import { allow } from '../lib/rateLimit'\n\nexport function handle(ip: string): { status: number } {\n  if (!allow(ip, 30)) return { status: 429 }\n  return { status: 200 }\n}\n",
+          "package.json": "{\n  \"name\": \"limiter\",\n  \"scripts\": { \"build\": \"tsc\" }\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "explain", "description": "The model loaded the explain skill" },
+        { "check": "tool_called", "tool": "search", "args_pattern": "allow|rateLimit", "description": "Searched for callers" },
+        { "check": "answer_matches", "pattern": "api/handler\\.ts|handler\\.ts", "description": "Names the caller" },
+        { "check": "answer_matches", "pattern": "token|bucket|refill", "flags": "i", "description": "Explains the token bucket mechanism" },
+        { "check": "file_unchanged", "path": "src/lib/rateLimit.ts", "description": "Nothing was edited" }
+      ]
+    },
+    {
+      "id": "explain-python-cli-flow",
+      "prompt": "/explain how a command flows through this CLI",
+      "mode": "plan",
+      "fixture": {
+        "description": "Python CLI package: notes/cli.py parses arguments with argparse and calls notes/core.py, which stores notes in a JSON file under the path from NOTES_FILE.",
+        "files": {
+          "pyproject.toml": "[project]\nname = \"notes\"\nversion = \"0.1.0\"\n\n[project.scripts]\nnotes = \"notes.cli:main\"\n",
+          "notes/__init__.py": "",
+          "notes/cli.py": "import argparse\n\nfrom notes import core\n\n\ndef main():\n    p = argparse.ArgumentParser(prog=\"notes\")\n    sub = p.add_subparsers(dest=\"cmd\", required=True)\n    add = sub.add_parser(\"add\")\n    add.add_argument(\"text\")\n    sub.add_parser(\"list\")\n    args = p.parse_args()\n    if args.cmd == \"add\":\n        core.add(args.text)\n    else:\n        for n in core.load():\n            print(n)\n",
+          "notes/core.py": "import json\nimport os\n\nPATH = os.environ.get(\"NOTES_FILE\", \"notes.json\")\n\n\ndef load():\n    if not os.path.exists(PATH):\n        return []\n    with open(PATH, encoding=\"utf-8\") as f:\n        return json.load(f)\n\n\ndef add(text):\n    notes = load() + [text]\n    with open(PATH, \"w\", encoding=\"utf-8\") as f:\n        json.dump(notes, f)\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "cli\\.py", "description": "Cites the CLI entry module" },
+        { "check": "answer_matches", "pattern": "core\\.py", "description": "Cites the core module" },
+        { "check": "answer_matches", "pattern": "NOTES_FILE", "description": "Mentions the config env var" },
+        { "check": "tool_not_called", "tool": "write_file", "description": "No files written" },
+        { "check": "tool_not_called", "tool": "edit_file", "description": "No files edited" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "skill": "reproduce-first",
+  "evals": [
+    {
+      "id": "reproduce-first-off-by-a-cent",
+      "prompt": "/reproduce-first users say the order total is sometimes off by a cent",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. src/total.js rounds money with Math.round(x * 100) / 100, which rounds some half-cent values (for example 1.005) down because of floating point. The model should write a failing repro test or script and must not change src/total.js.",
+        "files": {
+          "package.json": "{\n  \"name\": \"orders\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/total.js": "export function roundMoney(x) {\n  return Math.round(x * 100) / 100\n}\n\nexport function orderTotal(items, taxRate = 0) {\n  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0)\n  return roundMoney(subtotal * (1 + taxRate))\n}\n",
+          "test/total.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { orderTotal } from '../src/total.js'\n\ntest('adds items', () => {\n  assert.equal(orderTotal([{ price: 2.5, qty: 2 }]), 5)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "repro|test", "description": "Wrote a repro test or script" },
+        { "check": "command_ran", "pattern": "node", "description": "Ran the repro" },
+        { "check": "file_unchanged", "path": "src/total.js", "description": "Did not fix the source" },
+        { "check": "answer_matches", "pattern": "float|binary|1\\.005|half[- ]cent|round", "flags": "i", "description": "Explains the rounding trigger" },
+        { "check": "answer_matches", "pattern": "\\bfix\\b", "flags": "i", "description": "Offers the hand-off to fix" }
+      ]
+    },
+    {
+      "id": "reproduce-first-export-dates",
+      "prompt": "Sometimes the CSV export shows an order date one day off for some customers and we can't figure out when. Order dates are supposed to be the UTC date. Can you get a reliable reproduction before we touch anything?",
+      "mode": "build",
+      "fixture": {
+        "description": "Python module export.py turns a Unix timestamp into a date with datetime.fromtimestamp, which uses the machine's local time zone instead of UTC. Orders created near midnight get the wrong day. The model must reproduce it (for example with a timestamp near midnight and a forced time zone or patched clock) and not change export.py.",
+        "files": {
+          "export.py": "from datetime import datetime\n\n\ndef export_row(order):\n    day = datetime.fromtimestamp(order[\"created_ts\"]).date()\n    return f'{order[\"id\"]},{day.isoformat()}'\n",
+          "tests/test_export.py": "from export import export_row\n\n\ndef test_format():\n    row = export_row({\"id\": 7, \"created_ts\": 1700000000})\n    assert row.startswith(\"7,\")\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "reproduce-first", "description": "The model loaded the reproduce-first skill" },
+        { "check": "command_ran", "pattern": "pytest|python", "description": "Ran the repro" },
+        { "check": "file_unchanged", "path": "export.py", "description": "Did not fix the source" },
+        { "check": "answer_matches", "pattern": "time ?zone|\\bTZ\\b|local time|fromtimestamp", "flags": "i", "description": "Names the time zone trigger" }
+      ]
+    },
+    {
+      "id": "reproduce-first-plan-accents",
+      "prompt": "/reproduce-first the customer search returns nothing for some names with accents, like García",
+      "mode": "plan",
+      "fixture": {
+        "description": "src/search.js strips every non a-z character from the query, so 'García' becomes 'garca' and no longer matches the stored name. In Plan mode the model must not write files; it should propose the repro test and ask for Build mode.",
+        "files": {
+          "package.json": "{\n  \"name\": \"crm\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/search.js": "export function searchCustomers(customers, query) {\n  const q = query.toLowerCase().replace(/[^a-z0-9 ]/g, '')\n  return customers.filter((c) => c.name.toLowerCase().includes(q))\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "search", "description": "Read the search code" },
+        { "check": "file_unchanged", "path": "src/search.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "accent|diacritic|normali[sz]e|NFD|non-ASCII|a-z0-9|garca", "flags": "i", "description": "Identifies the character stripping as the trigger" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

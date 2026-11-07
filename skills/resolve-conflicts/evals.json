@@ -1,0 +1,66 @@
+{
+  "skill": "resolve-conflicts",
+  "evals": [
+    {
+      "id": "conflicts-config-keep-both",
+      "prompt": "/resolve-conflicts",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project where src/config.js was committed with merge conflict markers: HEAD added retries: 3, the feature/logging side added logLevel: 'info', both keep timeout: 5000. The test expects both keys. The skill must find the markers, keep both additions, run the tests and commit.",
+        "files": {
+          "package.json": "{\n  \"name\": \"svc\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/config.js": "export const config = {\n<<<<<<< HEAD\n  timeout: 5000,\n  retries: 3,\n=======\n  timeout: 5000,\n  logLevel: 'info',\n>>>>>>> feature/logging\n}\n",
+          "test/config.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { config } from '../src/config.js'\n\ntest('config has both settings', () => {\n  assert.equal(config.timeout, 5000)\n  assert.equal(config.retries, 3)\n  assert.equal(config.logLevel, 'info')\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "file_not_matches", "path": "src/config.js", "pattern": "^(<{7}|={7}|>{7})", "flags": "m", "description": "All conflict markers removed" },
+        { "check": "file_matches", "path": "src/config.js", "pattern": "retries:\\s*3", "description": "Kept the HEAD side's retries" },
+        { "check": "file_matches", "path": "src/config.js", "pattern": "logLevel:\\s*['\"]info['\"]", "description": "Kept the incoming side's logLevel" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the resolution" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"commit\"", "description": "Committed the resolution" }
+      ]
+    },
+    {
+      "id": "conflicts-two-files-natural",
+      "prompt": "My merge of feature/cli left conflict markers in package.json and src/math.js. Can you sort it out?",
+      "mode": "build",
+      "fixture": {
+        "description": "package.json has a conflict where HEAD added a lint script and feature/cli added a start script; src/math.js has HEAD adding multiply and feature/cli adding subtract. src/cli.js uses subtract and the tests cover add, multiply and subtract. Both sides must survive and the tests must pass (which also proves package.json is valid JSON).",
+        "files": {
+          "package.json": "{\n  \"name\": \"calc\",\n  \"type\": \"module\",\n  \"scripts\": {\n<<<<<<< HEAD\n    \"test\": \"node --test\",\n    \"lint\": \"node --check src/math.js\"\n=======\n    \"test\": \"node --test\",\n    \"start\": \"node src/cli.js\"\n>>>>>>> feature/cli\n  }\n}\n",
+          "src/math.js": "export function add(a, b) {\n  return a + b\n}\n\n<<<<<<< HEAD\nexport function multiply(a, b) {\n  return a * b\n}\n=======\nexport function subtract(a, b) {\n  return a - b\n}\n>>>>>>> feature/cli\n",
+          "src/cli.js": "import { subtract } from './math.js'\n\nconst [a, b] = process.argv.slice(2).map(Number)\nconsole.log(subtract(a, b))\n",
+          "test/math.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { add, multiply, subtract } from '../src/math.js'\n\ntest('math', () => {\n  assert.equal(add(2, 3), 5)\n  assert.equal(multiply(2, 3), 6)\n  assert.equal(subtract(5, 3), 2)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "resolve-conflicts", "description": "Loaded the resolve-conflicts skill" },
+        { "check": "file_matches", "path": "package.json", "pattern": "\"lint\"[\\s\\S]*\"start\"|\"start\"[\\s\\S]*\"lint\"", "description": "Both new scripts kept" },
+        { "check": "file_matches", "path": "src/math.js", "pattern": "multiply[\\s\\S]*subtract|subtract[\\s\\S]*multiply", "description": "Both new functions kept" },
+        { "check": "file_not_matches", "path": "src/math.js", "pattern": "^(<{7}|={7}|>{7})", "flags": "m", "description": "No markers left in src/math.js" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after resolving" }
+      ]
+    },
+    {
+      "id": "conflicts-plan-mode-proposal",
+      "prompt": "/resolve-conflicts",
+      "mode": "plan",
+      "fixture": {
+        "description": "src/greeting.js holds committed conflict markers: HEAD changed the text to 'Hi there', the incoming side added a name parameter. In Plan mode the skill must read the file, propose a resolution that keeps both (a greeting with Hi and the name), and change nothing.",
+        "files": {
+          "src/greeting.js": "<<<<<<< HEAD\nexport function greet() {\n  return 'Hi there'\n}\n=======\nexport function greet(name) {\n  return 'Hello, ' + name\n}\n>>>>>>> feature/names\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/greeting.js", "description": "No edits in Plan mode" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "greeting", "description": "Read the conflicted file" },
+        { "check": "answer_matches", "pattern": "Hi[\\s\\S]*name|name[\\s\\S]*Hi", "description": "Proposes keeping both the new text and the name parameter" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build to apply it" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "skill": "db-migration",
+  "evals": [
+    {
+      "id": "db-migration-prisma-add-role",
+      "prompt": "/db-migration add a required role column to users with default 'member'",
+      "mode": "build",
+      "fixture": {
+        "description": "Prisma project on SQLite (file:./dev.db) with one applied init migration. The model must change schema.prisma, create a migration with prisma migrate dev on the local database, and never use db push or migrate deploy.",
+        "files": {
+          "package.json": "{\n  \"name\": \"users-api\",\n  \"private\": true,\n  \"scripts\": { \"test\": \"node --test\" },\n  \"dependencies\": { \"@prisma/client\": \"^6.0.0\" },\n  \"devDependencies\": { \"prisma\": \"^6.0.0\" }\n}\n",
+          ".env.example": "DATABASE_URL=\"file:./dev.db\"\n",
+          "prisma/schema.prisma": "generator client {\n  provider = \"prisma-client-js\"\n}\n\ndatasource db {\n  provider = \"sqlite\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id        Int      @id @default(autoincrement())\n  email     String   @unique\n  createdAt DateTime @default(now())\n}\n",
+          "prisma/migrations/20240101000000_init/migration.sql": "CREATE TABLE \"User\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"email\" TEXT NOT NULL,\n    \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\nCREATE UNIQUE INDEX \"User_email_key\" ON \"User\"(\"email\");\n",
+          "prisma/migrations/migration_lock.toml": "provider = \"sqlite\"\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_matches", "path": "prisma/schema.prisma", "pattern": "role\\s+\\w+[^\\n]*@default\\(", "description": "Adds a role field with a default to the User model" },
+        { "check": "file_unchanged", "path": "prisma/migrations/20240101000000_init/migration.sql", "description": "Does not edit the applied init migration" },
+        { "check": "command_ran", "pattern": "prisma migrate dev", "description": "Creates the migration with prisma migrate dev" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "migrate deploy|db push", "description": "Never runs migrate deploy or db push" },
+        { "check": "answer_matches", "pattern": "rollback|roll back|revert|undo|down", "flags": "i", "description": "Explains how to roll back" }
+      ]
+    },
+    {
+      "id": "db-migration-large-index-natural",
+      "prompt": "We need an index on orders.customer_id. Heads up, that table has about 40 million rows in production.",
+      "mode": "build",
+      "fixture": {
+        "description": "Knex project on Postgres with a local DATABASE_URL. The index must be created concurrently in a migration with the transaction disabled.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shop-db\",\n  \"private\": true,\n  \"scripts\": { \"migrate\": \"knex migrate:latest\" },\n  \"dependencies\": { \"knex\": \"^3.1.0\", \"pg\": \"^8.13.0\" }\n}\n",
+          "knexfile.js": "module.exports = {\n  development: {\n    client: 'pg',\n    connection: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/shop_dev',\n    migrations: { directory: './migrations' }\n  }\n}\n",
+          "migrations/20240101000000_create_orders.js": "exports.up = (knex) =>\n  knex.schema.createTable('orders', (t) => {\n    t.bigIncrements('id')\n    t.bigInteger('customer_id').notNullable()\n    t.decimal('total', 12, 2).notNullable()\n    t.timestamps(true, true)\n  })\n\nexports.down = (knex) => knex.schema.dropTable('orders')\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "db-migration", "description": "The model loaded the db-migration skill" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "knexfile|migrations", "description": "Read the Knex config or existing migrations" },
+        { "check": "answer_matches", "pattern": "concurrently", "flags": "i", "description": "Uses CREATE INDEX CONCURRENTLY" },
+        { "check": "answer_matches", "pattern": "transaction", "flags": "i", "description": "Explains that the migration must run outside a transaction" },
+        { "check": "file_unchanged", "path": "migrations/20240101000000_create_orders.js", "description": "Does not edit the existing migration" }
+      ]
+    },
+    {
+      "id": "db-migration-plan-rename",
+      "prompt": "/db-migration rename users.name to full_name",
+      "mode": "plan",
+      "fixture": {
+        "description": "SQLAlchemy model plus Alembic setup. In Plan mode the model must propose a safe rename (expand and contract or a reviewed alter_column) with a downgrade, and ask for Build mode, without editing.",
+        "files": {
+          "alembic.ini": "[alembic]\nscript_location = alembic\nsqlalchemy.url = postgresql://postgres:postgres@localhost:5432/app_dev\n",
+          "app/models.py": "from sqlalchemy import Column, Integer, String\nfrom sqlalchemy.orm import declarative_base\n\nBase = declarative_base()\n\n\nclass User(Base):\n    __tablename__ = \"users\"\n    id = Column(Integer, primary_key=True)\n    name = Column(String(120), nullable=False)\n",
+          "alembic/versions/0001_create_users.py": "revision = \"0001\"\ndown_revision = None\n\nfrom alembic import op\nimport sqlalchemy as sa\n\n\ndef upgrade():\n    op.create_table(\"users\", sa.Column(\"id\", sa.Integer, primary_key=True), sa.Column(\"name\", sa.String(120), nullable=False))\n\n\ndef downgrade():\n    op.drop_table(\"users\")\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "app/models.py", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "alter_column|expand|backfill|copy|new column", "flags": "i", "description": "Proposes a real rename or expand-and-contract instead of drop and add" },
+        { "check": "answer_matches", "pattern": "downgrade|rollback|roll back", "flags": "i", "description": "Includes the rollback" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

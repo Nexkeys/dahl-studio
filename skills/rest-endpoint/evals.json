@@ -1,0 +1,67 @@
+{
+  "skill": "rest-endpoint",
+  "evals": [
+    {
+      "id": "rest-endpoint-express-create-note",
+      "prompt": "/rest-endpoint POST /api/notes to create a note with a required title (max 200 characters) and an optional body",
+      "mode": "build",
+      "fixture": {
+        "description": "Express app with a notes router that already has GET /api/notes using zod for query validation, an in-memory store, auth middleware that sets req.user, and a supertest test. The new route must follow the same patterns, validate input and return 201.",
+        "files": {
+          "package.json": "{\n  \"name\": \"notes-api\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"node src/server.js\", \"test\": \"node --test\" },\n  \"dependencies\": { \"express\": \"^4.21.0\", \"zod\": \"^3.23.0\" },\n  \"devDependencies\": { \"supertest\": \"^7.0.0\" }\n}\n",
+          "src/app.js": "import express from 'express'\nimport { requireUser } from './auth.js'\nimport notes from './routes/notes.js'\n\nexport const app = express()\napp.use(express.json())\napp.use('/api/notes', requireUser, notes)\napp.use((err, req, res, next) => {\n  console.error(err)\n  res.status(500).json({ error: { code: 'internal', message: 'Something went wrong' } })\n})\n",
+          "src/auth.js": "export function requireUser(req, res, next) {\n  const id = req.get('x-user-id')\n  if (!id) return res.status(401).json({ error: { code: 'unauthorized', message: 'Sign in first' } })\n  req.user = { id }\n  next()\n}\n",
+          "src/routes/notes.js": "import { Router } from 'express'\nimport { z } from 'zod'\n\nconst router = Router()\nexport const db = { notes: [] }\n\nconst listQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) })\n\nrouter.get('/', (req, res) => {\n  const parsed = listQuery.safeParse(req.query)\n  if (!parsed.success) return res.status(400).json({ error: { code: 'invalid', message: 'Invalid query', issues: parsed.error.issues } })\n  const mine = db.notes.filter((n) => n.userId === req.user.id).slice(0, parsed.data.limit)\n  res.json({ data: mine })\n})\n\nexport default router\n",
+          "test/notes.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport request from 'supertest'\nimport { app } from '../src/app.js'\n\ntest('GET /api/notes requires a user', async () => {\n  const res = await request(app).get('/api/notes')\n  assert.equal(res.status, 401)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_matches", "path": "src/routes/notes.js", "pattern": "router\\.post\\(", "description": "Adds a POST route on the existing router" },
+        { "check": "file_matches", "path": "src/routes/notes.js", "pattern": "max\\(\\s*200\\s*\\)", "description": "Validates the 200 character limit with zod" },
+        { "check": "file_matches", "path": "src/routes/notes.js", "pattern": "status\\(\\s*201\\s*\\)", "description": "Returns 201 on create" },
+        { "check": "file_matches", "path": "test/notes.test.js", "pattern": "\\.post\\(", "description": "Adds tests for the POST route" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests" }
+      ]
+    },
+    {
+      "id": "rest-endpoint-fastapi-get-by-id",
+      "prompt": "Add an endpoint to our FastAPI service that returns a single order by its id, with a 404 when it doesn't exist.",
+      "mode": "build",
+      "fixture": {
+        "description": "FastAPI app with an orders router that lists orders from an in-memory dict and a TestClient test. The new route must use a path parameter, return 404 via HTTPException, and be tested.",
+        "files": {
+          "requirements.txt": "fastapi>=0.115\nhttpx>=0.27\npytest>=8\n",
+          "app/__init__.py": "",
+          "app/main.py": "from fastapi import FastAPI\n\nfrom app.orders import router as orders_router\n\napp = FastAPI()\napp.include_router(orders_router)\n",
+          "app/orders.py": "from fastapi import APIRouter\nfrom pydantic import BaseModel\n\nrouter = APIRouter(prefix=\"/orders\", tags=[\"orders\"])\n\n\nclass Order(BaseModel):\n    id: int\n    total: float\n\n\nORDERS = {1: Order(id=1, total=19.5), 2: Order(id=2, total=42.0)}\n\n\n@router.get(\"\", response_model=list[Order])\ndef list_orders():\n    return list(ORDERS.values())\n",
+          "tests/test_orders.py": "from fastapi.testclient import TestClient\n\nfrom app.main import app\n\nclient = TestClient(app)\n\n\ndef test_list_orders():\n    res = client.get(\"/orders\")\n    assert res.status_code == 200\n    assert len(res.json()) == 2\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "rest-endpoint", "description": "The model loaded the rest-endpoint skill" },
+        { "check": "file_matches", "path": "app/orders.py", "pattern": "@router\\.get\\(\\s*[\"']/\\{\\s*\\w+\\s*\\}", "description": "Adds GET /orders/{id} on the existing router" },
+        { "check": "file_matches", "path": "app/orders.py", "pattern": "HTTPException\\([^)]*404|status_code\\s*=\\s*404", "description": "Returns 404 for a missing order" },
+        { "check": "file_matches", "path": "tests/test_orders.py", "pattern": "404", "description": "Tests the 404 case" },
+        { "check": "command_ran", "pattern": "pytest", "description": "Ran pytest" }
+      ]
+    },
+    {
+      "id": "rest-endpoint-plan-delete",
+      "prompt": "/rest-endpoint DELETE /api/projects/:id",
+      "mode": "plan",
+      "fixture": {
+        "description": "Express projects router with auth middleware. In Plan mode the model reports the contract (204, 404, ownership check) and asks for Build mode without editing.",
+        "files": {
+          "package.json": "{\n  \"name\": \"pm-api\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"dependencies\": { \"express\": \"^4.21.0\" }\n}\n",
+          "src/routes/projects.js": "import { Router } from 'express'\n\nconst router = Router()\nexport const projects = new Map()\n\nrouter.get('/:id', (req, res) => {\n  const p = projects.get(req.params.id)\n  if (!p || p.ownerId !== req.user.id) return res.status(404).json({ error: 'Not found' })\n  res.json(p)\n})\n\nexport default router\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/routes/projects.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "204", "description": "Specifies 204 for a successful delete" },
+        { "check": "answer_matches", "pattern": "owner|ownerId|403|IDOR", "flags": "i", "description": "Includes the ownership or permission check" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

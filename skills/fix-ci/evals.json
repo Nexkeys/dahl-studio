@@ -1,0 +1,71 @@
+{
+  "skill": "fix-ci",
+  "evals": [
+    {
+      "id": "fixci-case-sensitive-import",
+      "prompt": "CI fails on GitHub but the tests pass on my machine. The log says:\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/runner/work/app/app/src/utils.js' imported from /home/runner/work/app/app/src/index.js\n\nPlease fix it.",
+      "mode": "build",
+      "fixture": {
+        "description": "Node ESM project on an ubuntu-latest workflow. The file is src/Utils.js; src/report.js imports it correctly as ./Utils.js but src/index.js imports ./utils.js, which works on Windows and fails on Linux. The fix is the import case, not the workflow.",
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          ".github/workflows/ci.yml": "name: CI\non: [push, pull_request]\npermissions:\n  contents: read\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - run: npm test\n",
+          "src/Utils.js": "export const double = (n) => n * 2\n",
+          "src/report.js": "import { double } from './Utils.js'\n\nexport const reportLine = (n) => `double: ${double(n)}`\n",
+          "src/index.js": "import { double } from './utils.js'\n\nexport const quadruple = (n) => double(double(n))\n",
+          "test/index.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { quadruple } from '../src/index.js'\n\ntest('quadruple', () => {\n  assert.equal(quadruple(2), 8)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "fix-ci", "description": "Loaded the fix-ci skill" },
+        { "check": "file_matches", "path": "src/index.js", "pattern": "from ['\"]\\./Utils\\.js['\"]", "description": "The import matches the real file name case" },
+        { "check": "answer_matches", "pattern": "case|Linux", "flags": "i", "description": "Explains the Linux case-sensitivity cause" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests after the fix" },
+        { "check": "file_unchanged", "path": ".github/workflows/ci.yml", "description": "Did not weaken or edit the workflow" }
+      ]
+    },
+    {
+      "id": "fixci-reproduce-from-workflow",
+      "prompt": "/fix-ci the CI on main is failing",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project without a GitHub remote, so ci_status cannot reach GitHub. The workflow runs npm ci and npm test; formatPrice uses toFixed(1) while the test expects two decimals. The skill should try ci_status, fall back to the workflow's commands locally, and fix the code, not the check.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shop\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "package-lock.json": "{\n  \"name\": \"shop\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": { \"name\": \"shop\", \"version\": \"1.0.0\" }\n  }\n}\n",
+          ".github/workflows/ci.yml": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\npermissions:\n  contents: read\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n          cache: npm\n      - run: npm ci\n      - run: npm test\n",
+          "src/price.js": "export const formatPrice = (n) => n.toFixed(1)\n",
+          "test/price.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { formatPrice } from '../src/price.js'\n\ntest('two decimals', () => {\n  assert.equal(formatPrice(12.5), '12.50')\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "github", "args_pattern": "ci_status", "description": "Tried to read the CI status first" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "\\.github/workflows", "description": "Read the workflow to get the CI commands" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "The workflow's test command passes locally after the fix" },
+        { "check": "file_matches", "path": "src/price.js", "pattern": "toFixed\\(2\\)", "description": "Fixed the code to two decimals" },
+        { "check": "file_unchanged", "path": ".github/workflows/ci.yml", "description": "The check was not disabled or changed" }
+      ]
+    },
+    {
+      "id": "fixci-network-flake",
+      "prompt": "Our CI job failed with this, can you fix it?\n\nnpm ERR! code EAI_AGAIN\nnpm ERR! errno EAI_AGAIN\nnpm ERR! request to https://registry.npmjs.org/left-pad failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org\nError: Process completed with exit code 1.",
+      "mode": "build",
+      "fixture": {
+        "description": "Healthy Node project whose tests pass. The pasted log is a DNS failure reaching the npm registry, an infrastructure flake. The right answer is to re-run the job, with no code or workflow changes.",
+        "files": {
+          "package.json": "{\n  \"name\": \"pads\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          ".github/workflows/ci.yml": "name: CI\non: [pull_request]\npermissions:\n  contents: read\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - run: npm install\n      - run: npm test\n",
+          "src/pad.js": "export const padLeft = (s, n) => String(s).padStart(n, ' ')\n",
+          "test/pad.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { padLeft } from '../src/pad.js'\n\ntest('pads', () => {\n  assert.equal(padLeft('a', 3), '  a')\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "re-?run|retry", "flags": "i", "description": "Recommends re-running the job" },
+        { "check": "answer_matches", "pattern": "network|DNS|registry|infra|transient|flak", "flags": "i", "description": "Identifies it as an infrastructure or network failure" },
+        { "check": "file_unchanged", "path": "package.json", "description": "No package changes" },
+        { "check": "file_unchanged", "path": ".github/workflows/ci.yml", "description": "No workflow changes" },
+        { "check": "file_unchanged", "path": "src/pad.js", "description": "No code changes" }
+      ]
+    }
+  ]
+}

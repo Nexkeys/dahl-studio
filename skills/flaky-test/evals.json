@@ -1,0 +1,63 @@
+{
+  "skill": "flaky-test",
+  "evals": [
+    {
+      "id": "flaky-test-random-input",
+      "prompt": "/flaky-test test/discount.test.js fails about one run in ten. Orders of 10 or more items get the bulk discount.",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. The test picks a random quantity from 5 to 14 and expects a discount only above 10, so it fails whenever the quantity is exactly 10. src/discount.js is correct and must not change; the fix is deterministic test inputs including the boundary.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shop\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/discount.js": "// Orders of 10 or more items get 10 percent off.\nexport function bulkDiscount(qty) {\n  return qty >= 10 ? 0.1 : 0\n}\n",
+          "test/discount.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { bulkDiscount } from '../src/discount.js'\n\ntest('large orders get a discount', () => {\n  const qty = 5 + Math.floor(Math.random() * 10)\n  assert.equal(bulkDiscount(qty) > 0, qty > 10)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "ForEach-Object|1\\.\\.\\d+|for\\s*\\(|while", "description": "Ran the test repeatedly to measure the failure rate" },
+        { "check": "file_not_matches", "path": "test/discount.test.js", "pattern": "Math\\.random", "description": "The randomness is gone from the test" },
+        { "check": "file_unchanged", "path": "src/discount.js", "description": "The correct source was not changed" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the fix" },
+        { "check": "answer_matches", "pattern": "random", "flags": "i", "description": "Names randomness as the cause" }
+      ]
+    },
+    {
+      "id": "flaky-test-utc-date",
+      "prompt": "test_report_header passes on my machine but fails in CI some of the time. Can you figure out why and fix it properly?",
+      "mode": "build",
+      "fixture": {
+        "description": "report.py stamps the header with the UTC date while the test compares against date.today() (local date), so it fails whenever local and UTC dates differ. The fix is to control the clock or compare in UTC, not to retry.",
+        "files": {
+          "report.py": "from datetime import datetime, timezone\n\n\ndef report_header(title):\n    today = datetime.now(timezone.utc).date()\n    return f\"{title} ({today.isoformat()})\"\n",
+          "tests/test_report.py": "from datetime import date\n\nfrom report import report_header\n\n\ndef test_report_header():\n    assert report_header(\"Sales\") == f\"Sales ({date.today().isoformat()})\"\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "flaky-test", "description": "The model loaded the flaky-test skill" },
+        { "check": "answer_matches", "pattern": "UTC|time ?zone|midnight", "flags": "i", "description": "Names the clock or time zone mismatch" },
+        { "check": "file_not_matches", "path": "tests/test_report.py", "pattern": "retry|rerun|flaky|sleep", "flags": "i", "description": "Did not paper over it with retries or sleeps" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass after the fix" }
+      ]
+    },
+    {
+      "id": "flaky-test-plan-shared-state",
+      "prompt": "/flaky-test src/cart.test.js started failing randomly since we turned on jest --randomize in CI",
+      "mode": "plan",
+      "fixture": {
+        "description": "src/cart.js keeps items in a module-level array that is never reset, so the 'starts empty' test fails when 'adds item' runs first. In Plan mode the model must not edit; it should name shared state and test order as the cause.",
+        "files": {
+          "package.json": "{\n  \"name\": \"cart\",\n  \"scripts\": { \"test\": \"jest\" },\n  \"devDependencies\": { \"jest\": \"^29.7.0\" }\n}\n",
+          "src/cart.js": "const items = []\n\nexport function addItem(item) {\n  items.push(item)\n  return items.length\n}\n\nexport function getItems() {\n  return items\n}\n",
+          "src/cart.test.js": "import { addItem, getItems } from './cart.js'\n\ntest('starts empty', () => {\n  expect(getItems()).toEqual([])\n})\n\ntest('adds item', () => {\n  expect(addItem({ sku: 'A' })).toBe(1)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "cart", "description": "Read the test and the module" },
+        { "check": "file_unchanged", "path": "src/cart.test.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "shared|module[- ]level|global state|beforeEach|reset|order", "flags": "i", "description": "Identifies shared state and order dependence" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

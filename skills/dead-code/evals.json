@@ -1,0 +1,74 @@
+{
+  "skill": "dead-code",
+  "evals": [
+    {
+      "id": "dead-code-node-dynamic-import",
+      "prompt": "/dead-code",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. src/utils.js exports an unused oldFormat next to the used formatDate; src/legacy.js is imported nowhere; src/plugins/csv.js looks unused but is loaded with a dynamic import template string in src/index.js and must be kept.",
+        "files": {
+          "package.json": "{\n  \"name\": \"reports\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/index.js": "import { formatDate } from './utils.js'\n\nexport async function exportReport(kind, rows) {\n  const plugin = await import(`./plugins/${kind}.js`)\n  return plugin.render(rows.map((r) => ({ ...r, date: formatDate(r.date) })))\n}\n",
+          "src/utils.js": "export function formatDate(d) {\n  return new Date(d).toISOString().slice(0, 10)\n}\n\nexport function oldFormat(d) {\n  return new Date(d).toLocaleDateString('en-US')\n}\n",
+          "src/plugins/csv.js": "export function render(rows) {\n  return rows.map((r) => `${r.id},${r.date}`).join('\\n')\n}\n",
+          "src/legacy.js": "export function legacyExport(rows) {\n  return JSON.stringify(rows)\n}\n",
+          "test/index.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { exportReport } from '../src/index.js'\n\ntest('exports csv', async () => {\n  const out = await exportReport('csv', [{ id: 1, date: '2024-01-02T00:00:00Z' }])\n  assert.equal(out, '1,2024-01-02')\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "file_exists", "path": "src/plugins/csv.js", "description": "Kept the dynamically imported plugin" },
+        { "check": "file_not_matches", "path": "src/utils.js", "pattern": "oldFormat", "description": "Removed the unused export" },
+        { "check": "file_matches", "path": "src/utils.js", "pattern": "export function formatDate", "description": "Kept the used export" },
+        { "check": "file_absent", "path": "src/legacy.js", "description": "Removed the unused file" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the removals" }
+      ]
+    },
+    {
+      "id": "dead-code-python-string-refs",
+      "prompt": "There's a lot of leftover code in this Python project. Can you clean out whatever is actually unused?",
+      "mode": "build",
+      "fixture": {
+        "description": "Python project. app/utils.py has an unused old_slug. app/handlers.export_csv looks unused but is loaded by a dotted string through importlib in app/registry.py, and the pytest fixture rows in tests/conftest.py is used by parameter name. Both must be kept.",
+        "files": {
+          "app/__init__.py": "",
+          "app/utils.py": "import re\n\n\ndef slugify(text):\n    return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")\n\n\ndef old_slug(text):\n    return text.lower().replace(\" \", \"_\")\n",
+          "app/handlers.py": "def export_csv(rows):\n    return \"\\n\".join(\",\".join(map(str, r)) for r in rows)\n",
+          "app/registry.py": "import importlib\n\nHANDLERS = {\"csv\": \"app.handlers.export_csv\"}\n\n\ndef get_handler(kind):\n    module_name, func = HANDLERS[kind].rsplit(\".\", 1)\n    return getattr(importlib.import_module(module_name), func)\n",
+          "tests/conftest.py": "import pytest\n\n\n@pytest.fixture\ndef rows():\n    return [(1, \"a\"), (2, \"b\")]\n",
+          "tests/test_app.py": "from app.registry import get_handler\nfrom app.utils import slugify\n\n\ndef test_slug():\n    assert slugify(\"Hello World\") == \"hello-world\"\n\n\ndef test_csv(rows):\n    assert get_handler(\"csv\")(rows) == \"1,a\\n2,b\"\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "dead-code", "description": "The model loaded the dead-code skill" },
+        { "check": "file_not_matches", "path": "app/utils.py", "pattern": "def old_slug", "description": "Removed the unused function" },
+        { "check": "file_matches", "path": "app/handlers.py", "pattern": "def export_csv", "description": "Kept the handler loaded by string" },
+        { "check": "file_matches", "path": "tests/conftest.py", "pattern": "def rows", "description": "Kept the pytest fixture used by name" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass after the removals" }
+      ]
+    },
+    {
+      "id": "dead-code-plan-deps",
+      "prompt": "/dead-code deps",
+      "mode": "plan",
+      "fixture": {
+        "description": "package.json lists lodash (unused), dayjs (used in src/date.js), eslint-plugin-unicorn (used only in eslint.config.js) and rimraf (used only in the clean script). In Plan mode nothing may change; the model should flag lodash and keep the config and script dependencies with reasons.",
+        "files": {
+          "package.json": "{\n  \"name\": \"web\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"clean\": \"rimraf dist\", \"build\": \"node build.js\", \"lint\": \"eslint .\" },\n  \"dependencies\": { \"dayjs\": \"^1.11.10\", \"lodash\": \"^4.17.21\" },\n  \"devDependencies\": { \"eslint\": \"^9.0.0\", \"eslint-plugin-unicorn\": \"^52.0.0\", \"rimraf\": \"^5.0.5\" }\n}\n",
+          "eslint.config.js": "import unicorn from 'eslint-plugin-unicorn'\n\nexport default [{ plugins: { unicorn }, rules: { 'unicorn/prefer-node-protocol': 'error' } }]\n",
+          "src/date.js": "import dayjs from 'dayjs'\n\nexport const today = () => dayjs().format('YYYY-MM-DD')\n",
+          "build.js": "import { today } from './src/date.js'\n\nconsole.log(`build ${today()}`)\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "package.json", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "lodash", "description": "Flags lodash as unused" },
+        { "check": "answer_matches", "pattern": "rimraf[^\\n]*(script|clean|used|keep)|(script|clean|used|keep)[^\\n]*rimraf", "flags": "i", "description": "Keeps rimraf because the clean script uses it" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

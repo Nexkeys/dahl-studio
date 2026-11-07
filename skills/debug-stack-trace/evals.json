@@ -1,0 +1,69 @@
+{
+  "skill": "debug-stack-trace",
+  "evals": [
+    {
+      "id": "debug-stack-trace-node-undefined",
+      "prompt": "/debug-stack-trace Users without a profile should show their email instead.\nTypeError: Cannot read properties of undefined (reading 'name')\n    at formatUser (C:\\work\\app\\src\\format.js:2:23)\n    at Array.map (<anonymous>)\n    at renderList (C:\\work\\app\\src\\list.js:4:16)\n    at file:///C:/work/app/src/index.js:6:13",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. src/format.js reads user.profile.name without checking that profile exists; src/list.js maps users through it. The existing test only covers a user with a profile. Paths in the trace are from another machine.",
+        "files": {
+          "package.json": "{\n  \"name\": \"users\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/format.js": "export function formatUser(user) {\n  return user.profile.name\n}\n",
+          "src/list.js": "import { formatUser } from './format.js'\n\nexport function renderList(users) {\n  return users.map(formatUser).join('\\n')\n}\n",
+          "src/index.js": "import { renderList } from './list.js'\n\nconst users = [\n  { email: 'ann@example.com', profile: { name: 'Ann' } },\n  { email: 'bo@example.com' }\n]\nconsole.log(renderList(users))\n",
+          "test/format.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { formatUser } from '../src/format.js'\n\ntest('uses the profile name', () => {\n  assert.equal(formatUser({ profile: { name: 'Ann' } }), 'Ann')\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "format\\.js", "description": "Read the first project frame" },
+        { "check": "file_matches", "path": "src/format.js", "pattern": "email", "description": "Falls back to the email when there is no profile" },
+        { "check": "file_matches", "path": "test/format.test.js", "pattern": "email", "description": "Added a regression test for a user without a profile" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the fix" }
+      ]
+    },
+    {
+      "id": "debug-stack-trace-python-ci-paths",
+      "prompt": "Got this when importing orders.csv, can you sort it out?\n\nTraceback (most recent call last):\n  File \"/home/runner/work/shop/shop/app/main.py\", line 3, in <module>\n    rows = load_orders(\"orders.csv\")\n  File \"/home/runner/work/shop/shop/app/orders.py\", line 10, in load_orders\n    out.append({\"sku\": row[\"sku\"], \"qty\": parse_qty(row[\"qty\"])})\n  File \"/home/runner/work/shop/shop/app/parse.py\", line 2, in parse_qty\n    return int(raw)\nValueError: invalid literal for int() with base 10: '1,200'",
+      "mode": "build",
+      "fixture": {
+        "description": "Python package where parse_qty calls int() on CSV values that can contain thousands separators. The traceback paths come from a Linux CI runner and must be mapped to app/parse.py.",
+        "files": {
+          "app/__init__.py": "",
+          "app/parse.py": "def parse_qty(raw):\n    return int(raw)\n",
+          "app/orders.py": "import csv\n\nfrom app.parse import parse_qty\n\n\ndef load_orders(path):\n    out = []\n    with open(path, newline=\"\", encoding=\"utf-8\") as f:\n        for row in csv.DictReader(f):\n            out.append({\"sku\": row[\"sku\"], \"qty\": parse_qty(row[\"qty\"])})\n    return out\n",
+          "app/main.py": "from app.orders import load_orders\n\nrows = load_orders(\"orders.csv\")\nprint(len(rows))\n",
+          "tests/test_parse.py": "from app.parse import parse_qty\n\n\ndef test_plain():\n    assert parse_qty(\"5\") == 5\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "debug-stack-trace", "description": "The model loaded the debug-stack-trace skill" },
+        { "check": "file_matches", "path": "app/parse.py", "pattern": "replace\\(\\s*['\"],['\"]|re\\.sub|locale|translate", "description": "parse_qty handles thousands separators" },
+        { "check": "file_matches", "path": "tests/test_parse.py", "pattern": "\\d,\\d{3}", "description": "Regression test with a thousands separator" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass" },
+        { "check": "answer_matches", "pattern": "parse\\.py", "description": "Names the first project frame" }
+      ]
+    },
+    {
+      "id": "debug-stack-trace-plan-cwd",
+      "prompt": "/debug-stack-trace It works when I run it from the project folder but crashes when I start it from anywhere else:\nError: ENOENT: no such file or directory, open 'C:\\Users\\me\\data\\settings.json'\n    at Object.openSync (node:fs:573:18)\n    at Object.readFileSync (node:fs:452:35)\n    at loadSettings (C:\\work\\app\\src\\settings.js:5:18)\n    at main (C:\\work\\app\\src\\index.js:4:20)",
+      "mode": "plan",
+      "fixture": {
+        "description": "src/settings.js builds the settings path from process.cwd() instead of the module's own folder. The top frames are node:fs internals. In Plan mode the model must not edit; it should name settings.js:5 and the cwd cause.",
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"type\": \"module\",\n  \"scripts\": { \"start\": \"node src/index.js\" }\n}\n",
+          "src/settings.js": "import fs from 'node:fs'\nimport path from 'node:path'\n\nexport function loadSettings() {\n  const raw = fs.readFileSync(path.join(process.cwd(), 'data', 'settings.json'), 'utf8')\n  return JSON.parse(raw)\n}\n",
+          "src/index.js": "import { loadSettings } from './settings.js'\n\nfunction main() {\n  const settings = loadSettings()\n  console.log(settings.theme)\n}\n\nmain()\n",
+          "data/settings.json": "{ \"theme\": \"dark\" }\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "settings\\.js", "description": "Read the first project frame" },
+        { "check": "file_unchanged", "path": "src/settings.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "cwd|working directory|import\\.meta|__dirname|fileURLToPath", "flags": "i", "description": "Identifies the cwd-relative path as the cause" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

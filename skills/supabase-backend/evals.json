@@ -1,0 +1,64 @@
+{
+  "skill": "supabase-backend",
+  "evals": [
+    {
+      "id": "supabase-backend-todos-rls",
+      "prompt": "/supabase-backend add a todos table where each user can only see and edit their own todos",
+      "mode": "build",
+      "fixture": {
+        "description": "Supabase project with one applied migration (profiles with RLS) and a browser client using the anon key. The model must add a new migration with RLS enabled and per-operation policies based on auth.uid(), without editing the applied migration.",
+        "files": {
+          "package.json": "{\n  \"name\": \"todo-app\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\" },\n  \"dependencies\": { \"@supabase/supabase-js\": \"^2.45.0\" },\n  \"devDependencies\": { \"supabase\": \"^2.0.0\" }\n}\n",
+          "supabase/config.toml": "project_id = \"todo-app\"\n\n[api]\nport = 54321\n\n[db]\nport = 54322\nmajor_version = 15\n",
+          "supabase/migrations/20240101000000_profiles.sql": "create table public.profiles (\n  id uuid primary key references auth.users (id) on delete cascade,\n  display_name text\n);\n\nalter table public.profiles enable row level security;\n\ncreate policy \"profiles_select_own\" on public.profiles for select to authenticated using ((select auth.uid()) = id);\n",
+          "src/lib/supabase.ts": "import { createClient } from '@supabase/supabase-js'\n\nexport const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "supabase migration new", "description": "Creates the migration with the Supabase CLI" },
+        { "check": "transcript_matches", "pattern": "enable row level security", "flags": "i", "description": "The new table gets RLS enabled" },
+        { "check": "transcript_matches", "pattern": "auth\\.uid\\(\\)[\\s\\S]{0,40}user_id|user_id[\\s\\S]{0,40}auth\\.uid\\(\\)", "flags": "i", "description": "Policies compare the owner column with auth.uid()" },
+        { "check": "file_unchanged", "path": "supabase/migrations/20240101000000_profiles.sql", "description": "Does not edit the applied migration" }
+      ]
+    },
+    {
+      "id": "supabase-backend-service-role-leak",
+      "prompt": "Our React frontend uses the Supabase service role key because inserts into notes kept failing with the anon key. Can you set this up properly?",
+      "mode": "build",
+      "fixture": {
+        "description": "Vite app whose browser client uses VITE_SUPABASE_SERVICE_ROLE_KEY, and a notes table created without RLS policies for inserts. The fix is to use the anon key in the client and add RLS policies so inserts work for signed-in users.",
+        "files": {
+          "package.json": "{\n  \"name\": \"notes-web\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"dependencies\": { \"@supabase/supabase-js\": \"^2.45.0\" },\n  \"devDependencies\": { \"supabase\": \"^2.0.0\" }\n}\n",
+          ".env.example": "VITE_SUPABASE_URL=http://127.0.0.1:54321\nVITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key\n",
+          "src/lib/supabase.ts": "import { createClient } from '@supabase/supabase-js'\n\nexport const supabase = createClient(\n  import.meta.env.VITE_SUPABASE_URL,\n  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY\n)\n",
+          "supabase/migrations/20240201000000_notes.sql": "create table public.notes (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users (id),\n  body text not null\n);\n\nalter table public.notes enable row level security;\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "supabase-backend", "description": "The model loaded the supabase-backend skill" },
+        { "check": "file_not_matches", "path": "src/lib/supabase.ts", "pattern": "SERVICE_ROLE", "flags": "i", "description": "The browser client no longer uses the service role key" },
+        { "check": "file_matches", "path": "src/lib/supabase.ts", "pattern": "ANON|PUBLISHABLE", "flags": "i", "description": "The browser client uses the anon or publishable key" },
+        { "check": "transcript_matches", "pattern": "create policy[\\s\\S]{0,200}for insert", "flags": "i", "description": "Adds an insert policy so inserts work with RLS" },
+        { "check": "answer_matches", "pattern": "rotate|regenerate|roll", "flags": "i", "description": "Tells the user to rotate the exposed key" }
+      ]
+    },
+    {
+      "id": "supabase-backend-plan-storage",
+      "prompt": "/supabase-backend add an avatars storage bucket that each user can upload their own picture to",
+      "mode": "plan",
+      "fixture": {
+        "description": "Supabase project with migrations. In Plan mode the model reports the bucket migration and storage.objects policies scoped to the user's folder, and asks for Build mode, without writing files.",
+        "files": {
+          "supabase/config.toml": "project_id = \"social\"\n",
+          "supabase/migrations/20240101000000_profiles.sql": "create table public.profiles (\n  id uuid primary key references auth.users (id) on delete cascade,\n  avatar_path text\n);\n\nalter table public.profiles enable row level security;\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "supabase/migrations/20240101000000_profiles.sql", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "storage\\.objects", "description": "Policies target storage.objects" },
+        { "check": "answer_matches", "pattern": "foldername|auth\\.uid", "description": "Scopes uploads to the user's own folder" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

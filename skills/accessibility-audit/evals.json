@@ -1,0 +1,61 @@
+{
+  "skill": "accessibility-audit",
+  "evals": [
+    {
+      "id": "accessibility-audit-login-form",
+      "prompt": "/accessibility-audit src/LoginForm.jsx",
+      "mode": "build",
+      "fixture": {
+        "description": "React login form with an input that only has a placeholder, a logo image without alt, a clickable div used as the submit button, and CSS that removes the focus outline.",
+        "files": {
+          "package.json": "{\n  \"name\": \"web\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\" }\n}\n",
+          "src/LoginForm.jsx": "import './LoginForm.css'\n\nexport default function LoginForm({ onSubmit }) {\n  return (\n    <form onSubmit={onSubmit}>\n      <img src=\"/logo.png\" />\n      <input type=\"email\" placeholder=\"Email\" />\n      <input type=\"password\" placeholder=\"Password\" />\n      <div className=\"submit\" onClick={onSubmit}>Log in</div>\n    </form>\n  )\n}\n",
+          "src/LoginForm.css": "input { border: 1px solid #ddd; padding: 8px; }\ninput:focus { outline: none; }\n.submit { background: #6b8afd; color: #fff; padding: 8px 16px; cursor: pointer; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_matches", "path": "src/LoginForm.jsx", "pattern": "<label|aria-labelledby", "description": "Inputs get real labels" },
+        { "check": "file_matches", "path": "src/LoginForm.jsx", "pattern": "<button", "description": "The clickable div becomes a button" },
+        { "check": "file_matches", "path": "src/LoginForm.jsx", "pattern": "<img[^>]*alt=", "description": "The image gets an alt attribute" },
+        { "check": "file_matches", "path": "src/LoginForm.css", "pattern": "focus-visible|outline:\\s*\\d|outline:\\s*(solid|auto)", "description": "Focus is visible again" },
+        { "check": "answer_matches", "pattern": "1\\.1\\.1|1\\.3\\.1|2\\.1\\.1|2\\.4\\.7|4\\.1\\.2", "description": "Report cites WCAG criterion numbers" }
+      ]
+    },
+    {
+      "id": "accessibility-audit-signup-natural",
+      "prompt": "Can you check that our signup page meets WCAG AA and fix whatever doesn't?",
+      "mode": "build",
+      "fixture": {
+        "description": "Static signup.html with no lang attribute, light grey text (#aaa on white, below 4.5:1), a heading jump from h1 to h4, and an unlabeled input.",
+        "files": {
+          "signup.html": "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>Sign up</title>\n  <style>\n    body { font-family: system-ui, sans-serif; color: #222; background: #fff; }\n    .hint { color: #aaaaaa; font-size: 14px; }\n  </style>\n</head>\n<body>\n  <h1>Create your account</h1>\n  <h4>Step 1</h4>\n  <form>\n    <input type=\"text\" name=\"fullname\" placeholder=\"Full name\">\n    <p class=\"hint\">We never share your name.</p>\n    <button type=\"submit\">Create account</button>\n  </form>\n</body>\n</html>\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "accessibility-audit", "description": "The model loaded the accessibility-audit skill" },
+        { "check": "file_matches", "path": "signup.html", "pattern": "<html[^>]*\\blang=", "description": "Adds a lang attribute" },
+        { "check": "file_matches", "path": "signup.html", "pattern": "<label", "description": "Labels the input" },
+        { "check": "file_not_matches", "path": "signup.html", "pattern": "color:\\s*#aaa(aaa)?\\b", "flags": "i", "description": "Fixes the low-contrast hint colour" },
+        { "check": "answer_matches", "pattern": "1\\.4\\.3|contrast", "flags": "i", "description": "Reports the contrast issue" }
+      ]
+    },
+    {
+      "id": "accessibility-audit-review-mode",
+      "prompt": "/accessibility-audit src/Modal.tsx",
+      "mode": "review",
+      "fixture": {
+        "description": "A modal that has no dialog role, no Escape handling and an icon-only close button without a name. In Review mode the model reports findings with WCAG numbers and asks for Build mode, without editing.",
+        "files": {
+          "src/Modal.tsx": "export function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {\n  if (!open) return null\n  return (\n    <div className=\"overlay\">\n      <div className=\"modal\">\n        <span className=\"close\" onClick={onClose}><svg width=\"16\" height=\"16\"><path d=\"M0 0L16 16M16 0L0 16\" /></svg></span>\n        {children}\n      </div>\n    </div>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/Modal.tsx", "description": "No edits in Review mode" },
+        { "check": "answer_matches", "pattern": "role=\"?dialog|aria-modal|<dialog", "flags": "i", "description": "Flags the missing dialog semantics" },
+        { "check": "answer_matches", "pattern": "Escape|Esc\\b|focus", "flags": "i", "description": "Flags keyboard or focus handling" },
+        { "check": "answer_matches", "pattern": "4\\.1\\.2|2\\.1\\.1|2\\.1\\.2|2\\.4\\.3", "description": "Cites WCAG criterion numbers" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

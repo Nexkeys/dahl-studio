@@ -1,0 +1,59 @@
+{
+  "skill": "responsive-audit",
+  "evals": [
+    {
+      "id": "responsive-audit-pricing-fixed-width",
+      "prompt": "/responsive-audit the pricing page (index.html)",
+      "mode": "build",
+      "fixture": {
+        "description": "Static site. index.html has no viewport meta, styles.css gives the pricing section a fixed 1100px width and the plan grid three fixed 340px columns, so phones scroll sideways.",
+        "files": {
+          "index.html": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Pricing</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n  <section class=\"pricing\">\n    <h1>Pricing</h1>\n    <div class=\"plans\">\n      <article class=\"plan\"><h2>Free</h2><a class=\"cta\" href=\"/signup\">Start</a></article>\n      <article class=\"plan\"><h2>Pro</h2><a class=\"cta\" href=\"/signup?plan=pro\">Start</a></article>\n      <article class=\"plan\"><h2>Team</h2><a class=\"cta\" href=\"/contact\">Contact us</a></article>\n    </div>\n  </section>\n</body>\n</html>\n",
+          "styles.css": "body { margin: 0; font-family: system-ui, sans-serif; }\n.pricing { width: 1100px; margin: 0 auto; padding: 40px; }\n.plans { display: grid; grid-template-columns: repeat(3, 340px); gap: 20px; }\n.plan { border: 1px solid #ddd; border-radius: 8px; padding: 24px; }\n.cta { display: inline-block; padding: 4px 8px; font-size: 12px; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_matches", "path": "index.html", "pattern": "name=\"viewport\"[^>]*width=device-width", "description": "Adds a correct viewport meta" },
+        { "check": "file_not_matches", "path": "styles.css", "pattern": "\\.pricing\\s*\\{[^}]*[^-]width:\\s*1100px", "description": "Removes the fixed 1100px width" },
+        { "check": "file_not_matches", "path": "styles.css", "pattern": "repeat\\(3,\\s*340px\\)", "description": "Plan grid no longer uses fixed pixel columns" },
+        { "check": "answer_matches", "pattern": "360[\\s\\S]*1440", "description": "Reports results for the widths from 360 to 1440" }
+      ]
+    },
+    {
+      "id": "responsive-audit-dashboard-natural",
+      "prompt": "On my phone the dashboard scrolls sideways and the cards are cut off. Can you check it at mobile and tablet sizes and fix it?",
+      "mode": "build",
+      "fixture": {
+        "description": "React dashboard with plain CSS: a sidebar and main area in a flex row with no wrapping, a stats grid with four fixed 300px columns and a full-bleed banner using 100vw.",
+        "files": {
+          "package.json": "{\n  \"name\": \"dash\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\" }\n}\n",
+          "src/Dashboard.tsx": "import './Dashboard.css'\n\nexport default function Dashboard() {\n  return (\n    <div className=\"layout\">\n      <aside className=\"sidebar\">Menu</aside>\n      <main className=\"main\">\n        <div className=\"banner\">Welcome back</div>\n        <div className=\"stats\">\n          <div className=\"card\">Revenue</div><div className=\"card\">Orders</div><div className=\"card\">Refunds</div><div className=\"card\">Visitors</div>\n        </div>\n      </main>\n    </div>\n  )\n}\n",
+          "src/Dashboard.css": ".layout { display: flex; }\n.sidebar { width: 280px; flex-shrink: 0; }\n.banner { width: 100vw; padding: 16px; background: #eef2ff; }\n.stats { display: grid; grid-template-columns: repeat(4, 300px); gap: 16px; }\n.card { padding: 16px; border: 1px solid #e5e7eb; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "responsive-audit", "description": "The model loaded the responsive-audit skill" },
+        { "check": "file_not_matches", "path": "src/Dashboard.css", "pattern": "repeat\\(4,\\s*300px\\)", "description": "Stats grid no longer uses four fixed columns" },
+        { "check": "file_matches", "path": "src/Dashboard.css", "pattern": "@media|auto-fit|auto-fill|minmax|flex-wrap", "description": "Uses breakpoints or fluid layout" },
+        { "check": "file_not_matches", "path": "src/Dashboard.css", "pattern": "width:\\s*100vw", "description": "Removes the 100vw width that causes overflow" }
+      ]
+    },
+    {
+      "id": "responsive-audit-plan-mode",
+      "prompt": "/responsive-audit src/Header.css",
+      "mode": "plan",
+      "fixture": {
+        "description": "Header styles with a nowrap nav and a fixed 960px container. In Plan mode the model must report the problems with file and line and ask for Build mode, without editing.",
+        "files": {
+          "src/Header.css": ".header { width: 960px; margin: 0 auto; display: flex; justify-content: space-between; }\n.nav { display: flex; gap: 32px; white-space: nowrap; }\n.nav a { font-size: 13px; padding: 2px 4px; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/Header.css", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "960px|fixed width", "flags": "i", "description": "Names the fixed container width" },
+        { "check": "answer_matches", "pattern": "nowrap|wrap", "flags": "i", "description": "Names the non-wrapping nav" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

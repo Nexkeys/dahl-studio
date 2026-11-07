@@ -1,0 +1,66 @@
+{
+  "skill": "spec-to-tasks",
+  "evals": [
+    {
+      "id": "spec-to-tasks-csv-export",
+      "prompt": "/spec-to-tasks Users can export their invoices as CSV from the invoices page, filtered by a date range. Only their own invoices.",
+      "mode": "plan",
+      "fixture": {
+        "description": "Express API with an invoices route and a React invoices page. The model must map the requirement to these files, write small tasks with acceptance criteria and put them in update_plan, without changing files.",
+        "files": {
+          "package.json": "{\n  \"name\": \"billing\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\", \"test\": \"vitest run\" },\n  \"dependencies\": { \"express\": \"^4.21.0\", \"react\": \"^19.0.0\" },\n  \"devDependencies\": { \"vitest\": \"^2.1.0\", \"supertest\": \"^7.0.0\" }\n}\n",
+          "server/routes/invoices.js": "import { Router } from 'express'\nimport { listInvoices } from '../db.js'\n\nconst router = Router()\n\nrouter.get('/', async (req, res) => {\n  const rows = await listInvoices({ userId: req.user.id })\n  res.json({ data: rows })\n})\n\nexport default router\n",
+          "server/db.js": "export async function listInvoices({ userId }) {\n  return []\n}\n",
+          "src/pages/Invoices.tsx": "export default function Invoices() {\n  return (\n    <section>\n      <h1>Invoices</h1>\n    </section>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "update_plan", "description": "Puts the tasks in the visible plan" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "invoices|Invoices", "description": "Reads the related code" },
+        { "check": "answer_matches", "pattern": "server/routes/invoices\\.js|src/pages/Invoices\\.tsx", "description": "Maps tasks to real files" },
+        { "check": "answer_matches", "pattern": "acceptance", "flags": "i", "description": "Tasks have acceptance criteria" },
+        { "check": "file_unchanged", "path": "server/routes/invoices.js", "description": "Read-only: no source files changed" }
+      ]
+    },
+    {
+      "id": "spec-to-tasks-teams-natural",
+      "prompt": "Here's the spec in docs/spec-teams.md. Can you break it down into tasks we can work through in order?",
+      "mode": "plan",
+      "fixture": {
+        "description": "A short teams spec with an explicit TBD about whether admins can remove other admins. The model should ask about it with ask_user, then return ordered tasks with dependencies, without changing files.",
+        "files": {
+          "docs/spec-teams.md": "# Teams\n\n- A user can create a team and becomes its owner.\n- Owners and admins can invite members by email. Invites expire after 7 days.\n- Owners and admins can remove members. TBD: can an admin remove another admin?\n- Members see the team's projects.\n",
+          "package.json": "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"dependencies\": { \"next\": \"15.1.0\", \"@prisma/client\": \"^6.0.0\" }\n}\n",
+          "prisma/schema.prisma": "model User {\n  id    String @id @default(cuid())\n  email String @unique\n}\n\nmodel Project {\n  id      String @id @default(cuid())\n  name    String\n  ownerId String\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "spec-to-tasks", "description": "The model loaded the spec-to-tasks skill" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "spec-teams", "description": "Reads the spec file" },
+        { "check": "tool_called", "tool": "ask_user", "args_pattern": "admin", "description": "Asks about the admin removal ambiguity" },
+        { "check": "answer_matches", "pattern": "depend", "flags": "i", "description": "Tasks list their dependencies" },
+        { "check": "file_unchanged", "path": "docs/spec-teams.md", "description": "No files changed" }
+      ]
+    },
+    {
+      "id": "spec-to-tasks-save-file",
+      "prompt": "/spec-to-tasks docs/spec-search.md and save the task list to docs/tasks.md",
+      "mode": "build",
+      "fixture": {
+        "description": "A clear search spec and a small FastAPI app. In Build mode the user asked for docs/tasks.md, so the file must be written with tasks, acceptance criteria and dependencies, while source files stay unchanged.",
+        "files": {
+          "docs/spec-search.md": "# Product search\n\n- GET /products?q= returns products whose name contains q (case-insensitive), max 20 results.\n- The products page has a search box that updates results as the user types (debounced 300 ms).\n- Empty q returns the first 20 products.\n",
+          "app/main.py": "from fastapi import FastAPI\n\napp = FastAPI()\n\nPRODUCTS = [{\"id\": 1, \"name\": \"Desk Lamp\"}, {\"id\": 2, \"name\": \"Lamp Shade\"}]\n\n\n@app.get(\"/products\")\ndef list_products():\n    return PRODUCTS[:20]\n",
+          "web/src/Products.tsx": "export default function Products() {\n  return <h1>Products</h1>\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_exists", "path": "docs/tasks.md", "description": "Writes the requested tasks file" },
+        { "check": "file_matches", "path": "docs/tasks.md", "pattern": "acceptance", "flags": "i", "description": "Tasks have acceptance criteria" },
+        { "check": "file_matches", "path": "docs/tasks.md", "pattern": "depend", "flags": "i", "description": "Tasks list dependencies" },
+        { "check": "file_matches", "path": "docs/tasks.md", "pattern": "app/main\\.py|Products\\.tsx", "description": "Tasks reference real files" },
+        { "check": "file_unchanged", "path": "app/main.py", "description": "Source files not changed" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "skill": "onboard-project",
+  "evals": [
+    {
+      "id": "onboard-stale-readme",
+      "prompt": "/onboard-project",
+      "mode": "plan",
+      "fixture": {
+        "description": "Vite and Vitest project managed with pnpm. The README tells people to run npm start, but package.json has no start script (the dev script is dev), and CI uses pnpm. The map should name pnpm and Vitest and flag the stale README.",
+        "files": {
+          "package.json": "{\n  \"name\": \"dashboard\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"vite build\",\n    \"test\": \"vitest run\",\n    \"lint\": \"eslint .\"\n  },\n  \"devDependencies\": { \"vite\": \"^5.4.0\", \"vitest\": \"^2.1.0\", \"eslint\": \"^9.10.0\" }\n}\n",
+          "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+          "README.md": "# Dashboard\n\nInstall with `npm install`, then run `npm start` to open the app.\n",
+          ".github/workflows/ci.yml": "name: CI\non: [pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm test\n",
+          "src/main.ts": "import { renderDashboard } from './dashboard'\n\nrenderDashboard(document.getElementById('app')!)\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "package\\.json", "description": "Read package.json" },
+        { "check": "tool_called", "tool": "remember", "description": "Saved key facts to memory" },
+        { "check": "answer_matches", "pattern": "pnpm", "description": "Names pnpm as the package manager" },
+        { "check": "answer_matches", "pattern": "vitest", "flags": "i", "description": "Names Vitest as the test runner" },
+        { "check": "answer_matches", "pattern": "stale|outdated|out of date|no [`'\"]?start[`'\"]? script|does ?n[o']t (exist|have)|missing", "flags": "i", "description": "Flags the README's npm start instruction as a gotcha" }
+      ]
+    },
+    {
+      "id": "onboard-python-conventions",
+      "prompt": "I just cloned this repo. Get me oriented: what is it, how do I run the tests, and what conventions should I follow?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Python CLI package with pytest and ruff configured in pyproject.toml and a CLAUDE.md that sets team conventions (httpx only, money in integer cents). The map must surface the test command and the CLAUDE.md conventions without changing files.",
+        "files": {
+          "pyproject.toml": "[project]\nname = \"invoicer\"\nversion = \"0.3.0\"\nrequires-python = \">=3.11\"\ndependencies = [\"httpx>=0.27\", \"typer>=0.12\"]\n\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.6\"]\n\n[project.scripts]\ninvoicer = \"invoicer.cli:app\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\"src\"]\n\n[tool.ruff]\nline-length = 100\n",
+          "CLAUDE.md": "# Conventions\n- Use httpx for HTTP, never requests.\n- All money values are integers in cents, never floats.\n- New CLI commands get a test in tests/test_cli.py.\n",
+          "src/invoicer/cli.py": "import typer\n\napp = typer.Typer()\n\n\n@app.command()\ndef total(cents: list[int]) -> None:\n    typer.echo(sum(cents))\n",
+          "src/invoicer/__init__.py": "",
+          "tests/test_cli.py": "from typer.testing import CliRunner\n\nfrom invoicer.cli import app\n\n\ndef test_total():\n    result = CliRunner().invoke(app, [\"100\", \"250\"])\n    assert result.output.strip() == \"350\"\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "onboard-project", "description": "Loaded the onboard-project skill" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "CLAUDE\\.md", "description": "Read the existing instruction file" },
+        { "check": "answer_matches", "pattern": "pytest", "description": "Gives the pytest command" },
+        { "check": "answer_matches", "pattern": "cents", "flags": "i", "description": "Reports the money-in-cents convention" },
+        { "check": "file_unchanged", "path": "CLAUDE.md", "description": "No files changed in Plan mode" }
+      ]
+    },
+    {
+      "id": "onboard-write-short-agents-md",
+      "prompt": "/onboard-project write AGENTS.md",
+      "mode": "build",
+      "fixture": {
+        "description": "Tiny Node HTTP API with node:test tests that pass. In Build mode the skill should run the test command, then write a short AGENTS.md (under 60 lines) containing only verified commands.",
+        "files": {
+          "package.json": "{\n  \"name\": \"todo-api\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"start\": \"node src/server.js\",\n    \"test\": \"node --test\"\n  }\n}\n",
+          "src/todos.js": "const todos = []\n\nexport function addTodo(title) {\n  const todo = { id: todos.length + 1, title, done: false }\n  todos.push(todo)\n  return todo\n}\n\nexport const listTodos = () => [...todos]\n",
+          "src/server.js": "import http from 'node:http'\nimport { listTodos } from './todos.js'\n\nhttp.createServer((req, res) => {\n  res.setHeader('content-type', 'application/json')\n  res.end(JSON.stringify(listTodos()))\n}).listen(process.env.PORT || 3000)\n",
+          "test/todos.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { addTodo, listTodos } from '../src/todos.js'\n\ntest('adds a todo', () => {\n  addTodo('write docs')\n  assert.equal(listTodos().length, 1)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Confirmed the test command by running it" },
+        { "check": "file_exists", "path": "AGENTS.md", "description": "AGENTS.md was written" },
+        { "check": "file_matches", "path": "AGENTS.md", "pattern": "npm (run )?test|node --test", "description": "AGENTS.md contains the verified test command" },
+        { "check": "file_not_matches", "path": "AGENTS.md", "pattern": "^(?:[^\\n]*\\n){60}", "description": "AGENTS.md is under 60 lines" },
+        { "check": "tool_called", "tool": "remember", "description": "Saved key facts to memory" }
+      ]
+    }
+  ]
+}

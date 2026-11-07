@@ -1,0 +1,55 @@
+{
+  "skill": "landing-page",
+  "evals": [
+    {
+      "id": "landing-page-empty-folder",
+      "prompt": "/landing-page for Tallyo, an invoicing app for freelancers. Main CTA 'Start free trial' linking to /signup. Benefits: send invoices in a minute, automatic payment reminders, see who owes you at a glance. Plain HTML is fine.",
+      "mode": "build",
+      "fixture": {
+        "description": "Empty folder. The model should create a plain HTML/CSS landing page with the given copy, one h1, the CTA, meta and Open Graph tags, and no placeholder text.",
+        "files": {}
+      },
+      "criteria": [
+        { "check": "file_exists", "path": "index.html", "description": "Creates index.html" },
+        { "check": "file_matches", "path": "index.html", "pattern": "<h1[^>]*>[\\s\\S]*?</h1>", "description": "Has an h1" },
+        { "check": "file_matches", "path": "index.html", "pattern": "Start free trial", "description": "Uses the given CTA copy" },
+        { "check": "file_matches", "path": "index.html", "pattern": "og:title", "description": "Has Open Graph tags" },
+        { "check": "file_not_matches", "path": "index.html", "pattern": "lorem|ipsum", "flags": "i", "description": "No lorem ipsum" }
+      ]
+    },
+    {
+      "id": "landing-page-asks-for-missing-info",
+      "prompt": "Make us a landing page for the homepage of this Next.js app, we launch next week.",
+      "mode": "build",
+      "fixture": {
+        "description": "Next.js App Router project with a placeholder app/page.tsx and no product information anywhere. The model must ask for the missing product details instead of inventing them.",
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"scripts\": { \"dev\": \"next dev\", \"build\": \"next build\" },\n  \"dependencies\": { \"next\": \"15.1.0\", \"react\": \"19.0.0\", \"react-dom\": \"19.0.0\" }\n}\n",
+          "app/page.tsx": "export default function Home() {\n  return <main>Hello</main>\n}\n",
+          "app/layout.tsx": "export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang=\"en\">\n      <body>{children}</body>\n    </html>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "landing-page", "description": "The model loaded the landing-page skill" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "package\\.json|README", "description": "Looked for product information in the project first" },
+        { "check": "tool_called", "tool": "ask_user", "description": "Asked for the missing product details" },
+        { "check": "file_not_matches", "path": "app/page.tsx", "pattern": "lorem|ipsum", "flags": "i", "description": "No lorem ipsum" }
+      ]
+    },
+    {
+      "id": "landing-page-plan-outline",
+      "prompt": "/landing-page for Brewly, a coffee subscription for home baristas, CTA 'Get your first bag' to /start",
+      "mode": "plan",
+      "fixture": {
+        "description": "Empty folder in Plan mode. The model returns a section outline with real copy and a file plan, and asks for Build mode, without creating files.",
+        "files": {}
+      },
+      "criteria": [
+        { "check": "file_absent", "path": "index.html", "description": "No files created in Plan mode" },
+        { "check": "answer_matches", "pattern": "hero", "flags": "i", "description": "Outlines the hero section" },
+        { "check": "answer_matches", "pattern": "Get your first bag", "description": "Uses the given CTA copy" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

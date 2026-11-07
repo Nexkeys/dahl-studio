@@ -1,0 +1,60 @@
+{
+  "skill": "fix",
+  "evals": [
+    {
+      "id": "fix-empty-sum",
+      "prompt": "/fix cartTotal returns NaN for an empty cart, it should be 0",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project using node:test. src/cart.js reduces item prices without an initial value, so an empty array throws or returns NaN.",
+        "files": {
+          "package.json": "{\n  \"name\": \"cart\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/cart.js": "export function cartTotal(items) {\n  return items.map((i) => i.price * i.qty).reduce((a, b) => a + b)\n}\n",
+          "test/cart.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { cartTotal } from '../src/cart.js'\n\ntest('sums items', () => {\n  assert.equal(cartTotal([{ price: 2, qty: 3 }]), 6)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests" },
+        { "check": "file_matches", "path": "src/cart.js", "pattern": "reduce\\([^)]*\\)\\s*,\\s*0\\s*\\)|\\.length\\s*===?\\s*0|!items\\.length", "description": "The reduce gets an initial value or an empty cart is handled" },
+        { "check": "file_matches", "path": "test/cart.test.js", "pattern": "cartTotal\\(\\[\\]\\)", "description": "A regression test for the empty cart was added" },
+        { "check": "answer_matches", "pattern": "cause", "flags": "i", "description": "The answer states the root cause" }
+      ]
+    },
+    {
+      "id": "fix-wrong-discount",
+      "prompt": "The checkout gives 10 percent off when the code SAVE20 should give 20 percent. Fix it.",
+      "mode": "build",
+      "fixture": {
+        "description": "Python module with a discount table that maps SAVE20 to 0.1, and a pytest file that only covers SAVE10.",
+        "files": {
+          "shop/discounts.py": "RATES = {\"SAVE10\": 0.1, \"SAVE20\": 0.1}\n\n\ndef apply(total, code):\n    return round(total * (1 - RATES.get(code, 0)), 2)\n",
+          "shop/__init__.py": "",
+          "tests/test_discounts.py": "from shop.discounts import apply\n\n\ndef test_save10():\n    assert apply(100, \"SAVE10\") == 90\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "fix", "description": "The model loaded the fix skill with use_skill" },
+        { "check": "file_matches", "path": "shop/discounts.py", "pattern": "\"SAVE20\"\\s*:\\s*0\\.2", "description": "SAVE20 maps to 0.2" },
+        { "check": "file_matches", "path": "tests/test_discounts.py", "pattern": "SAVE20", "description": "A test covers SAVE20" },
+        { "check": "command_ran", "pattern": "pytest", "description": "Ran pytest to verify" }
+      ]
+    },
+    {
+      "id": "fix-plan-mode-no-edits",
+      "prompt": "/fix slugify('Hello World') returns 'hello world' instead of 'hello-world'",
+      "mode": "plan",
+      "fixture": {
+        "description": "Single JS file whose slugify lowercases but never replaces spaces. The run is in Plan mode, so no file may change.",
+        "files": {
+          "src/slug.js": "export const slugify = (s) => s.trim().toLowerCase()\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/slug.js", "description": "No edits in Plan mode" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "slug", "description": "Read the buggy file" },
+        { "check": "answer_matches", "pattern": "replace|\\\\s\\+|split", "flags": "i", "description": "Names the missing whitespace replacement as the fix" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode to apply it" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "skill": "refactor",
+  "evals": [
+    {
+      "id": "refactor-split-helpers",
+      "prompt": "/refactor src/report.js move the formatting helpers out of generateReport into their own module",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. src/report.js has generateReport with inline currency and date formatting code; test/report.test.js covers generateReport through its public export. The tests should pass before and after without changes.",
+        "files": {
+          "package.json": "{\n  \"name\": \"reports\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/report.js": "export function generateReport(rows) {\n  const lines = []\n  for (const r of rows) {\n    const d = new Date(r.date)\n    const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`\n    const amount = (r.cents / 100).toFixed(2)\n    lines.push(`${day}  ${r.label.padEnd(10)} ${amount.padStart(9)}`)\n  }\n  const total = (rows.reduce((s, r) => s + r.cents, 0) / 100).toFixed(2)\n  lines.push(`TOTAL${' '.repeat(18)}${total.padStart(9)}`)\n  return lines.join('\\n')\n}\n",
+          "test/report.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { generateReport } from '../src/report.js'\n\ntest('formats rows and total', () => {\n  const out = generateReport([\n    { date: '2024-03-05T10:00:00Z', label: 'Coffee', cents: 450 },\n    { date: '2024-03-06T10:00:00Z', label: 'Lunch', cents: 1299 }\n  ])\n  assert.equal(out.split('\\n').length, 3)\n  assert.match(out, /2024-03-05  Coffee\\s+4\\.50/)\n  assert.match(out, /TOTAL\\s+17\\.49$/)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the refactor" },
+        { "check": "file_matches", "path": "src/report.js", "pattern": "import\\s*\\{[^}]+\\}\\s*from\\s*['\"]\\./", "description": "report.js now imports the helpers from a new module" },
+        { "check": "file_matches", "path": "src/report.js", "pattern": "export (function|const) generateReport", "description": "The public export is kept" },
+        { "check": "file_unchanged", "path": "test/report.test.js", "description": "Existing tests were not edited" }
+      ]
+    },
+    {
+      "id": "refactor-python-nested-ifs",
+      "prompt": "pricing.py is a mess of nested ifs. Can you clean it up without changing what it does?",
+      "mode": "build",
+      "fixture": {
+        "description": "Python module with a deeply nested shipping_cost function and pytest tests that cover it. The tests must stay unchanged and green.",
+        "files": {
+          "pricing.py": "def shipping_cost(weight_kg, country, express=False):\n    if country == \"SE\":\n        if weight_kg <= 1:\n            if express:\n                return 99\n            else:\n                return 49\n        else:\n            if express:\n                return 149\n            else:\n                return 79\n    else:\n        if country in (\"NO\", \"DK\", \"FI\"):\n            if weight_kg <= 1:\n                return 129 if express else 69\n            else:\n                return 199 if express else 109\n        else:\n            raise ValueError(\"unsupported country\")\n",
+          "tests/test_pricing.py": "import pytest\n\nfrom pricing import shipping_cost\n\n\n@pytest.mark.parametrize(\"w,c,e,expected\", [\n    (1, \"SE\", False, 49), (1, \"SE\", True, 99), (2, \"SE\", False, 79), (2, \"SE\", True, 149),\n    (1, \"NO\", False, 69), (1, \"DK\", True, 129), (3, \"FI\", False, 109), (3, \"FI\", True, 199),\n])\ndef test_costs(w, c, e, expected):\n    assert shipping_cost(w, c, e) == expected\n\n\ndef test_unsupported():\n    with pytest.raises(ValueError):\n        shipping_cost(1, \"US\")\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "refactor", "description": "The model loaded the refactor skill" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass after the refactor" },
+        { "check": "file_unchanged", "path": "tests/test_pricing.py", "description": "Tests were not edited" },
+        { "check": "file_matches", "path": "pricing.py", "pattern": "def shipping_cost\\(weight_kg, country, express=False\\)", "description": "The public signature is unchanged" },
+        { "check": "file_not_matches", "path": "pricing.py", "pattern": "^\\s{16,}return", "flags": "m", "description": "The deep nesting is gone" }
+      ]
+    },
+    {
+      "id": "refactor-untested-adds-safety-net",
+      "prompt": "/refactor src/format.js reduce the duplication",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test configured but no tests for src/format.js, which has three near-identical formatter functions. The model should write characterization tests before changing the code.",
+        "files": {
+          "package.json": "{\n  \"name\": \"fmt\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/format.js": "export function formatKb(bytes) {\n  const v = bytes / 1024\n  return (Math.round(v * 10) / 10) + ' KB'\n}\n\nexport function formatMb(bytes) {\n  const v = bytes / 1024 / 1024\n  return (Math.round(v * 10) / 10) + ' MB'\n}\n\nexport function formatGb(bytes) {\n  const v = bytes / 1024 / 1024 / 1024\n  return (Math.round(v * 10) / 10) + ' GB'\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "test[^\"]*\\.m?js", "description": "Wrote characterization tests" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass" },
+        { "check": "file_matches", "path": "src/format.js", "pattern": "export (function|const) formatKb[\\s\\S]*export (function|const) formatMb[\\s\\S]*export (function|const) formatGb", "description": "All three public functions are still exported" }
+      ]
+    }
+  ]
+}

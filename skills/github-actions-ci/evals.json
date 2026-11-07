@@ -1,0 +1,70 @@
+{
+  "skill": "github-actions-ci",
+  "evals": [
+    {
+      "id": "ci-node-new-workflow",
+      "prompt": "/github-actions-ci",
+      "mode": "build",
+      "fixture": {
+        "description": "Dependency-free Node project with lint and test scripts, a committed package-lock.json and an .nvmrc, but no workflow. The skill should run the scripts locally, then write .github/workflows/ci.yml with checkout and setup-node v4, npm cache, npm ci, the test step, read-only permissions and concurrency.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shapes\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"lint\": \"node --check src/area.js\",\n    \"test\": \"node --test\"\n  }\n}\n",
+          "package-lock.json": "{\n  \"name\": \"shapes\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": { \"name\": \"shapes\", \"version\": \"1.0.0\" }\n  }\n}\n",
+          ".nvmrc": "20\n",
+          "src/area.js": "export const circleArea = (r) => Math.PI * r * r\n",
+          "test/area.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { circleArea } from '../src/area.js'\n\ntest('unit circle', () => {\n  assert.equal(circleArea(1), Math.PI)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Ran the test command locally before writing CI" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "actions/checkout@v4[\\s\\S]*actions/setup-node@v4[\\s\\S]*cache:\\s*['\"]?npm", "description": "checkout and setup-node v4 with npm caching" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "npm ci[\\s\\S]*(npm (run )?test|node --test)", "description": "Installs with npm ci and runs the tests" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "permissions:\\s*\\r?\\n\\s+contents:\\s*read", "description": "Least-privilege permissions block" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "concurrency:[\\s\\S]*cancel-in-progress:\\s*true", "description": "Superseded runs are cancelled" }
+      ]
+    },
+    {
+      "id": "ci-python-ruff-pytest",
+      "prompt": "Can you set up GitHub CI for this so ruff and the tests run on every pull request?",
+      "mode": "build",
+      "fixture": {
+        "description": "Small Python package with pytest and ruff listed in requirements-dev.txt and no workflow. The workflow should use setup-python v5, run ruff check and pytest, and trigger on pull_request.",
+        "files": {
+          "pyproject.toml": "[project]\nname = \"calc\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\n",
+          "requirements-dev.txt": "pytest>=8\nruff>=0.6\n",
+          "src/calc.py": "def add(a: int, b: int) -> int:\n    return a + b\n",
+          "tests/test_calc.py": "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "github-actions-ci", "description": "Loaded the github-actions-ci skill" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "actions/setup-python@v5", "description": "Uses setup-python v5" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "ruff check", "description": "Runs ruff" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "pytest", "description": "Runs pytest" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "pull_request", "description": "Triggers on pull requests" }
+      ]
+    },
+    {
+      "id": "ci-modernise-old-workflow",
+      "prompt": "/github-actions-ci our workflow is old and slow, bring it up to date",
+      "mode": "build",
+      "fixture": {
+        "description": "Private Node app (engines node >=20) with a committed lock file and an old workflow: checkout@v2, setup-node@v1, npm install, a 4 by 3 version and OS matrix, no permissions, and tests marked continue-on-error. The update should use v4 actions and npm ci, add permissions, and stop ignoring test failures.",
+        "files": {
+          "package.json": "{\n  \"name\": \"orders-app\",\n  \"version\": \"2.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=20\" },\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "package-lock.json": "{\n  \"name\": \"orders-app\",\n  \"version\": \"2.1.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": { \"name\": \"orders-app\", \"version\": \"2.1.0\" }\n  }\n}\n",
+          ".github/workflows/ci.yml": "name: build\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        node: [14, 16, 18, 20]\n        os: [ubuntu-latest, windows-latest, macos-latest]\n    steps:\n      - uses: actions/checkout@v2\n      - uses: actions/setup-node@v1\n        with:\n          node-version: ${{ matrix.node }}\n      - run: npm install\n      - run: npm test\n        continue-on-error: true\n",
+          "src/orders.js": "export const orderTotal = (lines) => lines.reduce((sum, l) => sum + l.qty * l.price, 0)\n",
+          "test/orders.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { orderTotal } from '../src/orders.js'\n\ntest('total', () => {\n  assert.equal(orderTotal([{ qty: 2, price: 5 }]), 10)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "actions/checkout@v4", "description": "checkout upgraded to v4" },
+        { "check": "file_not_matches", "path": ".github/workflows/ci.yml", "pattern": "checkout@v[123]\\b|setup-node@v[123]\\b", "description": "No outdated action versions left" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "npm ci", "description": "Uses npm ci instead of npm install" },
+        { "check": "file_not_matches", "path": ".github/workflows/ci.yml", "pattern": "continue-on-error:\\s*true", "description": "Test failures are no longer ignored" },
+        { "check": "file_matches", "path": ".github/workflows/ci.yml", "pattern": "permissions:", "description": "Adds a permissions block" }
+      ]
+    }
+  ]
+}
