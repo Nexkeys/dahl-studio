@@ -17,6 +17,7 @@ import { formatBreakdown, PIXEL_ANALYSIS_JS, windowsOcr } from './tools/image'
 import { appendJsonl, nowIso, redact } from './util'
 import { probeEnvironment } from './envProbe'
 import { batchDeltas } from './eventBatch'
+import { PreviewController } from './preview/controller'
 
 export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
 // Smoke tests use an isolated profile so they never touch the user's real settings and can run beside the installed app
@@ -143,6 +144,13 @@ async function visionCandidates(): Promise<{ key: string; label: string }[]> {
   return out.slice(0, 2)
 }
 
+/** The Preview pane's page, for the agent's browser_* tools (the guest is handed over in index.ts). */
+export const preview = new PreviewController({
+  show: (root, url) => send('preview:open', { root, url }),
+  activeProject: async () => (await settings.get()).activeProject,
+  log: (m) => void log('info', m)
+})
+
 const sendAgentEvent = batchDeltas((e) => send('agent:event', e))
 export const runner = new AgentRunner({
   backend: models,
@@ -158,6 +166,7 @@ export const runner = new AgentRunner({
   web: { search: (q, max, sig) => webSearch(q, sig, max), fetch: (u, sig) => webFetch(u, sig) },
   analyzeImage,
   environment: () => probeEnvironment(),
+  browser: preview,
   mcp: {
     toolsFor: (p, only, problems, waitMs) => mcp.toolsFor(p, only, problems, waitMs),
     connectors: (p) => mcp.connectors(p),

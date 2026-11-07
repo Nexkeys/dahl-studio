@@ -2,7 +2,8 @@ import { app, BrowserWindow, nativeTheme, session, shell } from 'electron'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 // services must be imported first: it sets the userData path before anything else touches it
-import { log, mcp, models, procs, settings, win } from './services'
+import { log, mcp, models, preview, procs, settings, win } from './services'
+import { registerPreviewTestIpc } from './preview/testIpc'
 import { registerIpc } from './ipc'
 import { initUpdater } from './updater'
 import { ProjectStore } from './store/projectStore'
@@ -97,6 +98,8 @@ function hardenPreview(w: BrowserWindow): void {
     guest.on('will-navigate', (e) => {
       if (!/^(https?|file):/i.test(e.url)) e.preventDefault()
     })
+    // the agent's browser_* tools drive this guest (preview/controller.ts)
+    preview.adopt(guest)
   })
 }
 
@@ -126,6 +129,8 @@ app.whenReady().then(async () => {
   app.setAppUserModelId(app.isPackaged && !process.env.DAHL_SMOKE ? 'global.dahl.studio' : 'global.dahl.studio.dev')
   registerIpc()
   setupPreviewSession()
+  // runs browser_* tools without a model, for smoke and dev checks only
+  if (process.env.DAHL_SMOKE || !app.isPackaged) registerPreviewTestIpc(preview, () => settings.get())
   const interrupted: RunState[] = []
   for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted((r) => interrupted.push(r)).catch(() => 0)
   await buildResumeOffer(interrupted)

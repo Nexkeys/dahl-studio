@@ -21,7 +21,7 @@ function SpeedLine({ s }: { s: NonNullable<TranscriptItem['stats']> }) {
 function toolIcon(name: string) {
   if (name === 'run_command') return <Terminal size={13} />
   if (/write|edit|append/.test(name)) return <FileDiff size={13} />
-  if (/web_/.test(name)) return <Globe size={13} />
+  if (/web_|browser_/.test(name)) return <Globe size={13} />
   if (/image/.test(name)) return <ImageIcon size={13} />
   if (name === 'delegate_agents') return <Users size={13} />
   return <Wrench size={13} />

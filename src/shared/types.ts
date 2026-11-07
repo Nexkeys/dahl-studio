@@ -178,7 +178,7 @@ export interface PendingApproval {
   id: string
   runId: string
   project: string
-  kind: 'write' | 'command' | 'mcp' | 'push' | 'question' | 'github'
+  kind: 'write' | 'command' | 'mcp' | 'push' | 'question' | 'github' | 'browser'
   /** kind 'question': what the agent asks; the answers come back as JSON in the approval feedback */
   questions?: AskQuestion[]
   agent?: string

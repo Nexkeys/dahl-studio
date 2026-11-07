@@ -144,6 +144,13 @@ export default function App() {
       api.on('keys:changed', (keys) => set({ keys })),
       api.on('usage:changed', (usage) => set({ usage })),
       api.on('app:focusProject' as never, (p: string) => (set({ view: 'workspace' }), void updateSettings({ activeProject: p }))),
+      // the agent's browser_* tools: show its project's Preview pane (and load a URL when the pane has no page yet)
+      api.on('preview:open' as never, (p: { root: string; url?: string }) => {
+        const s = useStore.getState().settings
+        if (!s?.openProjects.includes(p.root)) return
+        if (s.activeProject !== p.root) void updateSettings({ activeProject: p.root })
+        openPreview(p.root, p.url)
+      }),
       api.on('models:changed' as never, (models: ModelInfo[]) => (set({ models }), void ensureDefaultModel(models)))
     ]
     window.addEventListener('keydown', onLayoutKey, true)
