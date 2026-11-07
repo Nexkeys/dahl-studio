@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: Settings = {
   keyNames: { primary: 'Dahl primary', secondary: 'Dahl secondary', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', nvidia: 'NVIDIA' },
   autoApproveWrites: false,
   autoApproveCommands: false,
+  autoApproveAll: false,
+  askBeforePublishing: true,
   autoMemory: true,
   maintainProgress: true,
   notifications: true,
