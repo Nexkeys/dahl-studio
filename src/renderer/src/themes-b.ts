@@ -1,23 +1,25 @@
-import type { Palette } from './themes'
-import { PALETTES_C } from './themes-c'
+import { FONTS, type ThemeSpec } from './themegen'
 
-export const PALETTES_B: Palette[] = [
+// Dark themes, part one: the calm working themes.
+export const SPECS_B: ThemeSpec[] = [
   {
-    id: 'vibe-coder', name: 'Vibe Coder', tagline: 'Dusky lavender glass, relaxed and roomy.', dark: true,
-    bg: '#14132a', surface: '#1c1b38', surface2: '#252446', border: '#35335e', text: '#e9e7ff', muted: '#9c98cc',
-    accent: '#8b7bff', accentText: '#ffffff', accentSoft: '#2c2860', danger: '#ff6b8a', warn: '#ffd27a', ok: '#6ee7c8',
-    selection: '#3a3580', addBg: '#1c3a3a', delBg: '#45213a', editorBg: '#17162f', lineHl: '#1f1e3d',
-    syn: { keyword: '#b39dff', string: '#8ff0d0', number: '#ffd27a', comment: '#6c69a0', type: '#7cc7ff', func: '#ff9de6', variable: '#e9e7ff', punct: '#9c98cc' },
-    radius: '12px', effect: 'glass', glass: 'rgba(28,27,56,0.68)',
-    backdrop: 'linear-gradient(160deg, rgba(139,123,255,0.10), transparent 45%)'
+    id: 'midnight-terminal', name: 'Midnight Terminal', tagline: 'Deep navy, calm green, long-session focus.', group: 'dark',
+    base: { l: 0.19, c: 0.03, h: 255 }, accent: { l: 0.76, c: 0.14, h: 160 }, contrast: 30,
+    syn: { keyword: '#c792ea', string: '#a5d6a7', number: '#ffab70', comment: '#7a8794', type: '#7dcfff', func: '#82aaff', variable: '#d8dee6', punct: '#8b95a3' },
+    structure: { surfaces: 'elevated', separation: 'hairline', radius: 6, density: 'regular', font: FONTS.text, headFont: FONTS.text, headWeight: 600, labels: 'normal', iconStroke: 1.5, chrome: 'subtle', motion: 'calm' }
   },
   {
-    id: 'pen-tester', name: 'Pen Tester', tagline: 'Tactical charcoal, red alerts, uppercase labels.', dark: true,
-    bg: '#0e0f10', surface: '#151719', surface2: '#1c1f22', border: '#2b2f33', text: '#d9dcdf', muted: '#7d848b',
-    accent: '#ff3b3b', accentText: '#ffffff', accentSoft: '#3a1414', danger: '#ff3b3b', warn: '#ffb020', ok: '#3ddc84',
-    selection: '#4a1c1c', addBg: '#15301f', delBg: '#3d1616', editorBg: '#0c0d0e', lineHl: '#16181a',
-    syn: { keyword: '#ff5c5c', string: '#e8c07d', number: '#ffb020', comment: '#5c636a', type: '#62b6ff', func: '#f2f2f2', variable: '#d9dcdf', punct: '#7d848b' },
-    radius: '3px', effect: 'tactical', glass: 'rgba(21,23,25,0.94)'
+    id: 'forest-syntax', name: 'Forest Syntax', tagline: 'Deep moss, amber light, organic calm.', group: 'dark',
+    base: { l: 0.215, c: 0.04, h: 150 }, accent: { l: 0.78, c: 0.14, h: 75 }, contrast: 40,
+    syn: { keyword: '#d9a441', string: '#a8d08d', number: '#e2a272', comment: '#7d9a83', type: '#7fc9b6', func: '#e8d48a', variable: '#dfe9dc', punct: '#8da592' },
+    structure: { surfaces: 'elevated', separation: 'hairline', radius: 10, density: 'roomy', font: FONTS.text, headFont: FONTS.humanist, headWeight: 600, labels: 'normal', iconStroke: 1.5, chrome: 'subtle', motion: 'calm' },
+    effect: 'grain'
   },
-  ...PALETTES_C
+  {
+    id: 'vibe-coder', name: 'Vibe Coder', tagline: 'Lavender glass islands over a dusk gradient.', group: 'dark',
+    base: { l: 0.215, c: 0.06, h: 285 }, accent: { l: 0.72, c: 0.16, h: 290 }, contrast: 35,
+    syn: { keyword: '#b39dff', string: '#8ff0d0', number: '#ffd27a', comment: '#8a87bd', type: '#7cc7ff', func: '#ff9de6', variable: '#e9e7ff', punct: '#9c98cc' },
+    structure: { surfaces: 'islands', separation: 'none', radius: 14, density: 'roomy', font: FONTS.display, headFont: FONTS.display, headWeight: 600, labels: 'normal', iconStroke: 1.5, chrome: 'subtle', motion: 'lively' },
+    effect: 'glass', backdrop: 'linear-gradient(160deg, rgba(139,123,255,0.22), transparent 55%), radial-gradient(circle at 100% 100%, rgba(255,120,220,0.12), transparent 50%)'
+  }
 ]
