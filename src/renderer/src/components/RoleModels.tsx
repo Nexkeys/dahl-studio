@@ -74,7 +74,7 @@ export function RoleModels() {
                 <tr key={i}>
                   <td>{providerName(r.provider)}</td><td className="mono">{r.model}</td><td>${r.input}</td><td>${r.output}</td>
                   <td>{r.cached !== undefined ? `$${r.cached}` : ''}</td><td>{r.cacheWrite !== undefined ? `$${r.cacheWrite}` : ''}</td>
-                  <td className="note">{[r.period, r.tier, r.note, r.source.startsWith('http') ? '' : r.source].filter(Boolean).join('; ')}{r.source.startsWith('http') && <> <a href={r.source} target="_blank" rel="noreferrer">source</a></>}</td>
+                  <td className="pnote">{[r.period, r.tier, r.note, r.source.startsWith('http') ? '' : r.source].filter(Boolean).join('; ')}{r.source.startsWith('http') && <> <a href={r.source} target="_blank" rel="noreferrer">source</a></>}</td>
                 </tr>
               ))}
             </tbody>
