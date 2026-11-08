@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Boxes, Plus, Upload, Download, ShieldAlert } from 'lucide-react'
-import type { McpCatalogEntry, McpServerConfig, McpStatus } from '@shared/types'
+import type { McpCatalogEntry, McpServerConfig, McpStatus, PrereqStatus } from '@shared/types'
 import { api, useStore } from '../store'
 import { McpCard, type TestResult } from './McpCard'
+import { MobileSetup } from './MobileSetup'
+
+/** Catalogue connectors shown with the mobile setup checker (main: mcp/catalogExtra.ts MOBILE_CONNECTORS). */
+const MOBILE = ['mobile-mcp', 'maestro']
 
 interface ListResult { servers: McpServerConfig[]; tests: Record<string, TestResult>; status: McpStatus[] }
 
@@ -13,15 +17,20 @@ export function ToolboxView() {
   const [form, setForm] = useState({ name: '', transport: 'stdio' as 'stdio' | 'http', command: '', args: '', url: '', env: '' })
   const notify = useStore.getState().notify
   const reload = () => api.invoke<ListResult>('mcp:list').then(setList)
+  // connector requirements (REA's Node version, Maestro's CLI and Java, adb); read-only checks in the main process
+  const [prereqs, setPrereqs] = useState<Record<string, PrereqStatus>>({})
+  const [checking, setChecking] = useState(false)
+  const recheck = (fresh: boolean) => (setChecking(true), api.invoke<Record<string, PrereqStatus>>('mcp:prereqs', fresh).then(setPrereqs).catch(() => {}).finally(() => setChecking(false)))
   useEffect(() => {
     void api.invoke<McpCatalogEntry[]>('mcp:catalog').then(setCatalog)
     void reload()
+    void recheck(false)
     return window.dahl.on('mcp:changed' as never, (l: ListResult) => setList(l))
   }, [])
   const statusFor = (id: string) => list.status.find((s) => s.id === id || s.id.startsWith(`${id}|`))
   const groups: [string, (e: McpCatalogEntry) => boolean][] = [
     ['Core local tools (available now)', (e) => e.classification === 'included_local'],
-    ['Free online and optional installs', (e) => e.classification === 'free_online' || e.classification === 'optional_local'],
+    ['Free online and optional installs', (e) => (e.classification === 'free_online' || e.classification === 'optional_local') && !MOBILE.includes(e.id)],
     ['Your own accounts', (e) => e.classification === 'external_account' || e.classification === 'paid'],
     ['Unverified / high risk (not installable)', (e) => e.classification === 'unverified']
   ]
@@ -60,6 +69,10 @@ export function ToolboxView() {
     i.click()
   }
   const custom = list.servers.filter((s) => s.custom)
+  const card = (e: McpCatalogEntry) => {
+    const cfg = list.servers.find((s) => s.catalogId === e.id)
+    return <McpCard key={e.id} entry={e} cfg={cfg} status={cfg && statusFor(cfg.id)} test={cfg && list.tests[cfg.id]} onChange={reload} prereq={prereqs[e.id]} checking={checking} onRecheck={() => void recheck(true)} />
+  }
   return (
     <div className="view wide">
       <h1><Boxes size={20} /> Dahl Free Toolbox</h1>
@@ -71,14 +84,16 @@ export function ToolboxView() {
           <section key={title}>
             <h2>{title}</h2>
             <div className="mcp-grid">
-              {items.map((e) => {
-                const cfg = list.servers.find((s) => s.catalogId === e.id)
-                return <McpCard key={e.id} entry={e} cfg={cfg} status={cfg && statusFor(cfg.id)} test={cfg && list.tests[cfg.id]} onChange={reload} />
-              })}
+              {items.map(card)}
             </div>
           </section>
         )
       })}
+      <section>
+        <h2>Mobile app development</h2>
+        <MobileSetup />
+        <div className="mcp-grid">{catalog.filter((e) => MOBILE.includes(e.id)).map(card)}</div>
+      </section>
       <section>
         <h2>Custom connectors
           <button className="btn small ghost" onClick={() => setAdding(!adding)}><Plus size={13} /> Add</button>

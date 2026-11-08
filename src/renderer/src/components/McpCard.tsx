@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { ChevronDown, Download, Plug, PlugZap, Power, ScrollText, Trash2, FlaskConical, ExternalLink, ShieldAlert, Globe, HardDrive, KeyRound } from 'lucide-react'
-import type { McpCatalogEntry, McpServerConfig, McpStatus } from '@shared/types'
+import type { McpCatalogEntry, McpServerConfig, McpStatus, PrereqStatus } from '@shared/types'
 import { allowsWrites, isReadOnly, projectRef, setProjectRef, setReadOnly } from '@shared/mcpArgs'
 import { api, useStore } from '../store'
+import { PrereqNote } from './PrereqNote'
 
-const SECRET_LABEL: Record<string, string> = { SUPABASE_ACCESS_TOKEN: 'Supabase access token' }
+const SECRET_LABEL: Record<string, string> = {
+  SUPABASE_ACCESS_TOKEN: 'Supabase access token',
+  SEKUDO_AUTHORIZED: 'Authorisation: type true to confirm you may test these targets',
+  SEKUDO_TARGETS: 'Allowed targets: comma-separated hosts, *.suffix or IPv4 CIDR (e.g. localhost,127.0.0.1)'
+}
 const SECRET_HINT: Record<string, { text: string; url: string }> = {
-  SUPABASE_ACCESS_TOKEN: { text: 'Create a personal access token', url: 'https://supabase.com/dashboard/account/tokens' }
+  SUPABASE_ACCESS_TOKEN: { text: 'Create a personal access token', url: 'https://supabase.com/dashboard/account/tokens' },
+  SEKUDO_TARGETS: { text: 'Scope rules', url: 'https://www.npmjs.com/package/sekudo-mcp' }
 }
 
 type Act = (label: string, fn: () => Promise<unknown>) => Promise<void>
@@ -18,7 +24,7 @@ export const CLASS_LABEL: Record<string, string> = {
 
 export interface TestResult { ok: boolean; at: string; tools: number; connectMs?: number; capability?: { tool: string; ok: boolean; excerpt: string }; error?: string }
 
-export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCatalogEntry; cfg?: McpServerConfig; status?: McpStatus; test?: TestResult; onChange: () => void }) {
+export function McpCard({ entry, cfg, status, test, onChange, prereq, checking, onRecheck }: { entry?: McpCatalogEntry; cfg?: McpServerConfig; status?: McpStatus; test?: TestResult; onChange: () => void; prereq?: PrereqStatus; checking?: boolean; onRecheck?: () => void }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [logs, setLogs] = useState<string[] | null>(null)
@@ -50,6 +56,7 @@ export function McpCard({ entry, cfg, status, test, onChange }: { entry?: McpCat
         <span className="small muted">{cfg ? (cfg.enabled ? state : 'disabled') : 'not installed'}</span>
       </div>
       {entry && <p className="small mcp-desc">{entry.description}</p>}
+      {prereq && <PrereqNote status={prereq} busy={!!checking} onRecheck={() => onRecheck?.()} />}
       <div className="mcp-facts small">
         {entry && <span><HardDrive size={12} /> {entry.runsWhere === 'local' ? 'Runs locally' : 'Remote'}</span>}
         {entry && <span><Globe size={12} /> Internet: {entry.needsInternet}</span>}

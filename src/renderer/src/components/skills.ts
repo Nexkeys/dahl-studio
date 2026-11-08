@@ -1,5 +1,6 @@
-import { BookOpen, Bug, FlaskConical, ShieldAlert, Wand2, FileText, GitCommit, Search, Users, Globe, Gauge, Palette } from 'lucide-react'
+import { BookOpen, Bug, FlaskConical, ShieldAlert, Wand2, FileText, GitCommit, Search, Users, Globe, Gauge, Palette, Briefcase } from 'lucide-react'
 import type { AgentMode } from '@shared/types'
+import { CHIEF_PROMPT } from '../chief'
 
 export interface Skill {
   cmd: string
@@ -23,5 +24,6 @@ export const SKILLS: Skill[] = [
   { cmd: '/research', label: 'Research on the web', icon: Globe, mode: 'plan', web: true, prompt: 'Research <topic> on the web. Compare the main options with sources (URLs) and recommend one for this project.' },
   { cmd: '/perf', label: 'Find performance problems', icon: Gauge, mode: 'review', prompt: 'Find the most likely performance bottlenecks in this project and propose measured improvements.' },
   { cmd: '/ui', label: 'Build a polished UI from a design', icon: Palette, mode: 'build', prompt: 'Build the UI shown in the attached design image as closely as possible. First analyse the image (layout, colours, typography, text), then implement it, then compare against the analysis.' },
-  { cmd: '/find', label: 'Locate code', icon: Search, mode: 'plan', prompt: 'Where is <feature> implemented? List the relevant files and functions and how they connect.' }
+  { cmd: '/find', label: 'Locate code', icon: Search, mode: 'plan', prompt: 'Where is <feature> implemented? List the relevant files and functions and how they connect.' },
+  { cmd: '/chief', label: 'Chief of Staff: briefing across all open projects', icon: Briefcase, mode: 'plan', prompt: CHIEF_PROMPT }
 ]

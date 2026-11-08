@@ -1,0 +1,21 @@
+/* Connector prerequisites and the mobile setup checker (FixCommand, PrereqNote, MobileSetup) */
+.fix { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; font-size: 12px; }
+.fix-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fix-cmd { display: flex; align-items: center; gap: 6px; }
+.fix-cmd code { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px; padding: 5px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; white-space: nowrap; }
+.prereq { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: var(--radius); font-size: 12px; }
+.prereq.ok { background: var(--accent-soft); }
+.prereq.bad { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.prereq-head { display: flex; align-items: center; gap: 6px; }
+.prereq.ok .prereq-head svg { color: var(--ok); }
+.prereq.bad .prereq-head svg { color: var(--danger); }
+.mobile-setup { border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); background: var(--glass); padding: 12px 14px; margin-bottom: 12px; }
+.mobile-setup-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.mcheck { display: grid; grid-template-columns: 18px 1fr; gap: 2px 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+.mcheck:first-of-type { border-top: none; }
+.mcheck .mcheck-icon { padding-top: 1px; }
+.mcheck.pass .mcheck-icon { color: var(--ok); }
+.mcheck.warn .mcheck-icon { color: var(--warn); }
+.mcheck.fail .mcheck-icon { color: var(--danger); }
+.mcheck-body { min-width: 0; font-size: 12px; }
+.mcheck-detail { color: var(--muted); overflow-wrap: anywhere; }
