@@ -50,7 +50,7 @@ export class RefTable {
 // never printed, and their children are not walked (text runs, bullets)
 const SKIP = new Set(['InlineTextBox', 'LineBreak', 'ListMarker'])
 // layout or inline-formatting wrappers: not printed, their children take their place
-const WRAPPER = new Set(['generic', 'none', 'presentation', 'GenericContainer', 'Section', 'LayoutTable', 'LayoutTableRow', 'LayoutTableCell', 'strong', 'emphasis', 'mark', 'subscript', 'superscript', 'time', 'abbr', 'Abbr', 'deletion', 'insertion', 'Ruby', 'RubyAnnotation', 'IgnoredRole', 'Unknown'])
+const WRAPPER = new Set(['generic', 'none', 'presentation', 'GenericContainer', 'Section', 'LayoutTable', 'LayoutTableRow', 'LayoutTableCell', 'strong', 'emphasis', 'mark', 'subscript', 'superscript', 'time', 'abbr', 'Abbr', 'deletion', 'insertion', 'Ruby', 'RubyAnnotation', 'IgnoredRole', 'Unknown', 'LabelText'])
 const VALUE_ROLES = new Set(['textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'TextField', 'ComboBoxMenuButton'])
 const ROOTS = new Set(['RootWebArea', 'WebArea'])
 
@@ -63,6 +63,24 @@ export interface SnapshotOptions {
   rootBackendId?: number
   /** children shown per element before "... N more" */
   maxChildren?: number
+  /** page URL: link targets on the same site are shown relative to it */
+  baseUrl?: string
+}
+
+/** A link target as short as it can be without losing meaning: relative to the page's folder or site. */
+export function shortUrl(url: string, base?: string): string {
+  if (!base) return url
+  try {
+    const u = new URL(url)
+    const b = new URL(base)
+    if (u.origin !== b.origin || u.protocol !== b.protocol) return url
+    if (u.pathname === b.pathname && u.search === b.search) return u.hash || u.pathname.split('/').pop() || '/'
+    const dir = b.pathname.slice(0, b.pathname.lastIndexOf('/') + 1)
+    if (u.protocol === 'file:') return u.pathname.startsWith(dir) ? u.pathname.slice(dir.length) + u.search + u.hash : url
+    return u.pathname + u.search + u.hash
+  } catch {
+    return url
+  }
 }
 
 const clean = (v: unknown): string => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -132,7 +150,7 @@ export function formatSnapshot(nodes: AXNode[], refs: RefTable, o: SnapshotOptio
     const onlyText = kids.every((k) => 'text' in k)
     const text = onlyText ? clean(kids.map((k) => ('text' in k ? k.text : '')).join(' ')) : ''
     const head = `${pad}- ${role}${name ? ` ${JSON.stringify(clip(name, 120))}` : ''}${attrs(n, role)}`
-    const url = role === 'link' ? clean(n.properties?.find((p) => p.name === 'url')?.value?.value) : ''
+    const url = role === 'link' ? shortUrl(clean(n.properties?.find((p) => p.name === 'url')?.value?.value), o.baseUrl) : ''
     const value = VALUE_ROLES.has(role) ? clean(n.value?.value) : ''
     const tail = (url ? ` -> ${clip(url, 100)}` : '') + (value ? `: ${clip(value, 200)}` : text && text !== name && !name.includes(text) ? `: ${clip(text, 300)}` : '')
     push(head, tail, n.backendDOMNodeId)

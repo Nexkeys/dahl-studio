@@ -54,7 +54,8 @@ export class PreviewController implements BrowserBridge {
     const on = g.on.bind(g) as (event: string, fn: (...a: any[]) => void) => void
     on('console-message', (e: { level?: unknown; message?: string; lineNumber?: number; sourceId?: string }, ...rest: unknown[]) => {
       const message = e.message ?? String(rest[1] ?? '')
-      if (message) this.consoleLog.push({ at: Date.now(), level: consoleLevel(e.level ?? rest[0]), text: message, source: e.sourceId ?? (rest[3] as string | undefined), line: e.lineNumber ?? (rest[2] as number | undefined) })
+      // Electron's own warning about the page's CSP (unpackaged runs only) is not the page's problem
+      if (message && !/^\W*Electron Security Warning/.test(message)) this.consoleLog.push({ at: Date.now(), level: consoleLevel(e.level ?? rest[0]), text: message, source: e.sourceId ?? (rest[3] as string | undefined), line: e.lineNumber ?? (rest[2] as number | undefined) })
     })
     on('did-start-navigation', (e: { isMainFrame?: boolean; isSameDocument?: boolean }, _url: string, inPlace: boolean, mainFrame: boolean) => {
       if (!(e.isMainFrame ?? mainFrame) || (e.isSameDocument ?? inPlace) || g !== this.guest) return
@@ -217,7 +218,7 @@ export class PreviewController implements BrowserBridge {
   async snapshot(ref?: string): Promise<string> {
     const g = this.live()
     const { nodes } = await this.cmd<{ nodes: AXNode[] }>('Accessibility.getFullAXTree', {}, 20000)
-    const s = formatSnapshot(nodes, this.refs, { rootBackendId: ref ? this.node(ref) : undefined })
+    const s = formatSnapshot(nodes, this.refs, { rootBackendId: ref ? this.node(ref) : undefined, baseUrl: g.getURL() })
     return `Page: ${g.getTitle() || '(no title)'}\nURL: ${g.getURL()}\n${s.text}`
   }
 

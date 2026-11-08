@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSnapshot, RefTable, type AXNode } from '../src/main/preview/snapshot'
+import { formatSnapshot, RefTable, shortUrl, type AXNode } from '../src/main/preview/snapshot'
 import { RingBuffer, consoleLevel, formatConsole, formatNetwork, type ConsoleEntry, type NetEntry } from '../src/main/preview/logs'
 import { agentOpenUrl, isAgentPageUrl, isLocalHttp } from '../src/main/preview/urls'
 import { parseKeyCombo, MOD } from '../src/main/preview/keys'
@@ -87,6 +87,17 @@ describe('page snapshot', () => {
     expect(fresh.size).toBe(4)
     const capped = formatSnapshot(page(), new RefTable(), { maxChildren: 2 })
     expect(capped.text.split('\n').slice(-1)[0]).toBe('  - ... 5 more')
+  })
+
+  it('shows link targets relative to the page', () => {
+    expect(shortUrl('http://localhost:5173/docs?x=1', 'http://localhost:5173/shop/cart')).toBe('/docs?x=1')
+    expect(shortUrl('http://localhost:5173/shop/cart#top', 'http://localhost:5173/shop/cart')).toBe('#top')
+    expect(shortUrl('file:///C:/p/site/about.html', 'file:///C:/p/site/index.html')).toBe('about.html')
+    expect(shortUrl('file:///C:/p/other.html', 'file:///C:/p/site/index.html')).toBe('file:///C:/p/other.html')
+    expect(shortUrl('https://example.com/', 'http://localhost:5173/')).toBe('https://example.com/')
+    expect(shortUrl('not a url', 'http://localhost/')).toBe('not a url')
+    const label = [ax('1', 'RootWebArea', { childIds: ['2'] }), ax('2', 'LabelText', { childIds: ['3', '4'], backendDOMNodeId: 2 }), ax('3', 'StaticText', { name: named('Name') }), ax('4', 'textbox', { name: named('Name'), backendDOMNodeId: 4 })]
+    expect(formatSnapshot(label, new RefTable()).text).toBe('- text: Name\n- textbox "Name" [ref=e1]')
   })
 
   it('handles empty and odd trees', () => {
