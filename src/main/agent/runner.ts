@@ -14,6 +14,7 @@ import { progressFinish, progressPlan, progressStart, readProgress } from './pro
 import type { RunResult } from '../terminal'
 import { afterModelCall, beforeModelCall, newCostState, type CostState } from './costGate'
 import { helpersWarning, maxHelpers, resolveModelForRole } from './budget'
+import { describeTally, formatUsd } from '@shared/cost'
 
 export { repairHistory, closeDanglingToolCalls, compact } from './history'
 
@@ -261,7 +262,7 @@ export class AgentRunner {
     // the cost of the request and of the chat so far are shown on the summary, so a turn with model calls always gets one
     if (ctl.costs.task.requests) Object.assign(s, { cost: { ...ctl.costs.task }, chatCost: ctl.run.cost && { ...ctl.run.cost } })
     if (s.toolCount || s.changedFiles.length || s.memoriesSaved || s.cost) this.addItem(ctl, { kind: 'summary', text: '', summary: s })
-    this.log(ctl, status === 'failed' ? 'error' : 'info', `Turn finished: ${status}, ${s.toolCount} tool calls, ${s.changedFiles.length} files changed, ${Math.round(s.durationMs / 1000)}s`)
+    this.log(ctl, status === 'failed' ? 'error' : 'info', `Turn finished: ${status}, ${s.toolCount} tool calls, ${s.changedFiles.length} files changed, ${Math.round(s.durationMs / 1000)}s${s.cost ? `, cost ${formatUsd(s.cost)} (${describeTally(s.cost)})` : ''}`)
     if ((await this.deps.getSettings()).maintainProgress)
       await progressFinish(ctl.run.project, { run: ctl.run, prompt: ctl.prompt, status, answer: ctl.answer, summary: s, error: ctl.run.lastError }).catch((e) => this.log(ctl, 'error', `PROGRESS.md: ${(e as Error).message}`))
     await this.setStatus(ctl, status)
