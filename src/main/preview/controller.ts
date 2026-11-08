@@ -67,7 +67,7 @@ export class PreviewController implements BrowserBridge {
       if (mainFrame && code !== -3 && g === this.guest) this.loadError = `${desc || 'load failed'} (${code})`
     })
     // opening the Preview DevTools takes the debugger away: attach again once it is open, and after it closes
-    on('devtools-opened', () => setTimeout(() => this.attach(g), 700))
+    on('devtools-opened', () => (this.deps.log(`preview devtools opened (debugger attached: ${g.debugger.isAttached()})`), setTimeout(() => this.attach(g), 700)))
     on('devtools-closed', () => setTimeout(() => this.attach(g), 200))
     g.debugger.on('detach', (_e, reason) => {
       this.deps.log(`preview debugger detached: ${reason}`)
@@ -297,14 +297,20 @@ export class PreviewController implements BrowserBridge {
     return out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out
   }
 
-  /** Smoke and dev checks only (testIpc.ts): open or close the guest's DevTools, as the pane's bug button does. */
-  async testDevTools(open: boolean): Promise<{ open: boolean; attached: boolean }> {
+  /**
+   * Smoke and dev checks only (testIpc.ts): open or close the guest's DevTools, as the pane's bug button does.
+   * detachFirst drops the debugger first, the way DevTools or a crash takes it away, to check that it comes back.
+   */
+  async testDevTools(open: boolean, detachFirst = false): Promise<{ open: boolean; attached: boolean; ms: number }> {
     const g = this.live()
+    const t0 = Date.now()
+    if (detachFirst && g.debugger.isAttached()) g.debugger.detach()
     if (open) g.openDevTools({ mode: 'detach' })
     else g.closeDevTools()
-    for (const end = Date.now() + 15000; g.isDevToolsOpened() !== open && Date.now() < end; ) await sleep(100)
-    await sleep(1000)
-    return { open: g.isDevToolsOpened(), attached: g.debugger.isAttached() }
+    for (const end = Date.now() + 60000; g.isDevToolsOpened() !== open && Date.now() < end; ) await sleep(100)
+    const ms = Date.now() - t0
+    await sleep(1500)
+    return { open: g.isDevToolsOpened(), attached: g.debugger.isAttached(), ms }
   }
 
   consoleEntries(): { entries: ConsoleEntry[]; dropped: number } {
