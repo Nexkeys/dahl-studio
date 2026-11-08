@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest'
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { AgentRunner, type ChatBackend } from '../src/main/agent/runner'
+import { ProjectStore } from '../src/main/store/projectStore'
 import { execTool, type ExecCtx } from '../src/main/agent/toolExec'
 import { TOOL_DEFS, toolsFor } from '../src/main/agent/tools'
 import { browserToolsFor, BROWSER_ACT, BROWSER_READ } from '../src/main/agent/browserDefs'
 import type { BrowserBridge } from '../src/main/agent/browserTools'
 import { summariseTool } from '../src/main/agent/history'
 import { DEFAULT_SETTINGS } from '../src/main/settings'
-import type { PendingApproval } from '../src/shared/types'
+import type { AgentEvent, PendingApproval, RunState } from '../src/shared/types'
 
 type Ask = Omit<PendingApproval, 'id' | 'runId' | 'project'>
 const ROOT = 'C:\\proj'
@@ -133,5 +138,38 @@ describe('browser tools', () => {
 
   it('says so when there is no Preview pane', async () => {
     expect((await ctx().run('browser_snapshot', {})).text).toMatch(/not available/)
+  })
+})
+
+describe('browser tools in a task', () => {
+  it('sends the read-only tools in Plan mode and lists each step in the activity list', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dahl-bt-'))
+    try {
+      const { b, calls } = bridge()
+      const queue = [{ name: 'browser_open', args: { url: '5173' } }, { name: 'browser_click', args: { ref: 'e1', element: 'Pay button' } }]
+      const sent: string[][] = []
+      const backend: ChatBackend = {
+        async chat(req) {
+          sent.push(((req.tools ?? []) as { function: { name: string } }[]).map((t) => t.function.name))
+          const t = queue.shift()
+          return { content: t ? '' : 'Checked the page.', reasoning: '', toolCalls: t ? [{ id: `c${sent.length}`, type: 'function' as const, function: { name: t.name, arguments: JSON.stringify(t.args) } }] : [] }
+        }
+      }
+      const events: AgentEvent[] = []
+      const runner = new AgentRunner({
+        backend, getSettings: async () => ({ ...DEFAULT_SETTINGS, autoMemory: false, maintainProgress: false }), emit: (e) => void events.push(e),
+        runCommand: async () => ({ exitCode: 0, output: '', timedOut: false }), secrets: async () => [], browser: b
+      })
+      await runner.start({ project: dir, prompt: 'check the page', mode: 'plan', model: 'm' })
+      while (runner.isActive(dir)) await new Promise((r) => setTimeout(r, 5))
+      expect(sent[0]).toEqual(expect.arrayContaining(BROWSER_READ))
+      expect(sent[0]).not.toContain('browser_click')
+      const run = (await new ProjectStore(dir).loadRun(events[0].runId)) as RunState
+      const steps = run.transcript.filter((t) => t.kind === 'tool').map((t) => [t.text, t.tool?.ok])
+      expect(steps).toEqual([['Preview: open 5173', true], ['Preview: click Pay button', false]])
+      expect(calls).toEqual(['open http://localhost:5173/'])
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 5 })
+    }
   })
 })

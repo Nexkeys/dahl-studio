@@ -28,13 +28,14 @@ export interface BrowserBridge {
 const LOGS = new Set(['browser_console', 'browser_network'])
 let shots = 0
 
-/** New console errors and failed requests since `t0`, so an action's side effects show up in its own result. */
+/** Console errors and failed requests since `t0` (0: since the page loaded), so an action's side effects show up in its own result. */
 function sideEffects(b: BrowserBridge, t0: number): string {
   const errs = b.consoleEntries().entries.filter((e) => e.at >= t0 && e.level === 'error')
   const bad = b.networkEntries().filter((n) => n.at >= t0 && isProblem(n))
+  const label = (n: number, what: string) => (t0 ? `${n} new ${what}` : `${n} ${what} since the page loaded`)
   const out: string[] = []
-  if (errs.length) out.push(`${errs.length} new console error(s): ${errs.slice(-3).map((e) => e.text.slice(0, 300)).join(' | ')}`)
-  if (bad.length) out.push(`${bad.length} new failed request(s): ${bad.slice(-3).map((n) => `${n.error ?? n.status} ${n.url.slice(0, 160)}`).join(' | ')}`)
+  if (errs.length) out.push(`${label(errs.length, 'console error(s)')}: ${errs.slice(-3).map((e) => e.text.slice(0, 300)).join(' | ')}`)
+  if (bad.length) out.push(`${label(bad.length, 'failed request(s)')}: ${bad.slice(-3).map((n) => `${n.error ?? n.status} ${n.url.slice(0, 160)}`).join(' | ')}`)
   return out.length ? `\n${out.join('\n')}` : ''
 }
 
