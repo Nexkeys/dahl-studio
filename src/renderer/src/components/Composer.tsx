@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks } from 'lucide-react'
-import type { AgentMode, Attachment, McpServerConfig, StartRunRequest, ThinkingLevel } from '@shared/types'
+import type { AgentMode, Attachment, McpServerConfig, SkillList, SkillSummary, StartRunRequest, ThinkingLevel } from '@shared/types'
 import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
 import { addAttachments, api, updateSettings, useStore } from '../store'
-import { SKILLS } from './skills'
+import { skillIcon, skillLabel } from './skills'
 
 const NO_ATTS: Attachment[] = []
 const MODES: { id: AgentMode; label: string; icon: typeof Hammer; hint: string }[] = [
@@ -37,6 +37,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
   const [files, setFiles] = useState<string[]>([])
   const [mq, setMq] = useState('')
   const [mcp, setMcp] = useState<McpCommand[]>([])
+  const [skills, setSkills] = useState<SkillSummary[]>([])
   const ta = useRef<HTMLTextAreaElement>(null)
   const atts = useStore((s) => s.projects[root]?.attachments) ?? NO_ATTS
   const mode = useStore((s) => s.mode)
@@ -55,17 +56,23 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
     }
   }, [insert, set])
 
-  // MCP slash commands (/mcp and one per enabled server); refreshed whenever the skills menu opens
-  const loadMcp = () =>
-    api.invoke<{ servers: McpServerConfig[] }>('mcp:list').then((l) => {
-      const cmds = mcpCommands(l.servers, SKILLS.map((s) => s.cmd))
+  // skills (SKILL.md folders: built-in, yours, the project's) and MCP slash commands (/mcp and one per enabled
+  // server); both are refreshed whenever the skills menu opens. Skill names are reserved so MCP commands never clash.
+  const loadMcp = async (names?: string[]) => {
+    const reserved = (names ?? skills.map((s) => s.name)).map((n) => `/${n}`)
+    return api.invoke<{ servers: McpServerConfig[] }>('mcp:list').then((l) => {
+      const cmds = mcpCommands(l.servers, reserved)
       setMcp(cmds)
       return cmds
     }).catch(() => [] as McpCommand[])
+  }
   const skillsOpen = menu === 'skills'
   useEffect(() => {
-    void loadMcp()
-  }, [skillsOpen])
+    void api.invoke<SkillList>('skills:list', root).then((l) => l.skills, () => [] as SkillSummary[]).then((list) => {
+      setSkills(list)
+      void loadMcp(list.map((s) => s.name))
+    })
+  }, [skillsOpen, root])
 
   const typed = input.trim().toLowerCase()
   const cmdMatch = (cmd: string) => !typed.startsWith('/') || typed === '/' || cmd.startsWith(typed)
@@ -152,11 +159,16 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
         {menu === 'skills' && (
           <div className="popover up wide">
             <div className="popover-title"><Sparkles size={12} /> Skills</div>
-            {SKILLS.filter((s) => cmdMatch(s.cmd)).map((s) => (
-              <button key={s.cmd} className="popover-item" onClick={() => { setInput(s.prompt); if (s.mode) set({ mode: s.mode }); if (s.web) set({ web: true }); setMenu(null); ta.current?.focus() }}>
-                <s.icon size={14} /><span><b>{s.cmd}</b> <span className="muted">{s.label}</span></span>
-              </button>
-            ))}
+            {skills.filter((s) => s.userInvocable && cmdMatch(`/${s.name}`)).map((s) => {
+              const Icon = skillIcon(s)
+              return (
+                <button key={s.name} className="popover-item skill-item" title={`${s.description}\n\n${s.location}${s.argumentHint ? `\nType after the command: ${s.argumentHint}` : ''}`}
+                  onClick={() => { setInput(`/${s.name} `); if (s.mode) set({ mode: s.mode }); if (s.web) set({ web: true }); setMenu(null); ta.current?.focus() }}>
+                  <Icon size={14} /><span className="skill-row"><b>/{s.name}</b> <span className="muted">{skillLabel(s)}</span></span>
+                  {s.source !== 'builtin' && <span className="pill">{s.source === 'project' ? 'project' : 'yours'}</span>}
+                </button>
+              )
+            })}
             {mcpHits.length > 0 && <div className="popover-title"><Plug size={12} /> MCP servers</div>}
             {mcpHits.map((c) => (
               <button key={c.cmd} className="popover-item" title={c.id ? `Type a request after ${c.cmd}, or send it alone to see what ${c.name} can do` : 'Type a request after /mcp, or send it alone to list connected servers and tools'}

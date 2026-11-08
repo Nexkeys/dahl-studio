@@ -6,6 +6,7 @@ import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from 
 import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
+import { ProjectInstructions } from './InstructionsChip'
 import { LiveMarkdown } from './Markdown'
 import iconUrl from '../assets/icon.png'
 
@@ -131,6 +132,7 @@ export function ChatPanel({ root }: { root: string }) {
           </div>
         )}
       </div>
+      {!transcript.length && <ProjectInstructions root={root} />}
       <Composer root={root} running={!!running} onSend={send} />
     </div>
   )
