@@ -34,12 +34,12 @@
       "prompt": "/sekudo-assessment staging.myapp.dev - I own this domain, it's our staging server, passive scan only",
       "mode": "review",
       "fixture": {
-        "description": "Target and ownership are stated, but the eval environment has no Sekudo connector configured. The run must try use_connector with sekudo, then stop with instructions to add it in the Toolbox, without scanning by other means.",
+        "description": "Target and ownership are stated, but the eval environment has no Sekudo connector (none is listed and use_connector is not offered). The run must stop with instructions to add it in the Toolbox, without scanning by other means.",
         "files": {}
       },
       "criteria": [
         { "check": "skill_used", "name": "sekudo-assessment", "description": "Runs the sekudo-assessment skill" },
-        { "check": "tool_called", "tool": "use_connector", "args_pattern": "sekudo", "description": "Tried to load the sekudo connector" },
+        { "check": "answer_matches", "pattern": "sekudo", "flags": "i", "description": "Names the missing Sekudo connector" },
         { "check": "answer_matches", "pattern": "Toolbox", "description": "Tells the user to add the connector in the Toolbox" },
         { "check": "tool_not_called", "tool": "run_command", "args_pattern": "staging\\.myapp\\.dev", "description": "Did not scan the target by other means" }
       ]

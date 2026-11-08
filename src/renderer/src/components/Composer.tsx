@@ -38,6 +38,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
   const [mq, setMq] = useState('')
   const [mcp, setMcp] = useState<McpCommand[]>([])
   const [skills, setSkills] = useState<SkillSummary[]>([])
+  const [skipped, setSkipped] = useState<string[]>([])
   const ta = useRef<HTMLTextAreaElement>(null)
   const atts = useStore((s) => s.projects[root]?.attachments) ?? NO_ATTS
   const mode = useStore((s) => s.mode)
@@ -68,9 +69,10 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
   }
   const skillsOpen = menu === 'skills'
   useEffect(() => {
-    void api.invoke<SkillList>('skills:list', root).then((l) => l.skills, () => [] as SkillSummary[]).then((list) => {
-      setSkills(list)
-      void loadMcp(list.map((s) => s.name))
+    void api.invoke<SkillList>('skills:list', root).catch(() => ({ skills: [], problems: [] }) as SkillList).then((l) => {
+      setSkills(l.skills)
+      setSkipped(l.problems.filter((p) => p.level === 'error').map((p) => `${p.path}: ${p.reason}`))
+      void loadMcp(l.skills.map((s) => s.name))
     })
   }, [skillsOpen, root])
 
@@ -169,6 +171,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
                 </button>
               )
             })}
+            {skipped.length > 0 && typed === '/' && <div className="muted small pad" title={skipped.join('\n')}>{skipped.length} skill folder{skipped.length > 1 ? 's' : ''} skipped (invalid SKILL.md); hover for the reason</div>}
             {mcpHits.length > 0 && <div className="popover-title"><Plug size={12} /> MCP servers</div>}
             {mcpHits.map((c) => (
               <button key={c.cmd} className="popover-item" title={c.id ? `Type a request after ${c.cmd}, or send it alone to see what ${c.name} can do` : 'Type a request after /mcp, or send it alone to list connected servers and tools'}
