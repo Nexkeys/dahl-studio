@@ -13,19 +13,6 @@
 .model-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 320px; border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 4px 11px; font-size: 12px; color: var(--muted); transition: all .15s; }
 .model-chip:hover { color: var(--text); border-color: var(--accent); }
 .model-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
-.theme-card { border: 1px solid var(--border); background: var(--surface); border-radius: calc(var(--radius) + 2px); padding: 8px; text-align: left; transition: transform .18s, box-shadow .18s, border-color .18s; }
-.theme-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.12); }
-.theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.tp { height: 104px; display: grid; grid-template-columns: 14px 1fr 54px; gap: 4px; padding: 6px; overflow: hidden; position: relative; }
-.tp-rail { border: 1px solid; border-radius: 4px; display: flex; flex-direction: column; gap: 3px; padding: 3px 2px; }
-.tp-rail i { height: 6px; border-radius: 2px; }
-.tp-editor { border: 1px solid; border-radius: 4px; font-family: var(--mono); font-size: 9px; padding: 6px; line-height: 1.6; overflow: hidden; white-space: nowrap; }
-.tp-chat { border: 1px solid; border-radius: 4px; padding: 4px; display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; }
-.tp-chat div:first-child { height: 18px; } .tp-chat div:last-child { height: 12px; width: 70%; align-self: flex-end; }
-.tp[data-effect='scanlines']::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.25) 0 1px, transparent 1px 3px); pointer-events: none; }
-.tp-name { font-weight: 600; margin-top: 7px; }
-.tp-tag { font-size: 11px; color: var(--muted); }
 .mcp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 12px; }
 .mcp-card { border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); background: var(--glass); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; transition: border-color .18s, box-shadow .18s; }
 .mcp-card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); box-shadow: 0 8px 22px rgba(0,0,0,.06); }

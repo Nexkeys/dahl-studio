@@ -11,11 +11,17 @@ export interface FileChange {
   skipped?: boolean
 }
 
+function lines(text: string): string[] {
+  if (!text) return []
+  const l = text.replace(/\r\n/g, '\n').split('\n')
+  if (l[l.length - 1] === '') l.pop() // a final newline ends the last line, it is not an extra empty one
+  return l
+}
+
 /** Lines added and removed (a longest-common-subsequence diff; very large middles fall back to a line multiset). */
 export function countLineChanges(before: string, after: string): { added: number; removed: number } {
   if (before === after) return { added: 0, removed: 0 }
-  const a = before ? before.replace(/\r\n/g, '\n').split('\n') : []
-  const b = after ? after.replace(/\r\n/g, '\n').split('\n') : []
+  const a = lines(before), b = lines(after)
   let s = 0
   while (s < a.length && s < b.length && a[s] === b[s]) s++
   let ea = a.length, eb = b.length

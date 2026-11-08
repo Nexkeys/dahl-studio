@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { KeyRound, RefreshCw, Trash2, CheckCircle2, XCircle, ShieldCheck, Palette, Cpu, Eye, Brain, Sparkles } from 'lucide-react'
-import type { EffectsMode, KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
+import type { EffectsMode, KeyInfo, KeyTestResult } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
-import { THEMES, applyEffects, applyTheme, isLowEnd, type Theme } from '../themes'
+import { applyEffects, isLowEnd } from '../themes'
+import { ThemePicker } from './ThemeCards'
 
 const KEY_HELP: Record<string, string> = {
   primary: 'Main Dahl key. Used first for Dahl models.',
@@ -87,27 +88,6 @@ function healthLabel(h: KeyInfo['health']): string {
   return { unknown: 'Saved', ok: 'Connected', auth_failed: 'Auth failed', exhausted: 'No tokens / quota', rate_limited: 'Rate limited', error: 'Error' }[h]
 }
 
-export function ThemePreview({ t, on, onPick }: { t: Theme; on: boolean; onPick: () => void }) {
-  const v = t.vars
-  return (
-    <button className={`theme-card ${on ? 'on' : ''}`} onClick={onPick} aria-pressed={on}>
-      <div className="tp" data-effect={t.effect} style={{ background: v['--bg'], borderRadius: v['--radius'], fontFamily: v['--font'] }}>
-        <div className="tp-rail" style={{ background: v['--surface'], borderColor: v['--border'] }}><i style={{ background: v['--accent'] }} /><i style={{ background: v['--border'] }} /><i style={{ background: v['--border'] }} /></div>
-        <div className="tp-editor" style={{ background: v['--editor-bg'], borderColor: v['--border'] }}>
-          <span style={{ color: v['--syn-keyword'] }}>const</span> <span style={{ color: v['--text'] }}>app</span> <span style={{ color: v['--muted'] }}>=</span> <span style={{ color: v['--syn-func'] }}>dahl</span><span style={{ color: v['--muted'] }}>(</span><span style={{ color: v['--syn-string'] }}>'ship'</span><span style={{ color: v['--muted'] }}>)</span>
-          <br /><span style={{ color: v['--syn-comment'] }}>// {t.tagline.split(',')[0]}</span>
-        </div>
-        <div className="tp-chat" style={{ background: v['--surface'], borderColor: v['--border'] }}>
-          <div style={{ background: v['--surface-2'], borderRadius: v['--radius'] }} />
-          <div style={{ background: v['--accent'], borderRadius: v['--radius'] }} />
-        </div>
-      </div>
-      <div className="tp-name">{t.name}</div>
-      <div className="tp-tag">{t.tagline}</div>
-    </button>
-  )
-}
-
 export function SettingsView() {
   const s = useStore((st) => st.settings)
   const keys = useStore((st) => st.keys)
@@ -168,9 +148,7 @@ export function SettingsView() {
       </section>
       <section>
         <h2><Palette size={16} /> Theme</h2>
-        <div className="theme-grid">
-          {THEMES.map((t) => <ThemePreview key={t.id} t={t} on={s.theme === t.id} onPick={() => { applyTheme(t.id as ThemeId); void updateSettings({ theme: t.id }) }} />)}
-        </div>
+        <ThemePicker current={s.theme} />
         <label className="check">Visual effects
           <select className="input small" value={s.effects} onChange={(e) => { const v = e.target.value as EffectsMode; applyEffects(v); void updateSettings({ effects: v }) }}>
             <option value="auto">Automatic ({isLowEnd() ? 'reduced on this PC' : 'full on this PC'})</option>
