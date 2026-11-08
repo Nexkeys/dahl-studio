@@ -23,6 +23,8 @@ export interface ChatTab {
   status: RunStatus | null
   /** null for the active chat (its state lives on ProjectUI) and for restored chats that are not loaded yet */
   snap: ChatSnap | null
+  /** finished while the user was looking elsewhere; cleared when the chat is shown */
+  unread?: boolean
 }
 
 export interface ChatFields extends ChatSnap {
