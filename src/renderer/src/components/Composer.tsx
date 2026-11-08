@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks } from 'lucide-react'
+import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks, Clock, OctagonX } from 'lucide-react'
 import type { AgentMode, Attachment, McpServerConfig, StartRunRequest, ThinkingLevel } from '@shared/types'
 import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
+import { sendHow, type SendHow } from '@shared/outbox'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { SKILLS } from './skills'
 
@@ -31,7 +32,7 @@ function fileToAttachment(f: File): Promise<Attachment> {
   })
 }
 
-export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string, mcpServers?: StartRunRequest['mcpServers']) => void }) {
+export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string, mcpServers?: StartRunRequest['mcpServers'], how?: SendHow) => void }) {
   const [input, setInput] = useState('')
   const [menu, setMenu] = useState<null | 'attach' | 'skills' | 'mention'>(null)
   const [files, setFiles] = useState<string[]>([])
@@ -110,14 +111,14 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
       notify((e as Error).message, 'error')
     }
   }
-  const send = async () => {
+  const send = async (how?: SendHow) => {
     const text = input.trim()
-    if (!text || running) return
+    if (!text) return
     setInput('')
     setMenu(null)
     // "/<server> request" or "/mcp request": focus the run on that server (or on all MCP tools)
     const hit = text.startsWith('/') ? parseMcpCommand(text, mcp.length ? mcp : await loadMcp()) : null
-    onSend(text, hit ? (hit.id ? [hit.id] : 'all') : undefined)
+    onSend(text, hit ? (hit.id ? [hit.id] : 'all') : undefined, running ? how ?? 'steer' : undefined)
   }
 
   return (
@@ -135,12 +136,12 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
         </div>
       )}
       <div className="composer-box">
-        <textarea ref={ta} value={input} rows={3} disabled={running} aria-label="Message Dahl" onPaste={onPaste}
-          placeholder={running ? 'Dahl is working. Pause or cancel to send a new instruction.' : 'Ask Dahl to build, fix or explain. Type / for skills and MCP servers, @ to attach a file, paste images.'}
+        <textarea ref={ta} value={input} rows={3} aria-label="Message Dahl" onPaste={onPaste}
+          placeholder={running ? 'Dahl is working. Enter: tell Dahl now (it reads this at its next step). Alt+Enter: send after this task. Ctrl+Enter: stop and send.' : 'Ask Dahl to build, fix or explain. Type / for skills and MCP servers, @ to attach a file, paste images.'}
           onChange={(e) => void onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setMenu(null)
-            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); void send() }
+            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); void send(sendHow(e)) }
           }} />
         {menu === 'mention' && (
           <div className="popover up">
@@ -190,7 +191,13 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
           </select>
         </label>
         <span className="grow" />
-        <button className="btn primary send" onClick={() => void send()} disabled={running || !input.trim()} aria-label="Send"><Send size={15} /></button>
+        {running && input.trim() && (
+          <>
+            <button className="tool-toggle" title="Send after this task (Alt+Enter)" onClick={() => void send('queue')}><Clock size={13} /> <span>After task</span></button>
+            <button className="tool-toggle danger" title="Stop the task and send this now (Ctrl+Enter)" onClick={() => void send('stop')}><OctagonX size={13} /> <span>Stop and send</span></button>
+          </>
+        )}
+        <button className="btn primary send" onClick={() => void send('steer')} disabled={!input.trim()} aria-label={running ? 'Tell Dahl now' : 'Send'} title={running ? 'Tell Dahl now: it reads this at its next step (Enter)' : 'Send (Enter)'}><Send size={15} /></button>
       </div>
     </div>
   )

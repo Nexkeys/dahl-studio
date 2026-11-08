@@ -6,8 +6,12 @@ import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from 
 import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
+import { Outbox } from './Outbox'
 import { LiveMarkdown } from './Markdown'
+import { useWhileWorking } from '../whileWorking'
 import iconUrl from '../assets/icon.png'
+
+const NO_ATTS: unknown[] = []
 
 const SUGGESTIONS = [
   'Explain how this project is structured',
@@ -69,6 +73,7 @@ export function ChatPanel({ root }: { root: string }) {
   }
 
   const transcript = p?.transcript ?? []
+  const { submit, sendNow } = useWhileWorking(root, { runId: p?.runId ?? null, status: p?.status ?? null, transcript, attachments: p?.attachments ?? NO_ATTS }, !!running, send)
   const canContinue = p?.runId && (p.status === 'paused' || p.status === 'interrupted' || p.status === 'failed')
   // a Plan or Review answer that says the work needs Build mode: one click switches and continues
   const lastAnswer = [...transcript].reverse().find((t) => t.kind === 'assistant')?.text ?? ''
@@ -132,7 +137,8 @@ export function ChatPanel({ root }: { root: string }) {
           </div>
         )}
       </div>
-      <Composer root={root} running={!!running} onSend={send} />
+      <Outbox runId={p?.runId ?? null} transcript={transcript} running={!!running} onSendNow={(m) => void sendNow(m)} />
+      <Composer root={root} running={!!running} onSend={(t, m, how) => void submit(t, m, how)} />
     </div>
   )
 }
