@@ -1,0 +1,88 @@
+/* ---------- theme structure: density, corners, type, icons, surfaces, chrome, motion (themes.ts sets the variables) ---------- */
+body { font-size: var(--fs, 13px); }
+h1, h2, .panel-title, .empty-title, .q-text, .wn-title { font-family: var(--font-head, var(--font)); font-weight: var(--head-weight, 600); }
+
+/* icons: one stroke weight per theme, in screen pixels at every size (Lucide draws on a 24 px grid) */
+svg.lucide { stroke-width: var(--icon-stroke, 1.5); }
+svg.lucide > * { vector-effect: non-scaling-stroke; }
+
+/* density */
+.topbar { height: var(--top-h, 44px); }
+.panel-head { height: var(--head-h, 38px); padding-left: var(--pad, 12px); }
+.tabs { height: var(--tab-h, 38px); }
+.tree-row, .tree-draft-row, .tree-actions { height: var(--row-h, 26px); }
+.statusbar { height: var(--sb-h, 26px); }
+.btn { height: var(--ctl-h, 32px); }
+.btn.small { height: calc(var(--ctl-h, 32px) - 6px); }
+.input { height: var(--ctl-h, 32px); }
+.input.small { height: calc(var(--ctl-h, 32px) - 4px); }
+.list-row { padding: calc(var(--row-h, 26px) / 3) var(--pad, 12px); }
+.transcript { padding: var(--pad, 14px); gap: var(--gap, 10px); }
+.chat-tabs { padding: 4px calc(var(--pad, 12px) / 2); }
+.rail-btn { width: var(--rail-btn, 40px); height: var(--rail-btn, 40px); }
+
+/* corners */
+.btn, .input, .icon-btn, .ptab, .chat-tab, .segmented, .tree-input, .ctx-menu, .reject-box input { border-radius: var(--radius-sm, 6px); }
+.segmented button, .ctx-item, .step-head, .tab-close { border-radius: calc(var(--radius-sm, 6px) * .75); }
+.card, .list, .activity, .tool-card, .approval-card, .question-card, .note, .continue-bar, .composer textarea, .md-code, .update-pop, .resume-card { border-radius: var(--radius, 8px); }
+.rail-btn { border-radius: var(--radius-sm, 8px); }
+
+/* inputs carry a 3:1 boundary (WCAG 1.4.11); decorative dividers stay quiet */
+.input, .composer textarea, .reject-box input, .tree-input { border-color: var(--border-strong); }
+
+/* chrome: header, top bar and rail colour, active indicators */
+.tab.active { box-shadow: inset 0 -2px 0 var(--tab-ind, var(--accent)); }
+.rail-btn.on { background: var(--rail-on); color: var(--rail-on-text); }
+.rail-btn.on::before { content: ''; position: absolute; left: calc((var(--rail-btn, 40px) - 56px) / 2); top: 24%; bottom: 24%; width: 3px; border-radius: 0 3px 3px 0; background: var(--tab-ind, var(--accent)); }
+.rail-btn.on svg.lucide { stroke-width: calc(var(--icon-stroke, 1.5) + .4); }
+.rail-btn.on svg.lucide :is(rect, circle, ellipse, polygon) { fill: color-mix(in srgb, currentColor 22%, transparent); }
+.rail-btn:focus-visible .rail-tip { opacity: 1; transform: none; }
+.rail-tip { background: var(--text); color: var(--bg); border-radius: var(--radius-sm, 6px); font-family: var(--font); box-shadow: var(--shadow-2); }
+.ptab.on { background: var(--surface); box-shadow: var(--shadow-1); }
+[data-chrome='strong'] .ptab.on, [data-chrome='strong'] .chat-tab.on { box-shadow: inset 0 -2px 0 var(--accent); }
+[data-chrome='strong'] .panel-head { border-bottom-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+[data-chrome='none'] .segmented button.on { background: var(--surface-2); color: var(--text); }
+
+/* surfaces: flat (one plane) */
+[data-surface='flat'] .panel, [data-surface='flat'] .rail, [data-surface='flat'] .topbar, [data-surface='flat'] .statusbar { backdrop-filter: none; }
+/* elevated: stepped planes with soft shadows */
+[data-surface='elevated'] .topbar { position: relative; z-index: 3; box-shadow: var(--shadow-1); }
+[data-surface='elevated'] :is(.card, .activity, .tool-card, .approval-card, .question-card, .list, .mcp-card, .theme-card, .reason-item, .msg.user .msg-text) { box-shadow: var(--shadow-1); }
+[data-surface='elevated'] .editor-area { box-shadow: inset 1px 0 0 var(--border), inset -1px 0 0 var(--border); }
+/* islands: detached rounded panels floating on the background, gaps instead of dividers */
+[data-surface='islands'] .content { padding: 0 10px 0 2px; }
+[data-surface='islands'] .content > .split .panel { border-radius: var(--radius-lg, 14px); box-shadow: var(--shadow-1); overflow: hidden; }
+[data-surface='islands'] .content > .split .panel.chat { overflow: visible; }
+[data-surface='islands'] .sep.v { width: 10px; background: transparent; }
+[data-surface='islands'] .sep.h { height: 10px; background: transparent; }
+[data-surface='islands'] .sep:hover, [data-surface='islands'] .sep[data-separator-state='drag'] { background: linear-gradient(var(--accent), var(--accent)) center / 2px 60% no-repeat; }
+[data-surface='islands'] .sep.h:hover { background-size: 60% 2px; }
+[data-surface='islands'] .topbar, [data-surface='islands'] .statusbar, [data-surface='islands'] .rail { background: transparent; border-color: transparent; backdrop-filter: none; }
+[data-surface='islands'] .main { padding-bottom: 0; }
+[data-surface='islands'] .content > .view { margin: 0 0 10px; background: var(--surface); border-radius: var(--radius-lg, 14px); box-shadow: var(--shadow-1); }
+[data-surface='islands'] :is(.card, .activity, .list, .tool-card) { border-color: transparent; background: var(--surface-2); }
+/* bordered: hard outlines, no shadows */
+[data-surface='bordered'] :is(.btn, .card, .activity, .tool-card, .list, .chat-tab.on, .ptab.on, .segmented, .changes-pill, .st-badge) { border-color: var(--border-strong); box-shadow: none; }
+[data-surface='bordered'] .ptab.on, [data-surface='bordered'] .chat-tab.on { border-width: 1px; border-style: solid; }
+[data-surface='bordered'] .panel-head, [data-surface='bordered'] .tabs, [data-surface='bordered'] .chat-tabs { border-bottom-width: 1px; }
+/* glass: translucent panels over the backdrop, outlined in accent */
+[data-surface='glass'] .panel, [data-surface='glass'] .rail, [data-surface='glass'] .topbar, [data-surface='glass'] .statusbar { backdrop-filter: blur(18px) saturate(170%); }
+[data-surface='glass'] :is(.card, .activity, .tool-card, .list, .mcp-card, .theme-card, .progress-strip) { background: color-mix(in srgb, var(--surface) 72%, transparent); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); box-shadow: var(--shadow-1); }
+[data-surface='glass'] .sep { background: color-mix(in srgb, var(--accent) 26%, var(--border)); }
+[data-surface='glass'] .msg.user .msg-text { border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* labels */
+[data-labels='upper'] :is(.panel-title, .label, h2, .st-badge, .crumb-info, .q-chip, .changes-head) { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+[data-labels='mono'] :is(.panel-title, .label, h2, .st-badge, .chat-tab, .ptab, .crumbs, .ps-step, .ps-time, .run-badge, .changes-pill, .sb-item) { font-family: var(--mono); letter-spacing: .01em; }
+
+/* motion */
+.reveal { animation-duration: calc(var(--dur, 160ms) + 120ms); }
+[data-motion='none'] *, [data-motion='none'] *::before, [data-motion='none'] *::after { transition-duration: 0s !important; }
+[data-motion='none'] :is(.reveal, .content, .activity-body, .ps-list, .changes-pop) { animation: none; }
+[data-motion='lively'] .btn:hover:not(:disabled) { transform: translateY(-1px); }
+[data-motion='lively'] .rail-btn svg.lucide { transition: transform var(--dur, .24s) cubic-bezier(.3,1.6,.5,1); }
+[data-motion='lively'] .rail-btn:hover svg.lucide { transform: scale(1.1); }
+[data-lite][data-motion='lively'] .rail-btn:hover svg.lucide { transform: none; }
+
+/* the wordmark is dark ink: invert it on every dark theme, not only Midnight Terminal */
+[data-dark] .wordmark { mix-blend-mode: normal; filter: invert(1) hue-rotate(180deg); opacity: .92; }

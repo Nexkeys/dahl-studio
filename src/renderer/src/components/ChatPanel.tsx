@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText, Hammer } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Square, Pause, Bookmark, Play, ScrollText, Hammer } from 'lucide-react'
 import type { RunSummary, StartRunRequest } from '@shared/types'
 import { api, useStore } from '../store'
 import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from '../chats'
@@ -7,6 +7,8 @@ import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
 import { LiveMarkdown } from './Markdown'
+import { ChatStatus, ProgressStrip } from './ProgressStrip'
+import { ChangesPill } from './ChangesPill'
 import iconUrl from '../assets/icon.png'
 
 const SUGGESTIONS = [
@@ -15,17 +17,6 @@ const SUGGESTIONS = [
   'Build a polished landing page with Tailwind',
   'Write tests for the main module and run them'
 ]
-
-function Elapsed({ since }: { since: number | null }) {
-  const [, tick] = useState(0)
-  useEffect(() => {
-    if (!since) return
-    const t = setInterval(() => tick((x) => x + 1), 1000)
-    return () => clearInterval(t)
-  }, [since])
-  if (!since) return null
-  return <span className="muted small">{Math.round((Date.now() - since) / 1000)}s</span>
-}
 
 export function ChatPanel({ root }: { root: string }) {
   const p = useStore((s) => s.projects[root])
@@ -79,8 +70,8 @@ export function ChatPanel({ root }: { root: string }) {
       <div className="panel-head">
         <span className="panel-title">Dahl</span>
         {settings?.autoApproveAll && <span className="auto-badge" title={settings.askBeforePublishing ? 'Never ask is on: Dahl does not stop for approvals (publishing to GitHub still asks). Change it in Settings > Approvals.' : 'Never ask is on: Dahl does not stop for any approval. Change it in Settings > Approvals.'}>Auto-approve on</span>}
-        <span className={`run-badge ${p?.status ?? 'idle'}`}>{statusLabel(p?.status ?? null)}</span>
-        {running && <Elapsed since={p?.turnStartedAt ?? null} />}
+        <ChatStatus root={root} />
+        <ChangesPill root={root} />
         <div className="row-actions">
           {p?.runId && <button className="icon-btn" title="Task log" aria-label="Task log" onClick={() => set({ view: 'logs' })}><ScrollText size={15} /></button>}
           {running && <button className="icon-btn" title="Save checkpoint" aria-label="Save checkpoint" onClick={() => api.invoke('agent:checkpoint', root)}><Bookmark size={15} /></button>}
@@ -90,16 +81,7 @@ export function ChatPanel({ root }: { root: string }) {
       </div>
       <ChatTabs root={root} />
 
-      {p?.plan.length ? (
-        <div className="plan">
-          {p.plan.map((s, i) => (
-            <div key={i} className={`plan-step ${s.status}`}>
-              {s.status === 'done' ? <CircleCheck size={13} /> : s.status === 'in_progress' ? <CircleDot size={13} /> : s.status === 'failed' ? <CircleAlert size={13} /> : <Circle size={13} />}
-              <span>{s.title}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <ProgressStrip root={root} />
 
       <div className="transcript" ref={scroller} aria-live="polite" onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }}>
         {!transcript.length && !p?.live && (
@@ -135,10 +117,6 @@ export function ChatPanel({ root }: { root: string }) {
       <Composer root={root} running={!!running} onSend={send} />
     </div>
   )
-}
-
-function statusLabel(s: string | null): string {
-  return ({ running: 'Working', waiting_approval: 'Waiting for approval', paused: 'Paused', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', interrupted: 'Interrupted' } as Record<string, string>)[s ?? ''] ?? 'Idle'
 }
 
 /** Open a saved run (from Tasks) in its own chat tab. */

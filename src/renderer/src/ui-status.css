@@ -1,0 +1,83 @@
+/* ---------- status vocabulary: shape first, colour second (status.ts, StatusIcon.tsx) ---------- */
+.st { display: inline-grid; place-items: center; flex-shrink: 0; line-height: 0; }
+.st svg { display: block; }
+/* needs you: a raised hand or a question bubble, warn colour, tinted fill; it never moves and never looks like working */
+.st-needs { color: var(--warn); }
+.st-needs svg { fill: color-mix(in srgb, var(--warn) 26%, transparent); }
+/* working: an open arc that turns */
+.st-running { color: var(--accent); }
+.st-running svg, .ps-spin { animation: spin 1.1s linear infinite; }
+/* failed: a solid disc with a cross */
+.st-failed { color: var(--danger); }
+.st-failed svg circle { fill: var(--danger); }
+.st-failed svg path { stroke: var(--surface); }
+/* done, not seen: a solid dot */
+.st-unread i { display: block; width: 62%; height: 62%; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.st-paused { color: var(--muted); }
+.st-done { color: var(--muted); }
+.st-idle { color: var(--muted); opacity: .5; }
+[data-lite] .st-running svg, [data-lite] .ps-spin { animation: none; }
+
+.st-badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px 0 7px; border-radius: 99px; font-size: 11.5px; font-weight: 500; white-space: nowrap; background: var(--surface-2); color: var(--muted); border: 1px solid transparent; }
+.st-badge-running { background: var(--accent-soft); color: var(--accent); }
+.st-badge-needs { background: var(--surface); color: var(--text); border-color: var(--warn); font-weight: 600; }
+.st-badge-failed { background: var(--surface); color: var(--text); border-color: var(--danger); }
+.st-badge-unread { color: var(--text); }
+
+/* chat tabs: a chat that needs you is marked under the tab too */
+.chat-tab.tab-needs { color: var(--text); box-shadow: inset 0 -2px 0 var(--warn); }
+.chat-tab.tab-failed:not(.on) { color: var(--text); }
+
+/* status bar */
+.sb-status { gap: 5px; font-weight: 500; }
+.sb-needs, .sb-failed { color: var(--text); }
+.sb-running { color: var(--accent); }
+
+/* ---------- progress strip: pinned under the chat tabs while a task runs ---------- */
+.progress-strip { position: relative; flex-shrink: 0; display: grid; gap: 7px; padding: 9px var(--pad, 12px) 9px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.progress-strip.ps-running::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat; background-size: 40% 100%; animation: ps-sweep 1.8s ease-in-out infinite; }
+@keyframes ps-sweep { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+[data-lite] .progress-strip.ps-running::after { animation: none; background: var(--accent); opacity: .5; }
+.progress-strip.ps-needs { box-shadow: inset 3px 0 0 var(--warn); }
+.ps-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; }
+.ps-action { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.ps-last { flex: 1; min-width: 0; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-last::before { content: 'after: '; opacity: .8; }
+.ps-time { margin-left: auto; flex-shrink: 0; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.ps-plan { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; color: var(--muted); font-size: 11.5px; text-align: left; }
+.ps-plan:hover { color: var(--text); }
+.ps-segs { display: flex; gap: 3px; flex-shrink: 0; }
+.ps-segs i { width: 12px; height: 5px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--border-strong); transition: width var(--dur, .16s), background var(--dur, .16s); }
+.ps-segs i.done { background: var(--ok); box-shadow: none; }
+.ps-segs i.in_progress { width: 24px; background: var(--accent); box-shadow: none; }
+.ps-segs i.failed { background: var(--danger); box-shadow: none; }
+.ps-step { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-list { list-style: none; margin: 0; padding: 2px 0 0; display: grid; gap: 4px; max-height: 180px; overflow: auto; animation: reveal .2s both; }
+.ps-list li { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.ps-list li svg { flex-shrink: 0; }
+.ps-list li.done svg { color: var(--ok); }
+.ps-list li.in_progress { color: var(--text); font-weight: 600; }
+.ps-list li.in_progress svg { color: var(--accent); }
+.ps-list li.failed { color: var(--danger); }
+
+/* ---------- "+N -M" changes pill in the chat header ---------- */
+.changes-wrap { position: relative; display: inline-flex; min-width: 0; }
+.changes-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.changes-pill:hover, .changes-pill[aria-expanded='true'] { color: var(--text); border-color: var(--accent); }
+.changes-wrap .add { color: var(--ok); font-weight: 650; }
+.changes-wrap .del { color: var(--danger); font-weight: 650; }
+.changes-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 130; width: 340px; max-width: 70vw; display: grid; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-2); animation: reveal .16s both; }
+.changes-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 4px 6px; font-weight: 600; font-size: 12px; }
+.changes-head .muted { font-weight: 400; font-size: 11px; }
+.changes-list { display: grid; max-height: 260px; overflow: auto; }
+.changes-row { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 5px 6px; border-radius: var(--radius-sm, 5px); text-align: left; font-size: 12px; color: var(--text); }
+.changes-row:hover, .changes-row:focus-visible { background: var(--surface-2); }
+.changes-row svg { color: var(--muted); flex-shrink: 0; }
+.changes-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; }
+.changes-n { flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.changes-foot { display: flex; gap: 6px; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 6px; }
+
+/* ---------- rail: badges for chats waiting for you and running agents ---------- */
+.rail-badge { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; font-size: 10px; font-weight: 700; line-height: 1; font-family: var(--font); box-shadow: 0 0 0 2px var(--chrome); pointer-events: none; }
+.rail-badge.needs { background: var(--warn); color: var(--bg); }
+.rail-badge.busy { background: var(--accent); color: var(--accent-text); }

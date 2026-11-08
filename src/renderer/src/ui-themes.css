@@ -60,6 +60,18 @@ body { font-family: var(--font); letter-spacing: var(--tracking); }
 [data-effect='ink'] .btn.primary { box-shadow: 2px 2px 0 var(--text); }
 [data-effect='ink'] .msg.user .msg-text { border-left: 2px solid var(--accent); }
 
+/* Solar Flare: a molten line under the top bar, condensed heavy headings, glowing primary actions */
+[data-effect='flare'] .topbar { box-shadow: inset 0 -2px 0 var(--accent), var(--shadow-1); }
+[data-effect='flare'] h1, [data-effect='flare'] .panel-title, [data-effect='flare'] .empty-title { font-stretch: 87.5%; letter-spacing: .03em; }
+[data-effect='flare'] .btn.primary, [data-effect='flare'] .rail-btn.on { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent), 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* High Contrast: thick focus rings, outlined active items, underlined links, nothing translucent */
+[data-effect='contrast'] :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+[data-effect='contrast'] :is(.ptab.on, .chat-tab.on, .rail-btn.on, .segmented button.on, .theme-card.on) { outline: 2px solid var(--accent); outline-offset: -2px; }
+[data-effect='contrast'] .tab.active { box-shadow: inset 0 -3px 0 var(--accent); }
+[data-effect='contrast'] .md a, [data-effect='contrast'] .link { text-decoration: underline; }
+[data-effect='contrast'] .muted, [data-effect='contrast'] .speed-line { opacity: 1; }
+
 /* Reduced effects (Settings > Theme, automatic on low-end hardware): solid panels, no blur, no animated layers */
 [data-lite] .panel, [data-lite] .rail, [data-lite] .topbar, [data-lite] .statusbar { backdrop-filter: none; background: var(--surface); }
 [data-lite] .card, [data-lite] .mcp-card, [data-lite] .palette-backdrop { backdrop-filter: none !important; }
