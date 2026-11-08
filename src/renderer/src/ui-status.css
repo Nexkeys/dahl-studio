@@ -23,6 +23,11 @@
 .st-badge-failed { background: var(--surface); color: var(--text); border-color: var(--danger); }
 .st-badge-unread { color: var(--text); }
 
+/* Tasks list badges: same vocabulary (waiting is never painted like running) */
+.run-badge { display: inline-flex; align-items: center; gap: 4px; text-transform: none; }
+.run-badge.waiting_approval { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--warn); }
+.run-badge.interrupted, .run-badge.paused { color: var(--muted); }
+
 /* chat tabs: a chat that needs you is marked under the tab too */
 .chat-tab.tab-needs { color: var(--text); box-shadow: inset 0 -2px 0 var(--warn); }
 .chat-tab.tab-failed:not(.on) { color: var(--text); }
