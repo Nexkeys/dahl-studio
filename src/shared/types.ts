@@ -77,6 +77,10 @@ export interface Settings {
   keyNames: Record<KeySlot, string>
   autoApproveWrites: boolean
   autoApproveCommands: boolean
+  /** "Never ask": file changes, commands, connector tools and git run without approval cards, in every mode */
+  autoApproveAll: boolean
+  /** with autoApproveAll on, still ask before pushing to GitHub, pull requests and releases */
+  askBeforePublishing: boolean
   autoMemory: boolean
   /** keep an app-maintained PROGRESS.md work log in the project root */
   maintainProgress: boolean
@@ -161,6 +165,8 @@ export interface TranscriptItem {
   agentIds?: string[]
   /** a model call is being retried: drop the partly streamed reply on screen (it is not part of the conversation) */
   resetLive?: boolean
+  /** user messages sent while the agent was working: the id the composer gave it, so its pending chip can be cleared */
+  steerId?: string
   /** assistant replies: how fast the model answered (time to first token, generation speed), shown under the reply */
   stats?: { ttftMs: number; tokensPerSec: number; tokens: number; estimated: boolean; model: string }
 }

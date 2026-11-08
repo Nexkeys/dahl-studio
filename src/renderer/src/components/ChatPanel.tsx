@@ -78,6 +78,7 @@ export function ChatPanel({ root }: { root: string }) {
     <div className="panel chat">
       <div className="panel-head">
         <span className="panel-title">Dahl</span>
+        {settings?.autoApproveAll && <span className="auto-badge" title={settings.askBeforePublishing ? 'Never ask is on: Dahl does not stop for approvals (publishing to GitHub still asks). Change it in Settings > Approvals.' : 'Never ask is on: Dahl does not stop for any approval. Change it in Settings > Approvals.'}>Auto-approve on</span>}
         <span className={`run-badge ${p?.status ?? 'idle'}`}>{statusLabel(p?.status ?? null)}</span>
         {running && <Elapsed since={p?.turnStartedAt ?? null} />}
         <div className="row-actions">
