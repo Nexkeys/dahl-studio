@@ -78,15 +78,19 @@ export async function ocrImage(input: Buffer, o: OcrOptions = {}): Promise<OcrOu
   const W = px.width, H = px.height
   const inverted = isDark(px)
   let passes = 0, tiles = 0
+  const debug = process.env.DAHL_OCR_DEBUG ? (m: string) => console.log(`[ocr ${Date.now() - t0} ms] ${m}`) : () => {}
   const run = async (img: Raw, scale: number, overlap: number): Promise<OcrWord[]> => {
+    debug(`pass ${passes + 1}: ${img.width}x${img.height} at ${scale}x`)
     const r = await readPass(e, img, maxTile, overlap, o.signal)
     passes++
     tiles += r.tiles
+    debug(`pass ${passes} done: ${r.words.length} words, ${r.tiles} tiles${process.env.DAHL_OCR_DEBUG === '2' ? `: ${r.words.map((w) => w.t).join(' ')}` : ''}`)
     return toOriginal(r.words, scale)
   }
   // 1. measure: a reading at natural size (downscaled only when larger than the engine allows)
   const s0 = Math.min(1, 4096 / Math.max(W, H))
   const base = await prepare(px, { invert: inverted, scale: 1 })
+  debug(`decoded ${W}x${H}, ${inverted ? 'dark (inverted)' : 'light'}, engine max ${info.maxDim}`)
   const first = await run(s0 === 1 ? base : await prepare(px, { invert: inverted, scale: s0 }), s0, 96)
   const h1 = median(first.map((w) => w.h))
   const s = chooseScale(h1, W, H)
@@ -108,6 +112,7 @@ export async function ocrImage(input: Buffer, o: OcrOptions = {}): Promise<OcrOu
       const c = await readStrips(e, base, regions, Math.min(MAX_SCALE * 1.6, s * 1.6), maxTile, o.signal)
       passes++
       const r = resolveDisputes(cmp.disputes, c)
+      debug(`disputes ${cmp.disputes.length}: ${cmp.disputes.map((d) => `${d.a}|${d.b}`).join('; ')} -> C: ${c.map((w) => w.t).join(' ')}; unclear ${r.unclear.length}`)
       words = [...words, ...r.words]
       unclear.push(...r.unclear)
     }
