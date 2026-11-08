@@ -297,6 +297,16 @@ export class PreviewController implements BrowserBridge {
     return out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out
   }
 
+  /** Smoke and dev checks only (testIpc.ts): open or close the guest's DevTools, as the pane's bug button does. */
+  async testDevTools(open: boolean): Promise<{ open: boolean; attached: boolean }> {
+    const g = this.live()
+    if (open) g.openDevTools({ mode: 'detach' })
+    else g.closeDevTools()
+    for (const end = Date.now() + 15000; g.isDevToolsOpened() !== open && Date.now() < end; ) await sleep(100)
+    await sleep(1000)
+    return { open: g.isDevToolsOpened(), attached: g.debugger.isAttached() }
+  }
+
   consoleEntries(): { entries: ConsoleEntry[]; dropped: number } {
     return { entries: this.consoleLog.list(), dropped: this.consoleLog.dropped }
   }

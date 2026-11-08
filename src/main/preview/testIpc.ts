@@ -13,11 +13,18 @@ import type { BrowserBridge } from '../agent/browserTools'
  * Approvals are always declined here (browser_eval cannot run through this path). In a smoke run every result is
  * appended to <DAHL_SMOKE>/browser-tools.json and returned screenshots are saved next to it as PNG files.
  */
-export function registerPreviewTestIpc(bridge: BrowserBridge, getSettings: () => Promise<Settings>, log: (msg: string) => void): void {
+export function registerPreviewTestIpc(bridge: BrowserBridge & { testDevTools(open: boolean): Promise<unknown> }, getSettings: () => Promise<Settings>, log: (msg: string) => void): void {
   const smoke = process.env.DAHL_SMOKE
   const results: unknown[] = []
   ipcMain.handle('preview:test', async (_e, project: string, tool: string, args: Record<string, unknown> = {}, mode: 'build' | 'plan' | 'review' = 'build') => {
     try {
+      // the user opening or closing the Preview DevTools, which takes the debugger away from the agent
+      if (tool === 'devtools') {
+        const r = { tool, args, ...((await bridge.testDevTools(!!args.open)) as object) }
+        log(`preview:test devtools ${JSON.stringify(r)}`)
+        results.push(r)
+        return { ok: true, value: r }
+      }
       const s = await getSettings()
       if (!s.openProjects.some((p) => path.resolve(p).toLowerCase() === path.resolve(String(project)).toLowerCase())) throw new Error('Project is not open in Dahl Studio.')
       if (!/^browser_/.test(String(tool))) throw new Error('preview:test only runs browser_* tools.')
