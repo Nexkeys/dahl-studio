@@ -1,9 +1,8 @@
 /* ---------- status vocabulary: shape first, colour second (status.ts, StatusIcon.tsx) ---------- */
 .st { display: inline-grid; place-items: center; flex-shrink: 0; line-height: 0; }
 .st svg { display: block; }
-/* needs you: a raised hand or a question bubble, warn colour, tinted fill; it never moves and never looks like working */
-.st-needs { color: var(--warn); }
-.st-needs svg { fill: color-mix(in srgb, var(--warn) 26%, transparent); }
+/* needs you: a raised hand or a question bubble on a warn halo; it never moves and never looks like working */
+.st-needs { color: var(--warn); border-radius: 50%; background: color-mix(in srgb, var(--warn) 18%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 18%, transparent); }
 /* working: an open arc that turns */
 .st-running { color: var(--accent); }
 .st-running svg, .ps-spin { animation: spin 1.1s linear infinite; }

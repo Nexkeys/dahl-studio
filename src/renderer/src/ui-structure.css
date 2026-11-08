@@ -5,6 +5,11 @@ h1, h2, .panel-title, .empty-title, .q-text, .wn-title { font-family: var(--font
 /* icons: one stroke weight per theme, in screen pixels at every size (Lucide draws on a 24 px grid) */
 svg.lucide { stroke-width: var(--icon-stroke, 1.5); }
 svg.lucide > * { vector-effect: non-scaling-stroke; }
+/* one size per place: rail 20, panel toolbars 15, tabs 12, status bar 12 (CSS wins over the size attribute) */
+.panel-head .icon-btn svg.lucide, .tabs .icon-btn svg.lucide { width: 15px; height: 15px; }
+.chat-tab svg.lucide, .ptab svg.lucide, .tab svg.lucide { width: 12px; height: 12px; }
+.chat-tab .st svg.lucide, .ptab .st svg.lucide { width: 13px; height: 13px; }
+.statusbar svg.lucide { width: 12px; height: 12px; }
 
 /* density */
 .topbar { height: var(--top-h, 44px); }
