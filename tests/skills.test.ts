@@ -89,10 +89,12 @@ describe('skills in the prompt and the / command', () => {
     expect(text).not.toContain('hidden')
     expect(text.indexOf('- proj')).toBeLessThan(text.indexOf('- alpha'))
     const many = Array.from({ length: 60 }, (_, i) => fake({ name: `s${i}`, description: `Sentence one for ${i}. ${'More detail. '.repeat(20)}` }))
-    const small = skillsPromptSection(many, 3000)
+    // too long in full: first sentences only; still too long: the rest by name
+    const small = skillsPromptSection(many, 1000)
     expect(small).not.toContain('More detail')
-    expect(small).toMatch(/Also available \(call use_skill to read what they do\): .*s59/)
-    expect(small.length).toBeLessThan(3600)
+    expect(small).toContain('- s0: Sentence one for 0.')
+    expect(small).toMatch(/Also available \(call use_skill to read what they do\): .*s9$/)
+    expect(small.length).toBeLessThan(1800)
     expect(skillsPromptSection([fake({ modelInvocable: false })])).toBe('')
   })
 
