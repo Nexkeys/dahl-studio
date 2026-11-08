@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText, Hammer } from 'lucide-react'
 import type { RunSummary, StartRunRequest } from '@shared/types'
+import { isLocalProvider } from '@shared/models'
 import { api, useStore } from '../store'
 import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from '../chats'
 import { ChatTabs } from './ChatTabs'
@@ -53,7 +54,8 @@ export function ChatPanel({ root }: { root: string }) {
     if (running) return
     if (!settings?.defaultModel) return notify('Select a model first.', 'error')
     const provider = settings.defaultModel.split(':')[0]
-    const hasKey = provider === 'dahl' ? keys.some((k) => k.provider === 'dahl' && k.configured) : keys.some((k) => k.provider === provider && k.configured)
+    // Ollama and LM Studio run on this PC and need no key
+    const hasKey = isLocalProvider(provider) || keys.some((k) => k.provider === provider && k.configured)
     if (!hasKey) return notify(`Add a ${provider} API key in Settings first.`, 'error')
     const busy = otherBusyChat(root)
     if (busy) return notify(`"${busy.title}" is still working in this project. Wait for it to finish or cancel it first.`, 'error')

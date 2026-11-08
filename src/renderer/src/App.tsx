@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { LayoutPanelLeft, ListChecks, Brain, BrainCircuit, Settings as SettingsIcon, HardDrive, FolderPlus, X, GitBranch, PanelBottom, CircleAlert, Users, Boxes, ScrollText, Command, Eye, Globe } from 'lucide-react'
 import type { KeyInfo, KeyUsageLocal, ModelInfo, Settings } from '@shared/types'
+import { isLocalProvider } from '@shared/models'
 import { api, baseName, ensureDefaultModel, handleAgentEvent, loadModels, openPreview, PROVIDER_NAMES, updateSettings, useStore, type View } from './store'
 import { applyEffects, applyTheme, detectLowEnd } from './themes'
 import { overallStatus } from './chatState'
@@ -70,10 +71,12 @@ function StatusBar({ root }: { root: string | null }) {
     return () => clearInterval(t)
   }, [root, status])
   const provider = model?.provider ?? 'dahl'
-  const ok = keys.some((k) => k.provider === provider && k.configured && k.health !== 'auth_failed' && k.health !== 'exhausted')
+  // a local model is listed only while its server answers, so being listed means it is ready
+  const local = isLocalProvider(provider)
+  const ok = local || keys.some((k) => k.provider === provider && k.configured && k.health !== 'auth_failed' && k.health !== 'exhausted')
   return (
     <div className="statusbar">
-      <span className={`dot ${ok ? 'ok' : 'bad'}`} /> {ok ? `${PROVIDER_NAMES[provider]} ready` : `No usable ${PROVIDER_NAMES[provider]} key`}
+      <span className={`dot ${ok ? 'ok' : 'bad'}`} /> {ok ? `${PROVIDER_NAMES[provider]}${local ? ' (local)' : ''} ready` : `No usable ${PROVIDER_NAMES[provider]} key`}
       {model && <span className="sb-item">{model.label}{model.vision && <Eye size={11} />}</span>}
       {git?.repo && <button className="sb-btn sb-item" onClick={() => set({ view: 'git' })}><GitBranch size={12} /> {git.branch ?? 'detached'}{git.files.length ? ` · ${git.files.length} changed` : ''}</button>}
       {agents > 0 && <button className="sb-btn sb-item" onClick={() => set({ view: 'agents' })}><Users size={12} /> {agents} agents running</button>}
@@ -83,24 +86,6 @@ function StatusBar({ root }: { root: string | null }) {
       <button className="sb-btn" onClick={() => set({ palette: true })}><Command size={12} /> Ctrl+K</button>
       {root && <button className="sb-btn" onClick={() => set({ showTerminal: !showTerminal })} aria-pressed={showTerminal}><PanelBottom size={12} /> Terminal</button>}
       {root && <button className="sb-btn" title="Preview" onClick={() => (showPreview ? set({ showPreview: false }) : openPreview(root))} aria-pressed={showPreview}><Globe size={12} /> Preview</button>}
-    </div>
-  )
-}
-
-function ModelPicker() {
-  const s = useStore((st) => st.settings)
-  const models = useStore((st) => st.models)
-  const providers = [...new Set(models.map((m) => m.provider))]
-  return (
-    <div className="model-picker">
-      <select className="input small" value={s?.defaultModel ?? ''} onChange={(e) => updateSettings({ defaultModel: e.target.value })} aria-label="Model">
-        {!models.length && <option value="">Loading models</option>}
-        {providers.map((p) => (
-          <optgroup key={p} label={PROVIDER_NAMES[p]}>
-            {models.filter((m) => m.provider === p).map((m) => <option key={m.key} value={m.key}>{m.label}{m.isNew ? '  (new)' : ''}{m.vision ? '  [vision]' : ''}</option>)}
-          </optgroup>
-        ))}
-      </select>
     </div>
   )
 }
@@ -188,7 +173,7 @@ export default function App() {
             ))}
             <button className="btn small ghost" onClick={openProject}><FolderPlus size={14} /> Open folder</button>
           </div>
-          <ModelPicker />
+          {/* the model menu lives in the chat box (components/ModelMenu.tsx) */}
         </header>
 
         <div className="content" key={view}>

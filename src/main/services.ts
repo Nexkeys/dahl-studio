@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import type { KeyInfo, KeySlot } from '@shared/types'
 import { PROVIDER_OF_SLOT } from '@shared/types'
+import { LOCAL_DEFAULT_URL, normalizeLocalBase } from '@shared/models'
 import { SettingsStore } from './settings'
 import { SecretVault } from './secrets'
 import { UsageLedger } from './dahl/usage'
@@ -23,7 +24,7 @@ export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
 app.setPath('userData', process.env.DAHL_SMOKE ? path.join(process.env.DAHL_SMOKE, 'profile') : path.join(localAppData, 'DahlStudio'))
 export const APP_DIR = app.getPath('userData')
 export const LOG_FILE = path.join(APP_DIR, 'logs', 'main.jsonl')
-export const ALL_SLOTS: KeySlot[] = ['primary', 'secondary', 'openai', 'anthropic', 'gemini', 'nvidia']
+export const ALL_SLOTS: KeySlot[] = ['primary', 'secondary', 'openai', 'anthropic', 'gemini', 'nvidia', 'groq', 'openrouter']
 
 export const win: { current: BrowserWindow | null } = { current: null }
 export function send(channel: string, payload: unknown): void {
@@ -60,7 +61,8 @@ export const models = new ModelRegistry({
     health[slot] = { health: h, lastError: err ? redact(err) : undefined, lastCheckedAt: nowIso() }
     void keyInfos().then((k) => send('keys:changed', k))
   },
-  onModels: (m) => send('models:changed', m)
+  onModels: (m) => send('models:changed', m),
+  getLocalBase: async (p) => normalizeLocalBase((await settings.get()).localUrls?.[p] ?? '') ?? LOCAL_DEFAULT_URL[p]
 })
 
 /** Bundled MCP servers run with Electron's Node (ELECTRON_RUN_AS_NODE). In a packaged app they live in app.asar.unpacked. */

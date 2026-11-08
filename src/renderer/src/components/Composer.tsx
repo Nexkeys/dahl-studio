@@ -5,6 +5,7 @@ import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpComman
 import { sendHow, type SendHow } from '@shared/outbox'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { SKILLS } from './skills'
+import { ModelMenu } from './ModelMenu'
 
 const NO_ATTS: Attachment[] = []
 const MODES: { id: AgentMode; label: string; icon: typeof Hammer; hint: string }[] = [
@@ -190,6 +191,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
             {THINK.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
         </label>
+        <ModelMenu />
         <span className="grow" />
         {running && input.trim() && (
           <>

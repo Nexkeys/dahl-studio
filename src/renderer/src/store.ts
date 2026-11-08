@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AgentEvent, AgentInfo, AgentMode, Attachment, KeyInfo, KeyUsageLocal, ModelInfo, PendingApproval, PlanStep, ProviderId, RunStatus, RunSummary, Settings, TranscriptItem
 } from '@shared/types'
+import { pickFallbackModel, PROVIDER_NAME, splitModelKey } from '@shared/models'
 import { newTab, patchChat, type ChatFields } from './chatState'
 import type { ResumeOffer } from './resume'
 
@@ -153,11 +154,22 @@ export async function loadModels(refresh = false): Promise<void> {
   }
 }
 
+let fallingBack = false
+/** The chosen model is no longer listed (retired, key removed, local server stopped): switch to a valid one and say so. */
 export async function ensureDefaultModel(models: ModelInfo[]): Promise<void> {
-  const s = useStore.getState().settings
-  if (s && models.length && (!s.defaultModel || !models.some((m) => m.key === s.defaultModel))) {
-    const pick = models.find((m) => m.provider === 'dahl') ?? models[0]
+  const st = useStore.getState()
+  const s = st.settings
+  const pick = s && !fallingBack ? pickFallbackModel(s.defaultModel, models, s.recentModels) : null
+  if (!s || !pick) return
+  fallingBack = true
+  try {
     await updateSettings({ defaultModel: pick.key })
+    if (s.defaultModel) {
+      const gone = splitModelKey(s.defaultModel)
+      st.notify(`${gone.id} is no longer offered by ${PROVIDER_NAME[gone.provider] ?? gone.provider}. Switched to ${pick.label} (${PROVIDER_NAME[pick.provider]}).`)
+    }
+  } finally {
+    fallingBack = false
   }
 }
 
@@ -284,4 +296,4 @@ export function baseName(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p
 }
 
-export const PROVIDER_NAMES: Record<ProviderId, string> = { dahl: 'Dahl', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', nvidia: 'NVIDIA' }
+export const PROVIDER_NAMES: Record<ProviderId, string> = PROVIDER_NAME

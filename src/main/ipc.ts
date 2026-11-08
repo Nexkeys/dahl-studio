@@ -111,6 +111,8 @@ export function registerIpc(): void {
   handle('usage:reset', () => usage.reset())
   handle('models:list', () => models.list())
   handle('models:refresh', () => models.refresh())
+  // Settings > Local models: check Ollama and LM Studio now (after their address changed, or on demand)
+  handle('models:checkLocal', () => models.refresh(['ollama', 'lmstudio']))
 
   // ---- projects ----
   handle('project:pick', async () => {

@@ -1,8 +1,8 @@
 // Shared types between main, preload and renderer. No runtime imports here.
 
-export type ProviderId = 'dahl' | 'openai' | 'anthropic' | 'gemini' | 'nvidia'
-/** Secret slots: two Dahl keys plus one key per additional provider. */
-export type KeySlot = 'primary' | 'secondary' | 'openai' | 'anthropic' | 'gemini' | 'nvidia'
+export type ProviderId = 'dahl' | 'openai' | 'anthropic' | 'gemini' | 'nvidia' | 'groq' | 'openrouter' | 'ollama' | 'lmstudio'
+/** Secret slots: two Dahl keys plus one key per additional provider (Ollama and LM Studio are local and need none). */
+export type KeySlot = 'primary' | 'secondary' | 'openai' | 'anthropic' | 'gemini' | 'nvidia' | 'groq' | 'openrouter'
 export type AgentMode = 'plan' | 'review' | 'build'
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 export type ThemeId =
@@ -11,7 +11,7 @@ export type ThemeId =
   | 'blueprint' | 'ink-paper'
 
 export const PROVIDER_OF_SLOT: Record<KeySlot, ProviderId> = {
-  primary: 'dahl', secondary: 'dahl', openai: 'openai', anthropic: 'anthropic', gemini: 'gemini', nvidia: 'nvidia'
+  primary: 'dahl', secondary: 'dahl', openai: 'openai', anthropic: 'anthropic', gemini: 'gemini', nvidia: 'nvidia', groq: 'groq', openrouter: 'openrouter'
 }
 
 export interface KeyInfo {
@@ -129,6 +129,10 @@ export interface ChatMessage {
   name?: string
   /** provider-specific blocks that must be replayed verbatim (Anthropic thinking signatures) */
   providerBlocks?: unknown[]
+  /** the model's own reasoning for this reply; sent back only to families that need it (agent/modelProfile.ts) */
+  thought?: string
+  /** DeepSeek / Kimi thinking: reasoning sent back on the wire during a tool loop (set by withReplay, never stored) */
+  reasoning_content?: string
 }
 
 export interface Attachment {
@@ -430,4 +434,49 @@ export interface CompletionResponse {
   skipped?: 'off' | 'no_model' | 'cancelled' | 'rate_limited' | 'paused'
   /** the model call failed (shown by the status bar indicator) */
   error?: string
+}
+
+// ---------------- Providers: Groq, OpenRouter, local models, capabilities (0.4.0) ----------------
+// ModelInfo and Settings below extend the interfaces above (TypeScript interface merging), so this block stays additive.
+
+export type LocalProviderId = 'ollama' | 'lmstudio'
+
+/** One normalised capability record per model, filled by every provider's discovery. undefined = not reported. */
+export interface ModelCaps {
+  tools: boolean
+  vision: boolean
+  reasoning: boolean
+  contextTokens?: number
+  /** OpenRouter ":free" variants or zero prompt and completion pricing */
+  free: boolean
+  /** runs on this PC (Ollama, LM Studio) */
+  local: boolean
+}
+
+export interface ModelInfo {
+  /** native tool calling (function calling) */
+  tools?: boolean
+  /** a reasoning / thinking model (shown as a badge; `thinking` says whether a parameter controls it) */
+  reasoning?: boolean
+  free?: boolean
+  local?: boolean
+}
+
+export interface Settings {
+  /** base URLs of local model servers (defaults: Ollama http://localhost:11434, LM Studio http://localhost:1234) */
+  localUrls?: Partial<Record<LocalProviderId, string>>
+  /** model keys picked most recently, newest first (shown at the top of the model menu) */
+  recentModels?: string[]
+}
+
+/** Whether a local model server answered on the last check, and what it offers. */
+export interface LocalProviderStatus {
+  provider: LocalProviderId
+  baseUrl: string
+  running: boolean
+  models: number
+  checkedAt: string
+  error?: string
+  /** LM Studio: the smallest loaded context length when it is too small for agent prompts */
+  smallContext?: number
 }
