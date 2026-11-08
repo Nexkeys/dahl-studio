@@ -138,6 +138,9 @@ export interface ChatRequest {
   messages: ChatMessage[]
   tools?: unknown[]
   temperature?: number
+  /** family sampling settings (agent/modelProfile.ts); top_k is only set for providers that accept it */
+  topP?: number
+  topK?: number
   /** provider-specific body fields (reasoning_effort, chat_template_kwargs, ...) */
   extra?: Record<string, unknown>
   /** whether image parts may be sent; otherwise they are replaced by a text note */
@@ -186,6 +189,7 @@ export function toOpenAIMessages(messages: ChatMessage[], vision: boolean): unkn
     if (m.tool_calls?.length) out.tool_calls = m.tool_calls
     if (m.tool_call_id) out.tool_call_id = m.tool_call_id
     if (m.name) out.name = m.name
+    if (m.reasoning_content) out.reasoning_content = m.reasoning_content
     return out
   })
 }
@@ -251,6 +255,8 @@ export async function streamChat(
   const body: Record<string, unknown> = { model: req.model, messages: toOpenAIMessages(req.messages, !!req.vision), stream: true }
   if (req.tools && req.tools.length) body.tools = req.tools
   if (req.temperature !== undefined) body.temperature = req.temperature
+  if (req.topP !== undefined) body.top_p = req.topP
+  if (req.topK !== undefined) body.top_k = req.topK
   if (req.extra) Object.assign(body, req.extra)
   opts.shape?.(body)
 

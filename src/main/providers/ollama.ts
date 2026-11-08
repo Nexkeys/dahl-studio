@@ -89,6 +89,8 @@ export async function ollamaStream(req: OllamaRequest, signal: AbortSignal, cb: 
   }
   const options: Record<string, unknown> = { num_ctx: req.numCtx }
   if (req.temperature !== undefined) options.temperature = req.temperature
+  if (req.topP !== undefined) options.top_p = req.topP
+  if (req.topK !== undefined) options.top_k = req.topK
   const body: Record<string, unknown> = { model: req.model, messages, stream: true, options }
   if (tools && req.nativeTools) body.tools = tools
   if (req.think !== undefined) body.think = req.think
