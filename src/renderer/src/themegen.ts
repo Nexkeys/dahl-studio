@@ -126,16 +126,18 @@ export function generate(s: ThemeSpec): Palette {
     }
     return base
   }
-  const accentSoft = tint(surface, accent, dark ? 0.22 : 0.14, [[accent, T.accent], [text, T.text], [muted, 3]])
-  const onAccent = [oklch(0.99, 0.01, s.accent.h), oklch(0.17, 0.05, s.accent.h)]
-  const accentText = contrast(onAccent[0], accent) >= contrast(onAccent[1], accent) ? onAccent[0] : onAccent[1]
-  const selection = tint(editorBg, accent, dark ? 0.34 : 0.24, [[text, T.text]])
-
   const hue = { danger: 27, warn: 75, ok: 150, ...s.hues }
   const status = (h: number, c: number, ld: number, ll: number): string => fit({ l: dark ? ld : ll, c, h }, [bg, surface, editorBg, lineHl], T.text, dir)
   const danger = status(hue.danger, 0.17, 0.72, 0.52)
   const warn = status(hue.warn, 0.15, 0.82, 0.58)
   const ok = status(hue.ok, 0.14, 0.76, 0.52)
+  // status glyphs must stay readable on a highlighted row too
+  const glyphs: [string, number][] = [[danger, 3], [warn, 3], [ok, 3]]
+
+  const accentSoft = tint(surface, accent, dark ? 0.22 : 0.14, [[accent, T.accent], [text, T.text], [muted, 3], ...glyphs])
+  const onAccent = [oklch(0.99, 0.01, s.accent.h), oklch(0.17, 0.05, s.accent.h)]
+  const accentText = contrast(onAccent[0], accent) >= contrast(onAccent[1], accent) ? onAccent[0] : onAccent[1]
+  const selection = tint(editorBg, accent, dark ? 0.34 : 0.24, [[text, T.text], ...glyphs])
   const addBg = tint(editorBg, ok, dark ? 0.2 : 0.16, [[text, T.text]])
   const delBg = tint(editorBg, danger, dark ? 0.2 : 0.14, [[text, T.text]])
 
@@ -146,7 +148,7 @@ export function generate(s: ThemeSpec): Palette {
     : away(surface, textLch, (st.separation === 'none' ? 1.12 : 1.25) + 0.25 * k)
 
   const chromeT = { none: 0, subtle: 0, tinted: dark ? 0.08 : 0.05, strong: dark ? 0.11 : 0.07 }[st.chrome]
-  const chrome = chromeT ? tint(surface, accent, chromeT, [[text, T.text], [muted, T.muted], [accent, T.accent]]) : surface
+  const chrome = chromeT ? tint(surface, accent, chromeT, [[text, T.text], [muted, T.muted], [accent, T.accent], [danger, T.text], [warn, T.text], [ok, T.text]]) : surface
   const railOn = st.chrome === 'none' ? surface2 : st.chrome === 'strong' ? accent : accentSoft
   const railOnText = st.chrome === 'none' ? text : st.chrome === 'strong' ? accentText : accent
 

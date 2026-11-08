@@ -6,7 +6,7 @@ export const SPECS_B: ThemeSpec[] = [
     id: 'midnight-terminal', name: 'Midnight Terminal', tagline: 'Deep navy, calm green, long-session focus.', group: 'dark',
     base: { l: 0.19, c: 0.03, h: 255 }, accent: { l: 0.76, c: 0.14, h: 160 }, contrast: 30,
     syn: { keyword: '#c792ea', string: '#a5d6a7', number: '#ffab70', comment: '#7a8794', type: '#7dcfff', func: '#82aaff', variable: '#d8dee6', punct: '#8b95a3' },
-    structure: { surfaces: 'elevated', separation: 'hairline', radius: 6, density: 'regular', font: FONTS.text, headFont: FONTS.text, headWeight: 600, labels: 'normal', iconStroke: 1.5, chrome: 'subtle', motion: 'calm' }
+    structure: { surfaces: 'elevated', separation: 'hairline', radius: 6, density: 'compact', font: FONTS.text, headFont: FONTS.text, headWeight: 600, labels: 'normal', iconStroke: 1.5, chrome: 'none', motion: 'calm' }
   },
   {
     id: 'forest-syntax', name: 'Forest Syntax', tagline: 'Deep moss, amber light, organic calm.', group: 'dark',

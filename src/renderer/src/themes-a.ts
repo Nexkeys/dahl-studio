@@ -24,7 +24,7 @@ export const SPECS_A: ThemeSpec[] = [
   },
   {
     id: 'sakura-flow', name: 'Sakura Flow', tagline: 'Blossom paper, rose accents, drifting petals.', group: 'light',
-    base: { l: 0.95, c: 0.05, h: 355 }, accent: { l: 0.55, c: 0.17, h: 357 }, contrast: 40,
+    base: { l: 0.925, c: 0.055, h: 352 }, accent: { l: 0.55, c: 0.17, h: 357 }, contrast: 40,
     syn: { keyword: '#c2185b', string: '#5a8f3e', number: '#c96b2c', comment: '#9a7f88', type: '#7a5cc4', func: '#d6457a', variable: '#3b2a30', punct: '#94737e' },
     structure: { surfaces: 'elevated', separation: 'hairline', radius: 16, density: 'roomy', font: FONTS.text, headFont: FONTS.soft, headWeight: 700, labels: 'normal', iconStroke: 1.75, chrome: 'tinted', motion: 'lively' },
     effect: 'petals', backdrop: 'radial-gradient(circle at 100% 0%, rgba(214,69,122,0.10), transparent 45%)'
