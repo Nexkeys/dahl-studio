@@ -73,7 +73,7 @@ export function TerminalPanel({ root }: { root: string }) {
         <NewTerminalButton root={root} />
         <span className="grow" />
         <div className="row-actions">
-          {devUrl && <button className="btn small ghost term-preview" title={`Open ${devUrl} in Preview`} onClick={() => openPreview(root, devUrl)}><Globe size={12} /> <span className="ellipsis">Open {hostOf(devUrl)} in Preview</span></button>}
+          {devUrl && <button className="btn small ghost term-preview" title={`Open ${devUrl} in Preview`} onClick={() => openPreview(root, devUrl)}><Globe size={12} /> <span className="ellipsis">Preview {hostOf(devUrl)}</span></button>}
           {canStop && <button className="btn small ghost" title={live.running ? `Stop ${live.running} (Ctrl+C)` : 'Send Ctrl+C'} onClick={() => sendInterrupt(live.id)}><Square size={11} /> Stop</button>}
           <button className="icon-btn" title="Clear" aria-label="Clear terminal" disabled={!active} onClick={() => active && clearTerminal(active.id)}><Eraser size={14} /></button>
           <button className="icon-btn danger" title="Kill terminal" aria-label="Kill terminal" disabled={!active} onClick={() => active && killTerminal(active.id)}><Trash2 size={14} /></button>

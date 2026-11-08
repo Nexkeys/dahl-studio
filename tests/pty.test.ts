@@ -169,7 +169,7 @@ describe('shell launch', () => {
     expect(out).toContain('\x1b]633;A\x07')
     expect(out).toContain('\x1b]633;B\x07')
     expect(out).not.toMatch(/error|exception/i)
-  })
+  }, 120_000) // PowerShell takes 30 s and more to start while the PC is busy
 
   it.runIf(process.platform === 'win32')('in a real ConPTY, PowerShell reports the command line, start and exit code', async () => {
     const { spawn } = await import('node-pty')
