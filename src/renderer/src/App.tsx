@@ -23,6 +23,7 @@ import { ToolboxView } from './components/ToolboxView'
 import { GitView } from './components/GitView'
 import { LogsView } from './components/LogsView'
 import { CommandPalette } from './components/CommandPalette'
+import { CompletionStatus } from './components/CompletionStatus'
 import iconUrl from './assets/icon.png'
 
 // the preview browser (and its <webview>) loads only when the panel is first opened
@@ -78,6 +79,7 @@ function StatusBar({ root }: { root: string | null }) {
       {agents > 0 && <button className="sb-btn sb-item" onClick={() => set({ view: 'agents' })}><Users size={12} /> {agents} agents running</button>}
       <span className="grow" />
       <UpdateBadge />
+      {root && <CompletionStatus />}
       <button className="sb-btn" onClick={() => set({ palette: true })}><Command size={12} /> Ctrl+K</button>
       {root && <button className="sb-btn" onClick={() => set({ showTerminal: !showTerminal })} aria-pressed={showTerminal}><PanelBottom size={12} /> Terminal</button>}
       {root && <button className="sb-btn" title="Preview" onClick={() => (showPreview ? set({ showPreview: false }) : openPreview(root))} aria-pressed={showPreview}><Globe size={12} /> Preview</button>}

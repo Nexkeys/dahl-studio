@@ -389,3 +389,39 @@ export interface McpStatus {
   pid?: number
   startedAt?: string
 }
+
+// ---------------- Tab completions (grey ghost text in the editor) ----------------
+// The two settings fields are merged into Settings here (interface merging), so they stay in this block.
+export interface Settings {
+  /** Tab completions on or off. Unset counts as off: nothing is sent until a completion model is chosen. */
+  tabCompletions?: boolean
+  /** model key ("<provider id>:<model id>") used for Tab completions; null or unset = none chosen */
+  completionModel?: string | null
+}
+
+export interface CompletionRequest {
+  /** renderer sequence number; completion:cancel uses it */
+  id: number
+  /** file path relative to the project root (shown to the model as the file name) */
+  path: string
+  /** Monaco language id */
+  language: string
+  /** text before and after the cursor (the main process trims both to its prompt budget) */
+  prefix: string
+  suffix: string
+  /** a few lines from other open tabs, as extra context */
+  related?: { path: string; text: string }[]
+  /** asked for by the user (Alt+\, "Trigger Inline Suggestion") rather than by typing: skips the cache and the rate limit */
+  explicit?: boolean
+}
+
+export interface CompletionResponse {
+  /** the suggestion; missing or empty = nothing to show */
+  text?: string
+  cached?: boolean
+  ms?: number
+  /** why no model call was made */
+  skipped?: 'off' | 'no_model' | 'cancelled' | 'rate_limited' | 'paused'
+  /** the model call failed (shown by the status bar indicator) */
+  error?: string
+}
