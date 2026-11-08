@@ -3,6 +3,7 @@ import { KeyRound, RefreshCw, Trash2, CheckCircle2, XCircle, ShieldCheck, Palett
 import type { EffectsMode, KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
 import { THEMES, applyEffects, applyTheme, isLowEnd, type Theme } from '../themes'
+import { CompletionSettings } from './CompletionSettings'
 
 const KEY_HELP: Record<string, string> = {
   primary: 'Main Dahl key. Used first for Dahl models.',
@@ -144,6 +145,7 @@ export function SettingsView() {
           </div>
         ))}
       </section>
+      <CompletionSettings />
       <section>
         <h2><ShieldCheck size={16} /> Behaviour</h2>
         <label className="check"><input type="checkbox" checked={s.notifications} onChange={(e) => updateSettings({ notifications: e.target.checked })} /> Windows notifications when Dahl needs approval, finishes, fails or pauses (only while Dahl Studio is in the background) <button className="btn tiny ghost" onClick={async (e) => { e.preventDefault(); const ok = await api.invoke<boolean>('notify:test'); if (!ok) useStore.getState().notify('Notifications are not supported or are blocked in Windows settings', 'error') }}>Send test notification</button></label>

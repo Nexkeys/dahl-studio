@@ -12,6 +12,7 @@ import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { registerCompletionIpc } from './completion/ipc'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -302,4 +303,6 @@ export function registerIpc(): void {
     // used by the renderer's 'auto' effects mode
     gpu: String(app.getGPUFeatureStatus().gpu_compositing), cpus: os.cpus().length
   }))
+  // ---- Tab completions (completion/ipc.ts) ----
+  registerCompletionIpc()
 }
