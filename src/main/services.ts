@@ -17,6 +17,7 @@ import { formatBreakdown, PIXEL_ANALYSIS_JS, windowsOcr } from './tools/image'
 import { appendJsonl, nowIso, redact } from './util'
 import { probeEnvironment } from './envProbe'
 import { batchDeltas } from './eventBatch'
+import { createSkillService } from './skills/service'
 
 export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
 // Smoke tests use an isolated profile so they never touch the user's real settings and can run beside the installed app
@@ -143,6 +144,10 @@ async function visionCandidates(): Promise<{ key: string; label: string }[]> {
   return out.slice(0, 2)
 }
 
+/** Built-in skills: the top-level skills/ folder (extraResources in the installed app, the repo in development). */
+export const builtinSkillsDir = (): string => (app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.join(app.getAppPath(), 'skills'))
+export const skills = createSkillService({ builtinDir: builtinSkillsDir, userDir: path.join(APP_DIR, 'skills'), log: (m) => void log('info', m) })
+
 const sendAgentEvent = batchDeltas((e) => send('agent:event', e))
 export const runner = new AgentRunner({
   backend: models,
@@ -158,6 +163,7 @@ export const runner = new AgentRunner({
   web: { search: (q, max, sig) => webSearch(q, sig, max), fetch: (u, sig) => webFetch(u, sig) },
   analyzeImage,
   environment: () => probeEnvironment(),
+  skills: (p) => skills.load(p),
   mcp: {
     toolsFor: (p, only, problems, waitMs) => mcp.toolsFor(p, only, problems, waitMs),
     connectors: (p) => mcp.connectors(p),

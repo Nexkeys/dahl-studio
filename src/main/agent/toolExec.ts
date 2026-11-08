@@ -14,6 +14,7 @@ import { parseToolArgs } from './args'
 import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
+import { execReadSkillFile, execUseSkill } from '../skills/tools'
 
 export interface ToolResult {
   ok: boolean
@@ -152,6 +153,11 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return await execGithub(c, a ?? {})
       case 'ask_user':
         return await execAskUser(c, a ?? {})
+      case 'use_skill':
+      case 'read_skill_file': {
+        const skills = c.deps.skills ? (await c.deps.skills(root)).skills : []
+        return name === 'use_skill' ? await execUseSkill(skills, a ?? {}) : await execReadSkillFile(skills, a ?? {})
+      }
       case 'web_search': {
         if (!c.deps.web) return { ok: false, text: 'Web research is not available.' }
         const res = await c.deps.web.search(String(a.query), Math.min(Number(a.max_results) || 8, 15), c.signal)

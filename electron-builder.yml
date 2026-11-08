@@ -12,6 +12,11 @@ files:
 extraResources:
   - from: resources/icon.png
     to: icon.png
+  # built-in Agent Skills (SKILL.md folders), read at runtime from <resources>/skills (src/main/services.ts builtinSkillsDir)
+  - from: skills
+    to: skills
+    filter:
+      - "**/*"
 asarUnpack:
   - resources/**
   - node_modules/**

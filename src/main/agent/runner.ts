@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { promises as fsp } from 'node:fs'
-import type { AgentEvent, AgentInfo, AgentRole, ChatMessage, ContentPart, McpConnectorInfo, McpToolRef, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
+import type { AgentEvent, AgentInfo, AgentRole, ChatMessage, ContentPart, InstructionFileInfo, McpConnectorInfo, McpToolRef, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
 import { DahlError, type ChatRequest, type ChatResult, type StreamCallbacks } from '../dahl/client'
 import { projectOutline, resolveInside, writeText } from '../fs/workspace'
 import { ProjectStore } from '../store/projectStore'
@@ -12,6 +12,9 @@ import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
 import { parseToolArgs } from './args'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
+import type { Skill } from '../skills/loader'
+import { expandSkillCommand, skillsPromptSection } from '../skills/prompt'
+import { loadInstructions, workingSet } from '../instructions'
 
 export { repairHistory, closeDanglingToolCalls, compact } from './history'
 
@@ -45,6 +48,8 @@ export interface RunnerDeps {
   maxIterations?: number
   /** installed developer tools on this PC, one line (see envProbe.ts) */
   environment?(): Promise<string>
+  /** Agent Skills for this project (built-in, user, project); enables use_skill, read_skill_file and /<skill> */
+  skills?(project: string): Promise<{ skills: Skill[] }>
 }
 
 interface RunCtl {
@@ -63,6 +68,8 @@ interface RunCtl {
   turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number; delegations?: number }
   prompt: string
   answer: string
+  /** instruction files already shown in this turn's "Instructions loaded" chip */
+  instructionsShown?: Set<string>
 }
 interface AgentCtx {
   info: AgentInfo
@@ -131,14 +138,18 @@ export class AgentRunner {
     run.commandsRun ??= []
     repairHistory(run.messages)
     const images = new Map<string, { mediaType: string; data: string }>()
-    run.messages.push({ role: 'user', content: buildUserContent(req.prompt, req.attachments ?? [], images) })
+    // "/<skill> args": the model gets the skill's instructions; the chat keeps showing what the user typed
+    const skillRun = !req.mcpServers && this.deps.skills && req.prompt.trim().startsWith('/')
+      ? await expandSkillCommand((await this.deps.skills(req.project).catch(() => ({ skills: [] as Skill[] }))).skills, req.prompt)
+      : null
+    run.messages.push({ role: 'user', content: buildUserContent(skillRun?.text ?? req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
       run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], prompt: req.prompt, answer: '',
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
     this.addItem(ctl, { kind: 'user', text: req.prompt, attachments: (req.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name })) })
-    this.log(ctl, 'info', `Turn started: mode=${run.mode} model=${run.model} thinking=${run.thinking} web=${ctl.web} attachments=${req.attachments?.length ?? 0}${run.mcpServers ? ` mcp=${run.mcpServers}` : ''}`)
+    this.log(ctl, 'info', `Turn started: mode=${run.mode} model=${run.model} thinking=${run.thinking} web=${ctl.web} attachments=${req.attachments?.length ?? 0}${run.mcpServers ? ` mcp=${run.mcpServers}` : ''}${skillRun ? ` skill=${skillRun.skill.name} (${skillRun.skill.location})` : ''}`)
     await store.saveRun(run)
     this.emitRun(ctl)
     void this.runTurn(ctl)
@@ -285,6 +296,7 @@ export class AgentRunner {
   private allowedTools(ctl: RunCtl, a: AgentCtx): string[] {
     const base: string[] = toolsFor(a.info.role, ctl.run.mode, ctl.web)
     if (a.isLead) base.push(...this.activeMcp(ctl).map((t) => t.fnName), ...(this.loadableConnectors(ctl).length ? ['use_connector'] : []))
+    if (a.isLead && this.deps.skills) base.push('use_skill', 'read_skill_file')
     return base
   }
 
@@ -294,6 +306,7 @@ export class AgentRunner {
       for (const t of this.activeMcp(ctl))
         defs.push({ type: 'function', function: { name: t.fnName, description: `[MCP ${t.serverName}] ${t.tool.description ?? t.tool.name}`.slice(0, 1000), parameters: t.tool.inputSchema ?? { type: 'object', properties: {} } } })
       if (this.loadableConnectors(ctl).length) defs.push(USE_CONNECTOR)
+      if (this.deps.skills) defs.push(TOOL_DEFS.use_skill, TOOL_DEFS.read_skill_file)
     }
     return defs
   }
@@ -348,6 +361,12 @@ export class AgentRunner {
     const lastText = typeof last?.content === 'string' ? last.content : (last?.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ')
     const memory = (await ctl.store.relevantMemory(`${run.objective} ${lastText} ${a.isLead ? '' : a.info.task}`)).map((m) => m.text)
     const reasoning = this.deps.reasoning ? await this.deps.reasoning(run.project) : { name: 'Default', prompt: 'Reason carefully and verify your work.' }
+    const skills = a.isLead && this.deps.skills ? await this.deps.skills(run.project).then((s) => skillsPromptSection(s.skills), () => '') : ''
+    // CLAUDE.md, AGENTS.md and Cursor/Copilot rules for the files this agent is working on (re-read every step)
+    const attached = run.transcript.flatMap((t) => (t.kind === 'user' ? (t.attachments ?? []).filter((x) => x.kind === 'file' || x.kind === 'selection').map((x) => x.name) : []))
+    const ws = workingSet(a.messages, a.isLead ? attached : a.info.files)
+    const ins = await loadInstructions(run.project, { ...ws, prompt: lastText }).catch((e) => (this.log(ctl, 'error', `instruction files: ${(e as Error).message}`), null))
+    if (a.isLead && ins?.files.length) this.noteInstructions(ctl, ins.files)
     return systemPrompt({
       role: a.info.role, mode: run.mode, projectName: path.basename(run.project), outline: await projectOutline(run.project), memory,
       plan: run.plan.map((s) => `[${s.status}] ${s.title}`).join('\n'), reasoning, thinking: THINKING_GUIDANCE[run.thinking ?? 'off'],
@@ -355,8 +374,20 @@ export class AgentRunner {
       connectors: a.isLead ? this.connectorLines(ctl) : [],
       environment: this.deps.environment ? await this.deps.environment().catch(() => '') : '',
       mcpFocus: !a.isLead || !run.mcpServers ? undefined : run.mcpServers === 'all' ? 'all' : [...new Set(ctl.mcpTools.map((t) => t.serverName))],
-      progress: (await this.deps.getSettings()).maintainProgress ? await readProgress(run.project) : ''
+      progress: (await this.deps.getSettings()).maintainProgress ? await readProgress(run.project) : '',
+      skills, instructions: ins?.text
     })
+  }
+
+  /** The "Instructions loaded" chip: once at the start of a turn, then again only when more files apply. */
+  private noteInstructions(ctl: RunCtl, files: InstructionFileInfo[]): void {
+    const shown = (ctl.instructionsShown ??= new Set())
+    const first = shown.size === 0
+    const fresh = files.filter((f) => !shown.has(f.path))
+    for (const f of fresh) shown.add(f.path)
+    const loaded = fresh.filter((f) => !f.listed)
+    if (!fresh.length || (!first && !loaded.length)) return
+    this.addItem(ctl, { kind: 'status', text: `${first ? 'Instructions loaded' : 'More instructions loaded'}: ${(loaded.length ? loaded : fresh).map((f) => f.path).join(', ')}`, instructions: first ? files : fresh })
   }
 
   /** The agent loop shared by the lead agent and sub-agents. Returns the agent's final text. */
