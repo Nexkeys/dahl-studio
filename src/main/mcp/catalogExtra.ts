@@ -91,7 +91,7 @@ export const EXTRA_CATALOG: McpCatalogEntry[] = [
     license: 'Apache-2.0',
     source: 'https://docs.maestro.dev/getting-started/maestro-mcp',
     runtime: 'Maestro CLI (Java)',
-    version: 'the Maestro CLI you install',
+    version: 'CLI (installed separately)',
     permissions: ['Run UI flows on the emulator or device'],
     access: 'Devices visible to adb',
     dataLeaves: 'Screen content goes to the AI model (MAESTRO_CLI_NO_ANALYTICS is set)',

@@ -50,7 +50,7 @@ export function McpCard({ entry, cfg, status, test, onChange, prereq, checking, 
         <span className={`mcp-icon ${state}`}>{state === 'connected' ? <PlugZap size={16} /> : <Plug size={16} />}</span>
         <div className="grow">
           <div className="mcp-name">{name} {entry && <span className={`pill cls-${entry.classification}`}>{CLASS_LABEL[entry.classification]}</span>} {cfg?.custom && <span className="pill">Custom</span>}</div>
-          <div className="muted small">{entry ? `${entry.publisher} · v${entry.version} · ${entry.license}` : cfg?.transport === 'http' ? cfg.url : `${cfg?.command} ${(cfg?.args ?? []).join(' ')}`}</div>
+          <div className="muted small">{entry ? `${entry.publisher} · ${/^\d/.test(entry.version) ? 'v' : ''}${entry.version} · ${entry.license}` : cfg?.transport === 'http' ? cfg.url : `${cfg?.command} ${(cfg?.args ?? []).join(' ')}`}</div>
         </div>
         <span className={`state-dot ${state}`} title={status?.error ?? state} />
         <span className="small muted">{cfg ? (cfg.enabled ? state : 'disabled') : 'not installed'}</span>
