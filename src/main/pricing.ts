@@ -3,6 +3,8 @@ import { DAHL_USD_PER_M, LOCAL_PROVIDERS, PRICE_SOURCES, PRICE_TABLE, PRICES_CHE
 
 export { PRICES_CHECKED } from './priceTable'
 export { emptyTally, formatUsd, mergeTally } from '@shared/cost'
+import { localDate } from '@shared/cost'
+export { localDate }
 
 /**
  * Token counts of one request. promptTokens is ALL input, including cache reads and cache writes (adapters convert
@@ -22,11 +24,6 @@ export interface CostResult {
   /** reported by the provider, or certain (local models) */
   exact: boolean
   source: 'provider' | 'table' | 'dahl' | 'local' | 'unknown'
-}
-
-/** Local calendar date, YYYY-MM-DD (budgets and "today" follow the user's clock, not UTC). */
-export function localDate(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function splitModelKey(key: string): { provider: string; id: string } {

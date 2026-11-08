@@ -1,6 +1,17 @@
-import type { CostTally } from './types'
+import type { CostTally, QualityPreset, ThinkingLevel } from './types'
 
 /** Cost helpers shared by the main process and the UI. */
+
+/** The day the list prices in src/main/priceTable.ts were copied from the providers' pricing pages. */
+export const PRICES_CHECKED = '2026-11-07'
+
+/** Thinking level each quality preset selects (the composer switch writes it to settings.thinking). */
+export const PRESET_THINKING: Record<QualityPreset, ThinkingLevel> = { economy: 'low', balanced: 'medium', best: 'high' }
+
+/** Local calendar date, YYYY-MM-DD (budgets and "today" follow the user's clock, not UTC). */
+export function localDate(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export function emptyTally(): CostTally {
   return { usd: 0, requests: 0, unknown: 0, estimated: false, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 }

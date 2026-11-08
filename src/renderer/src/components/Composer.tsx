@@ -4,6 +4,7 @@ import type { AgentMode, Attachment, McpServerConfig, StartRunRequest, ThinkingL
 import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { SKILLS } from './skills'
+import { PresetSwitch } from './PresetSwitch'
 
 const NO_ATTS: Attachment[] = []
 const MODES: { id: AgentMode; label: string; icon: typeof Hammer; hint: string }[] = [
@@ -183,6 +184,7 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
             <button key={m.id} role="radio" aria-checked={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => set({ mode: m.id })}><m.icon size={13} /> {m.label}</button>
           ))}
         </div>
+        <PresetSwitch />
         <label className="think" title={model?.thinking === 'native' ? 'Uses the provider\'s native reasoning setting' : 'App-level thinking guidance (this model has no documented reasoning parameter)'}>
           <Brain size={13} />
           <select value={settings?.thinking ?? 'medium'} onChange={(e) => updateSettings({ thinking: e.target.value as ThinkingLevel })} aria-label="Thinking depth">

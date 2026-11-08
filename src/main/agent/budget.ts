@@ -1,8 +1,7 @@
-import type { AgentRole, ChatMessage, CostTally, ModelRole, QualityPreset, RunState, Settings, ThinkingLevel } from '@shared/types'
+import type { AgentRole, ChatMessage, CostTally, ModelRole, RunState, Settings } from '@shared/types'
 import { formatUsd } from '@shared/cost'
 
-/** Thinking level each quality preset selects (the composer switch writes it to settings.thinking). */
-export const PRESET_THINKING: Record<QualityPreset, ThinkingLevel> = { economy: 'low', balanced: 'medium', best: 'high' }
+export { PRESET_THINKING } from '@shared/cost'
 
 /** Which per-role model setting each agent role uses (null: the main model). */
 export const ROLE_OF_AGENT: Record<AgentRole, ModelRole | null> = {

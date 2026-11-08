@@ -3,8 +3,9 @@
  * Only models whose price was confirmed on that page are listed; anything else shows as "unknown" in the app.
  * Costs computed from this table are estimates (the provider's invoice is authoritative), and the UI says so.
  * Model ids are exact API ids (Anthropic dated ids like claude-opus-4-1-20250805 are matched without the date).
+ * Update PRICES_CHECKED (src/shared/cost.ts) whenever these are re-checked.
  */
-export const PRICES_CHECKED = '2026-11-07'
+export { PRICES_CHECKED } from '@shared/cost'
 
 export const PRICE_SOURCES: Record<string, string> = {
   openai: 'https://developers.openai.com/api/docs/pricing',
