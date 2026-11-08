@@ -132,7 +132,9 @@ export class PreviewController implements BrowserBridge {
     const g = this.live()
     if (!g.debugger.isAttached()) this.attach(g)
     if (!g.debugger.isAttached()) throw new Error('The Preview page cannot be controlled right now (its DevTools may be holding it). Close the Preview DevTools and try again.')
-    return withTimeout(g.debugger.sendCommand(method, params) as Promise<T>, ms, method)
+    const t0 = Date.now()
+    this.deps.log(`DEBUG cdp> ${method}`)
+    return withTimeout(g.debugger.sendCommand(method, params) as Promise<T>, ms, method).finally(() => this.deps.log(`DEBUG cdp< ${method} ${Date.now() - t0}ms`))
   }
 
   private async waitGuest(after: number, ms: number): Promise<WebContents | null> {

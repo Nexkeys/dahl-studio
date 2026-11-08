@@ -13,7 +13,7 @@ import type { BrowserBridge } from '../agent/browserTools'
  * Approvals are always declined here (browser_eval cannot run through this path). In a smoke run every result is
  * appended to <DAHL_SMOKE>/browser-tools.json and returned screenshots are saved next to it as PNG files.
  */
-export function registerPreviewTestIpc(bridge: BrowserBridge, getSettings: () => Promise<Settings>): void {
+export function registerPreviewTestIpc(bridge: BrowserBridge, getSettings: () => Promise<Settings>, log: (msg: string) => void): void {
   const smoke = process.env.DAHL_SMOKE
   const results: unknown[] = []
   ipcMain.handle('preview:test', async (_e, project: string, tool: string, args: Record<string, unknown> = {}, mode: 'build' | 'plan' | 'review' = 'build') => {
@@ -30,8 +30,10 @@ export function registerPreviewTestIpc(bridge: BrowserBridge, getSettings: () =>
         emitPlan: () => {}, onChanged: () => {}, status: () => {}
       } as unknown as ExecCtx
       const t0 = Date.now()
+      log(`preview:test ${tool} started`)
       const r = await execTool(c, String(tool), JSON.stringify(args ?? {}), toolsFor('lead', mode, false))
       const out = { tool, args, mode, ok: r.ok, ms: Date.now() - t0, text: r.text, images: (r.images ?? []).map((i) => i.name) }
+      log(`preview:test ${tool} ${r.ok ? 'ok' : 'failed'} in ${out.ms} ms`)
       if (smoke) {
         for (const im of r.images ?? []) await fs.writeFile(path.join(smoke, `browser-${im.name.replace(/[^\w.-]/g, '_')}`), Buffer.from(im.data, 'base64'))
         results.push(out)

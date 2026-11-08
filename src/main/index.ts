@@ -130,7 +130,7 @@ app.whenReady().then(async () => {
   registerIpc()
   setupPreviewSession()
   // runs browser_* tools without a model, for smoke and dev checks only
-  if (process.env.DAHL_SMOKE || !app.isPackaged) registerPreviewTestIpc(preview, () => settings.get())
+  if (process.env.DAHL_SMOKE || !app.isPackaged) registerPreviewTestIpc(preview, () => settings.get(), (m) => void log('info', m))
   const interrupted: RunState[] = []
   for (const p of (await settings.get()).openProjects) await new ProjectStore(p).markInterrupted((r) => interrupted.push(r)).catch(() => 0)
   await buildResumeOffer(interrupted)
