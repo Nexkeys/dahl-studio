@@ -7,7 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultModel: null,
   thinking: 'medium',
   preferredKey: 'primary',
-  keyNames: { primary: 'Dahl primary', secondary: 'Dahl secondary', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', nvidia: 'NVIDIA' },
+  keyNames: { primary: 'Dahl primary', secondary: 'Dahl secondary', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', nvidia: 'NVIDIA', groq: 'Groq', openrouter: 'OpenRouter' },
   autoApproveWrites: false,
   autoApproveCommands: false,
   autoMemory: true,
