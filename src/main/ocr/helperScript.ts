@@ -52,10 +52,13 @@ while ($true) {
     }
     $angle = if ($null -ne $result.TextAngle) { [double]$result.TextAngle } else { 0 }
     [void]$sb.Append('],"angle":' + $angle.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '}')
-    $stream.Dispose()
     [Console]::Out.WriteLine($sb.ToString())
   } catch {
     [Console]::Out.WriteLine('{"id":' + $id + ',"error":"' + (Esc $_.Exception.Message) + '"}')
+  } finally {
+    # release the file at once, so the caller can delete (or rewrite) it
+    if ($null -ne $bitmap) { $bitmap.Dispose(); $bitmap = $null }
+    if ($null -ne $stream) { $stream.Dispose(); $stream = $null }
   }
   [Console]::Out.Flush()
 }

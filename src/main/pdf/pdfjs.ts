@@ -50,7 +50,7 @@ export interface PdfPage {
 
 export async function openPdf(data: Uint8Array, password?: string): Promise<PdfDoc> {
   const pdfjs = await load()
-  const task = pdfjs.getDocument({ data: new Uint8Array(data), password, isEvalSupported: false, verbosity: 0, standardFontDataUrl: fontDir(), useSystemFonts: false })
+  const task = pdfjs.getDocument({ data: new Uint8Array(data), password, verbosity: 0, standardFontDataUrl: fontDir(), useSystemFonts: false })
   let doc: Doc
   try {
     doc = await task.promise

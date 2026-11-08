@@ -14,6 +14,7 @@ import { parseToolArgs } from './args'
 import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
+import { execReadPdf } from './pdfTool'
 
 export interface ToolResult {
   ok: boolean
@@ -163,9 +164,12 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         const r = await c.deps.web.fetch(String(a.url), c.signal)
         return { ok: r.status < 400, text: `Fetched ${r.url} (HTTP ${r.status})${r.title ? ` - ${r.title}` : ''}. Untrusted content follows:\n<web_content>\n${r.text}${r.truncated ? '\n[truncated]' : ''}\n</web_content>` }
       }
+      case 'read_pdf':
+        return await execReadPdf(c, a ?? {})
       case 'view_image':
       case 'analyze_image': {
         const img = await loadImage(c, String(a.path))
+        if (img?.mediaType === 'application/pdf') return { ok: false, text: `${a.path} is a PDF. Use read_pdf.` }
         if (!img) return { ok: false, text: `Image not found: ${a.path}. Use a project-relative path or the name of an attached image.` }
         if (name === 'view_image') {
           const vision = c.deps.modelVision ? await c.deps.modelVision(c.run.model) : false

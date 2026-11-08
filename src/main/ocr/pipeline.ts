@@ -1,6 +1,6 @@
 import { compareReadings, resolveDisputes } from './consensus'
 import { groupLines, median, mergeTiles, tileGrid, toOriginal, union, type Box, type OcrLine, type OcrWord } from './geometry'
-import { isDark, prepare, removeQuietly, rgbPixels, writeRegion, writeStrip, type Raw } from './preprocess'
+import { contrastSpread, isDark, prepare, removeQuietly, rgbPixels, writeRegion, writeStrip, type Raw } from './preprocess'
 import { windowsOcrHelper, type OcrInfo, type RawOcr } from './windowsOcr'
 
 /** Text height OCR reads best at, in pixels (word box height after scaling). */
@@ -65,9 +65,9 @@ export function chooseScale(textHeight: number, W: number, H: number): number {
 }
 
 /**
- * Full OCR of one image: decode, detect dark mode, a quick first reading to measure the text size, a reading at the
- * scale that brings text to about 30 px, a second differently processed reading, and a third, larger reading of
- * every region where the two disagree (all such regions stacked into one strip, so it costs one OCR call).
+ * Full OCR of one image: decode, detect dark mode (inverted), reading A upscaled (re-read at the scale that brings
+ * the measured text height to about 30 px when it is far off), reading B at another scale, and a third, larger
+ * reading of every region where A and B disagree (all such regions stacked into one strip: one OCR call).
  */
 export async function ocrImage(input: Buffer, o: OcrOptions = {}): Promise<OcrOutcome> {
   const t0 = Date.now()
@@ -87,29 +87,39 @@ export async function ocrImage(input: Buffer, o: OcrOptions = {}): Promise<OcrOu
     debug(`pass ${passes} done: ${r.words.length} words, ${r.tiles} tiles${process.env.DAHL_OCR_DEBUG === '2' ? `: ${r.words.map((w) => w.t).join(' ')}` : ''}`)
     return toOriginal(r.words, scale)
   }
-  // 1. measure: a reading at natural size (downscaled only when larger than the engine allows)
-  const s0 = Math.min(1, 4096 / Math.max(W, H))
-  const base = await prepare(px, { invert: inverted, scale: 1 })
-  debug(`decoded ${W}x${H}, ${inverted ? 'dark (inverted)' : 'light'}, engine max ${info.maxDim}`)
-  const first = await run(s0 === 1 ? base : await prepare(px, { invert: inverted, scale: s0 }), s0, 96)
-  const h1 = median(first.map((w) => w.h))
-  const s = chooseScale(h1, W, H)
-  const overlap = Math.round(Math.max(96, 3 * Math.max(0, ...first.map((w) => w.h)) * s))
-  // 2. reading A at the chosen scale (reuse the first reading when the scale barely changes)
-  const a = Math.abs(s - s0) / s0 < 0.15 ? first : await run(await prepare(px, { invert: inverted, scale: s }), s, overlap)
+  // Measured on the eval set (30 screenshots, scripts/ocr-eval): plain greyscale upscaled 2.5x read 89.9% of the
+  // characters against 77.0% for the original image; 3.25x 90.9%. CLAHE (89.0%, and 97.5% -> 71.3% on one image)
+  // and sharpening (89.3%) did not help on normal-contrast screenshots, so CLAHE is only used on low-contrast ones.
+  const lowContrast = contrastSpread(px) < 80
+  const prep = (scale: number): Promise<Raw> => prepare(px, { invert: inverted, scale, stretch: true, clahe: lowContrast ? TARGET_TEXT_PX * 5 : undefined })
+  const fit = Math.sqrt(MAX_SCALED_PIXELS / Math.max(1, W * H))
+  debug(`decoded ${W}x${H}, ${inverted ? 'dark (inverted)' : 'light'}${lowContrast ? ', low contrast' : ''}, engine max ${info.maxDim}`)
+  // 1. reading A at 2.5x, then the text height decides: very small or very large text is read again at the scale
+  // that brings it to about TARGET_TEXT_PX
+  let s = Math.round(Math.min(2.5, fit) * 100) / 100
+  let a = await run(await prep(s), s, 160)
+  const h1 = median(a.map((w) => w.h))
+  const want = chooseScale(h1, W, H)
+  if (a.length && Math.abs(want - s) / s > 0.3) {
+    s = want
+    a = await run(await prep(s), s, Math.round(Math.max(160, 3 * Math.max(...a.map((w) => w.h)) * s)))
+  }
+  const overlap = Math.round(Math.max(160, 3 * Math.max(0, ...a.map((w) => w.h)) * s))
+  const base = await prepare(px, { invert: inverted, scale: 1, stretch: true })
   let words = a
   const unclear: Box[] = []
   if (o.verify !== false && a.length) {
-    // 3. reading B: larger, with local contrast equalisation
-    const sb = Math.min(MAX_SCALE * 1.25, Math.round(s * 1.25 * 100) / 100)
-    const b = await run(await prepare(px, { invert: inverted, scale: sb, clahe: TARGET_TEXT_PX * 5 }), sb, Math.round(overlap * 1.25))
+    // 2. reading B at a different scale: the engine's mistakes change with the pixel grid, the real text does not
+    const sb = Math.round((s * 1.3 <= Math.min(MAX_SCALE * 1.15, fit) ? s * 1.3 : s / 1.3) * 100) / 100
+    const b = await run(await prep(sb), sb, Math.round((overlap * sb) / s))
     const cmp = compareReadings(a, b)
     words = cmp.agreed
     if (cmp.disputes.length) {
       // 4. reading C of the disputed regions only, padded to give the engine context, larger again
       const th = Math.max(8, h1 || 12)
       const regions = cmp.disputes.map((d) => ({ x: Math.max(0, d.box.x - th), y: Math.max(0, d.box.y - th * 0.4), w: Math.min(W, d.box.w + 2 * th), h: Math.min(H, d.box.h + th * 0.8) }))
-      const c = await readStrips(e, base, regions, Math.min(MAX_SCALE * 1.6, s * 1.6), maxTile, o.signal)
+      // 3. reading C of the disputed regions only, larger again, all stacked into one strip
+      const c = await readStrips(e, base, regions, Math.min(MAX_SCALE * 1.25, s * 1.6), maxTile, o.signal)
       passes++
       const r = resolveDisputes(cmp.disputes, c)
       debug(`disputes ${cmp.disputes.length}: ${cmp.disputes.map((d) => `${d.a}|${d.b}`).join('; ')} -> C: ${c.map((w) => w.t).join(' ')}; unclear ${r.unclear.length}`)

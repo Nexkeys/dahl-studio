@@ -98,13 +98,24 @@ function isGrid(cols: Block[][], span: number): boolean {
   return true
 }
 
-/** Recursive XY cut. `grids` collects the rows of every grid found. */
+/**
+ * Recursive XY cut. `grids` collects the rows of every grid found.
+ * - Columns (a vertical gap through everything) are read left to right, except that a title above or a note below
+ *   the columns is split off first (it starts above, or ends below, every column's text).
+ * - Otherwise horizontal bands are read top to bottom, but consecutive bands with gaps at the same x positions
+ *   (rows of side-by-side cards, rows of a table) are kept together, so cards are read one by one and a table as a
+ *   grid instead of row fragments.
+ */
 function order(blocks: Block[], unit: number, grids: Block[][][]): Block[] {
   if (blocks.length <= 1) return blocks
   const span = Math.max(...blocks.map((b) => b.x + b.w)) - Math.min(...blocks.map((b) => b.x))
   const vx = gaps(blocks, 'x', Math.max(8, 0.9 * unit))
   if (vx.length) {
     const cols = splitAt(blocks, vx, 'x')
+    const innerTop = Math.max(...cols.map((c) => Math.min(...c.map((b) => b.y))))
+    const innerBottom = Math.min(...cols.map((c) => Math.max(...c.map((b) => b.y + b.h))))
+    const outer = gaps(blocks, 'y', 0.8 * unit).filter(([s, e]) => e <= innerTop + 1 || s >= innerBottom - 1)
+    if (outer.length) return splitAt(blocks, outer, 'y').flatMap((g) => order(g, unit, grids))
     if (isGrid(cols, span)) {
       // a column of cells may have been joined into one block: every line is a cell here
       const cells = blocks.flatMap((b) => (b.lines.length > 1 ? b.lines.map((l): Block => ({ ...b, ...union([l]), lines: [l], text: l.text })) : [b]))
@@ -116,8 +127,25 @@ function order(blocks: Block[], unit: number, grids: Block[][][]): Block[] {
     return cols.flatMap((c) => order(c, unit, grids))
   }
   const hy = gaps(blocks, 'y', 1)
-  if (hy.length) return splitAt(blocks, hy, 'y').flatMap((g) => order(g, unit, grids))
+  if (hy.length) {
+    const bands: Block[][] = []
+    let prev: [number, number][] = []
+    for (const band of splitAt(blocks, hy, 'y')) {
+      const g = gaps(band, 'x', Math.max(8, 0.9 * unit))
+      if (bands.length && sameGutters(prev, g)) bands[bands.length - 1].push(...band)
+      else bands.push(band)
+      prev = g
+    }
+    // a merged group has a vertical gap through it, so it is ordered as columns (or a grid) one level down
+    if (bands.length > 1) return bands.flatMap((g) => order(g, unit, grids))
+    return bands[0].length < blocks.length ? order(bands[0], unit, grids) : [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
+  }
   return [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
+}
+function sameGutters(a: [number, number][], b: [number, number][]): boolean {
+  if (!a.length || !b.length) return false
+  const [few, many] = a.length <= b.length ? [a, b] : [b, a]
+  return few.every(([s, e]) => many.some(([s2, e2]) => Math.min(e, e2) - Math.max(s, s2) > 0))
 }
 function rowsOf(blocks: Block[]): Block[][] {
   const rows: Block[][] = []

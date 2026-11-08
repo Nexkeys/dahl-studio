@@ -1,4 +1,5 @@
 import type { Attachment, ChatMessage, ContentPart, RunState, RunSummary } from '@shared/types'
+import { isPdfAttachment, MAX_IMAGES_PER_MESSAGE } from '@shared/imageLimits'
 
 // Measured on the user's machine: median requests of 32,000 to 52,000 input tokens on Dahl models, which slows the
 // first token and raises failures. History is trimmed in two passes (see compact).
@@ -13,22 +14,84 @@ export function summary(r: RunState): RunSummary {
   return { id: r.id, project: r.project, objective: r.objective, status: r.status, updatedAt: r.updatedAt, mode: r.mode, changedFiles: r.changedFiles ?? [] }
 }
 
-/** Build the user message content: prompt text + attachment digests + images. */
-export function buildUserContent(prompt: string, atts: Attachment[], images: Map<string, { mediaType: string; data: string }>): string | ContentPart[] {
+/** What agent/attachments.ts read from one attachment before the first model call. */
+export interface AttachmentReading {
+  /** image: the full breakdown (text in reading order, layout, colours) for a model that cannot see it */
+  breakdown?: string
+  /** image: OCR text in reading order, sent along with the image to a vision model */
+  ocrText?: string
+  /** image: description from one of the user's vision models */
+  vision?: { text: string; model: string }
+  /** image: send the image itself (the model sees images and the provider's per-request limit allows it) */
+  sendImage?: boolean
+  /** pdf: the document as Markdown */
+  pdf?: string
+}
+
+/**
+ * Build the user message content: prompt text + attachment digests + images. With `readings` (images and PDFs read
+ * before the first model call), a model that cannot see images gets each image's breakdown as "Image k of N", and a
+ * vision model gets the image plus its OCR text. At most MAX_IMAGES_PER_MESSAGE images are included.
+ */
+export function buildUserContent(prompt: string, atts: Attachment[], images: Map<string, { mediaType: string; data: string }>, readings?: Map<string, AttachmentReading>): string | ContentPart[] {
   if (!atts.length) return prompt
   const parts: ContentPart[] = []
   const texts: string[] = [prompt]
+  const allImages = atts.filter((a) => a.kind === 'image' && a.data && a.mediaType)
+  const kept = allImages.slice(0, MAX_IMAGES_PER_MESSAGE)
   for (const a of atts) {
     if (a.kind === 'image' && a.data && a.mediaType) {
+      const k = kept.indexOf(a) + 1
+      if (!k) continue
       images.set(a.name, { mediaType: a.mediaType, data: a.data })
-      parts.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name })
-      texts.push(`[Attached image: ${a.name}. If you cannot see images, call analyze_image with path "${a.name}".]`)
+      const r = readings?.get(a.id)
+      const label = `Image ${k} of ${kept.length}: ${a.name}`
+      if (!r) {
+        parts.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name })
+        texts.push(`[Attached image: ${a.name}. If you cannot see images, call analyze_image with path "${a.name}".]`)
+      } else if (r.sendImage) {
+        parts.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name })
+        texts.push(`${label} (attached below, image ${k} in order)\n${r.ocrText?.trim() ? `Text found in it by OCR (may contain mistakes; trust what you see):\n${r.ocrText.trim()}` : 'OCR found no text in it.'}`)
+      } else {
+        const vision = r.vision ? `\n\nDescription from ${r.vision.model} (a vision model; the OCR text above is exact where it is not marked unclear):\n${r.vision.text}` : ''
+        texts.push(`<image index="${k}" of="${kept.length}" name="${a.name}">\n${label}. You cannot see this image; this is what Dahl Studio read from it.\n${r.breakdown ?? '(no breakdown)'}${vision}\n</image>`)
+      }
+    } else if (isPdfAttachment(a) && a.data) {
+      images.set(a.name, { mediaType: 'application/pdf', data: a.data })
+      const pdf = readings?.get(a.id)?.pdf
+      texts.push(`<attachment type="pdf" name="${a.name}">\n${pdf ?? `PDF attached: ${a.name}. Call read_pdf with path "${a.name}" to read it.`}\n</attachment>`)
     } else if (a.text) {
       const label = a.kind === 'folder' ? 'Attached folder' : a.kind === 'selection' ? 'Attached editor selection' : 'Attached file'
       texts.push(`<attachment type="${a.kind}" name="${a.name}">\n${label}: ${a.name}\n${a.text}\n</attachment>`)
     }
   }
+  if (allImages.length > kept.length) texts.push(`[${allImages.length - kept.length} more attached image(s) were left out: at most ${MAX_IMAGES_PER_MESSAGE} images per message.]`)
   return parts.length ? [{ type: 'text', text: texts.join('\n\n') }, ...parts] : texts.join('\n\n')
+}
+
+/**
+ * Keep at most `limit` images in a request (newest first): some providers reject more (Groq takes 5 per request).
+ * Older images become a short note; their breakdown or description stays in the text.
+ */
+export function capImages(messages: ChatMessage[], limit: number): ChatMessage[] {
+  let left = Math.max(0, limit)
+  const out = [...messages]
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i]
+    if (!Array.isArray(m.content) || !m.content.some((p) => p.type === 'image')) continue
+    out[i] = {
+      ...m,
+      content: m.content.map((p): ContentPart => {
+        if (p.type !== 'image') return p
+        if (left > 0) {
+          left--
+          return p
+        }
+        return { type: 'text', text: `[image ${p.name ?? ''} not sent: this model accepts ${limit} image(s) per request]` }
+      })
+    }
+  }
+  return out
 }
 
 /**

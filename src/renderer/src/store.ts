@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AgentEvent, AgentInfo, AgentMode, Attachment, KeyInfo, KeyUsageLocal, ModelInfo, PendingApproval, PlanStep, ProviderId, RunStatus, RunSummary, Settings, TranscriptItem
 } from '@shared/types'
+import { mergeAttachments } from '@shared/imageLimits'
 import { newTab, patchChat, type ChatFields } from './chatState'
 import type { ResumeOffer } from './resume'
 
@@ -190,8 +191,15 @@ export async function loadRunsSummary(root: string): Promise<RunSummary[]> {
   return api.invoke<RunSummary[]>('agent:runs', root)
 }
 
-export function addAttachments(root: string, atts: Attachment[]): void {
-  useStore.getState().patchProject(root, (c) => ({ attachments: [...c.attachments, ...atts].slice(0, 20) }))
+/** Add attachments within the limits (15 images, 20 in total per message); returns what was left out. */
+export function addAttachments(root: string, atts: Attachment[]): { skippedImages: number; skippedOther: number } {
+  let res = { skippedImages: 0, skippedOther: 0 }
+  useStore.getState().patchProject(root, (c) => {
+    const r = mergeAttachments(c.attachments, atts)
+    res = r
+    return { attachments: r.list }
+  })
+  return res
 }
 
 // Streamed tokens arrive in small batches from the main process (every 16 ms). They are applied once per screen frame

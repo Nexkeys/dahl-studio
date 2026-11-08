@@ -50,6 +50,25 @@ export function isDark(px: Raw): boolean {
   return mode * 16 + 8 < 100 || dark / Math.max(1, n) > 0.5
 }
 
+/** Luminance spread between the darkest and lightest pixels: below about 80 the image is washed out or very dim. */
+export function contrastSpread(px: Raw): number {
+  const hist = new Array(256).fill(0)
+  const step = Math.max(1, Math.floor((px.width * px.height) / 200_000))
+  let n = 0
+  for (let i = 0; i < px.width * px.height; i += step) {
+    const o = i * px.channels
+    hist[Math.round(lum(px.data[o], px.data[o + 1], px.data[o + 2]))]++
+    n++
+  }
+  const at = (q: number): number => {
+    let acc = 0
+    for (let v = 0; v < 256; v++) if ((acc += hist[v]) >= q * n) return v
+    return 255
+  }
+  // the extreme half percent: on a sparse screenshot text covers far less than 5% of the pixels
+  return at(0.995) - at(0.005)
+}
+
 export interface PrepOptions {
   /** invert (white text on dark backgrounds becomes dark on light) */
   invert: boolean

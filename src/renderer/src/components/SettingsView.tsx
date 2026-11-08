@@ -3,6 +3,7 @@ import { KeyRound, RefreshCw, Trash2, CheckCircle2, XCircle, ShieldCheck, Palett
 import type { EffectsMode, KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
 import { THEMES, applyEffects, applyTheme, isLowEnd, type Theme } from '../themes'
+import { OcrSettings } from './OcrSettings'
 
 const KEY_HELP: Record<string, string> = {
   primary: 'Main Dahl key. Used first for Dahl models.',
@@ -151,6 +152,7 @@ export function SettingsView() {
         <label className="check"><input type="checkbox" checked={s.autoMemory} onChange={(e) => updateSettings({ autoMemory: e.target.checked })} /> Learn project memory automatically after tasks (one small extra model call)</label>
         <label className="check"><input type="checkbox" checked={s.autoApproveWrites} onChange={(e) => updateSettings({ autoApproveWrites: e.target.checked })} /> Apply file changes without asking (not recommended)</label>
         <label className="check"><input type="checkbox" checked={s.autoApproveCommands} onChange={(e) => updateSettings({ autoApproveCommands: e.target.checked })} /> Run agent commands without asking (not recommended)</label>
+        <OcrSettings />
       </section>
       <section>
         <h2><Palette size={16} /> Theme</h2>
