@@ -38,7 +38,7 @@ export function describeTally(t: CostTally): string {
   if (t.cachedTokens) parts.push(`${t.cachedTokens.toLocaleString('en-US')} read from cache`)
   if (t.cacheWriteTokens) parts.push(`${t.cacheWriteTokens.toLocaleString('en-US')} written to cache`)
   const notes: string[] = []
-  if (t.estimated) notes.push('estimate from list prices')
+  if (t.estimated) notes.push('estimated')
   if (t.unknown) notes.push(`${t.unknown} request${t.unknown === 1 ? '' : 's'} with unknown price not included`)
   return `${parts.join(', ')}${notes.length ? ` (${notes.join('; ')})` : ''}`
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import type { CostTally, Settings, TranscriptItem } from '@shared/types'
+import type { CostTally, TranscriptItem } from '@shared/types'
+import { PRESET_THINKING } from '@shared/cost'
 
 type Mods = {
   store: typeof import('../src/renderer/src/store')
@@ -40,11 +41,12 @@ describe('cost in the chat', () => {
     expect(html.match(/class="activity /g)?.length).toBe(2)
   })
 
-  it('the quality preset menu shows the saved preset', () => {
-    m.store.useStore.setState({ settings: { qualityPreset: 'economy' } as Settings })
+  it('the quality preset menu offers Economy, Balanced (default) and Best, each with a thinking level', () => {
+    // server rendering reads the store's initial state (no settings yet), so the default preset is selected
     const html = renderToString(createElement(m.preset.PresetSwitch))
-    expect(html).toMatch(/<option value="economy" [^>]*selected=""/)
-    expect(html).toContain('Balanced')
-    expect(html).toContain('Best')
+    expect(html).toMatch(/<option value="balanced" [^>]*selected=""/)
+    for (const label of ['Economy', 'Balanced', 'Best']) expect(html).toContain(`>${label}</option>`)
+    expect(html).toContain('at most 2 helper agents at once')
+    expect(PRESET_THINKING).toEqual({ economy: 'low', balanced: 'medium', best: 'high' })
   })
 })
