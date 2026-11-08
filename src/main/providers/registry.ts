@@ -3,6 +3,7 @@ import type { KeySlot, KeyTestResult, KeyUsageLocal, ModelInfo, ProviderId, Thin
 import { classifyHttpError, DAHL_DOCUMENTED_CONTEXT, DahlError, extractRemaining, getKeyBalance, listModels as listDahlModels, streamChat, type ChatRequest, type ChatResult, type StreamCallbacks } from '../dahl/client'
 import { DahlRouter } from '../dahl/router'
 import { ANTHROPIC_BASE, anthropicHeaders, anthropicStream } from './anthropic'
+import { ledgerFields, usageRequestFields } from './usage'
 import { nowIso, readJson, writeJson } from '../util'
 
 export const PROVIDER_INFO: Record<ProviderId, { name: string; base: string; slot: KeySlot; docs: string }> = {
@@ -265,7 +266,7 @@ export class ModelRegistry {
       try {
         const res = await (provider === 'anthropic'
           ? anthropicStream(key, { ...req, model: id, vision, extra: ex, maxTokens }, signal, wrapped)
-          : streamChat(key, { ...req, model: id, vision, extra: ex }, signal, wrapped, fetch, { baseUrl: PROVIDER_INFO[provider].base }))
+          : streamChat(key, { ...req, model: id, vision, extra: { ...usageRequestFields(provider), ...ex } }, signal, wrapped, fetch, { baseUrl: PROVIDER_INFO[provider].base }))
         const reported = typeof res.usage?.prompt_tokens === 'number'
         this.deps.onUsage(slot, {
           ok: true,
@@ -273,7 +274,8 @@ export class ModelRegistry {
           completionTokens: res.usage?.completion_tokens ?? Math.ceil((res.content + res.reasoning).length / 4),
           estimated: !reported,
           lastModel: req.model,
-          lastLatencyMs: Date.now() - t0
+          lastLatencyMs: Date.now() - t0,
+          ...ledgerFields(res.usage)
         })
         this.deps.onHealth(slot, 'ok')
         return { ...res, slot }

@@ -1,5 +1,7 @@
 import type { ChatMessage, ContentPart, ToolCall } from '@shared/types'
 import { classifyHttpError, DahlError, type ChatRequest, type ChatResult, type FetchLike, type StreamCallbacks } from '../dahl/client'
+import { addCacheBreakpoints } from './anthropicCache'
+import { readAnthropicUsage } from './usage'
 
 /**
  * Native Anthropic Messages API adapter (https://api.anthropic.com/v1/messages).
@@ -89,6 +91,7 @@ export async function anthropicStream(
   const tools = toAnthropicTools(req.tools)
   if (tools) body.tools = tools
   if (req.extra) Object.assign(body, req.extra)
+  addCacheBreakpoints(body as Parameters<typeof addCacheBreakpoints>[0])
 
   let res: Response
   try {
@@ -127,7 +130,8 @@ export async function anthropicStream(
         }
         switch (ev.type) {
           case 'message_start':
-            result.usage = { prompt_tokens: ev.message?.usage?.input_tokens, completion_tokens: ev.message?.usage?.output_tokens ?? 0 }
+            // input_tokens excludes cache reads and writes; readAnthropicUsage adds them back and keeps them apart
+            result.usage = readAnthropicUsage(ev.message?.usage)
             break
           case 'content_block_start':
             blocks[ev.index] = { ...ev.content_block, _json: '' }
@@ -161,7 +165,7 @@ export async function anthropicStream(
           }
           case 'message_delta':
             if (ev.delta?.stop_reason) result.finishReason = ev.delta.stop_reason === 'max_tokens' ? 'length' : ev.delta.stop_reason
-            if (ev.usage?.output_tokens !== undefined) result.usage = { ...(result.usage ?? {}), completion_tokens: ev.usage.output_tokens }
+            if (ev.usage) result.usage = readAnthropicUsage(ev.usage, result.usage)
             break
           case 'error':
             throw classifyHttpError(ev.error?.type === 'overloaded_error' ? 529 : 500, JSON.stringify(ev))

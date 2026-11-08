@@ -18,7 +18,16 @@ export const DEFAULT_SETTINGS: Settings = {
   openProjects: [],
   activeProject: null,
   projectReasoning: {},
-  lastSeenVersion: null
+  lastSeenVersion: null,
+  // cost awareness (see pricing.ts and agent/budget.ts)
+  qualityPreset: 'balanced',
+  roleModels: {},
+  budgetTaskUsd: null,
+  budgetDayUsd: null,
+  warnInputTokens: 100_000,
+  warnImages: 8,
+  warnHelpers: 4,
+  confirmExpensive: false
 }
 
 export class SettingsStore {
@@ -32,7 +41,7 @@ export class SettingsStore {
   async get(): Promise<Settings> {
     if (!this.cache) {
       const stored = await readJson<Partial<Settings>>(this.file, {})
-      const s: Settings = { ...DEFAULT_SETTINGS, ...stored, keyNames: { ...DEFAULT_SETTINGS.keyNames, ...(stored.keyNames ?? {}) }, projectReasoning: stored.projectReasoning ?? {} }
+      const s: Settings = { ...DEFAULT_SETTINGS, ...stored, keyNames: { ...DEFAULT_SETTINGS.keyNames, ...(stored.keyNames ?? {}) }, projectReasoning: stored.projectReasoning ?? {}, roleModels: stored.roleModels ?? {} }
       // migrate pre-0.3 model ids (no provider prefix) to the Dahl provider
       if (s.defaultModel && !s.defaultModel.includes(':')) s.defaultModel = `dahl:${s.defaultModel}`
       // settings saved by a version before What's New existed: that user upgraded, so show them what is new

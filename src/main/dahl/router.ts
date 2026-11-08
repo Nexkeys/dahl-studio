@@ -1,5 +1,6 @@
 import type { KeyInfo, KeySlot, KeyUsageLocal } from '@shared/types'
 import { DahlError, estimateTokens, streamChat, type ChatRequest, type ChatResult, type FetchLike, type StreamCallbacks } from './client'
+import { ledgerFields } from '../providers/usage'
 
 export interface RouterDeps {
   getKey(slot: KeySlot): Promise<string | null>
@@ -85,7 +86,8 @@ export class DahlRouter {
               : estimateTokens(res.content + res.reasoning + JSON.stringify(res.toolCalls)),
             estimated: !reported,
             lastModel: req.model,
-            lastLatencyMs: Date.now() - t0
+            lastLatencyMs: Date.now() - t0,
+            ...ledgerFields(res.usage)
           })
           this.deps.onHealth?.(slot, 'ok')
           return { ...res, slot, attempts }
