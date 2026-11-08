@@ -196,7 +196,7 @@ export default function App() {
               <Separator className="sep v" />
               <Panel minSize={320} id="center">
                 <Group orientation="vertical" id="ws-v">
-                  <Panel minSize={160} id="editor">
+                  <Panel minSize={160} collapsible collapsedSize={0} id="editor" panelRef={(h) => void (panels.editor = h)}>
                     {/* the editor keeps its place in the tree, so toggling Preview never remounts Monaco */}
                     <Group orientation="horizontal" id="ws-preview">
                       <Panel minSize={160} id="editor-main"><EditorArea root={root} /></Panel>
