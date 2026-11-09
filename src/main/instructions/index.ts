@@ -79,6 +79,24 @@ const LABEL: Record<InstructionFileInfo['kind'], string> = {
   claude: 'CLAUDE.md', agents: 'AGENTS.md', 'cursor-rule': 'Cursor rule', cursorrules: 'Cursor rules', copilot: 'Copilot', import: 'import'
 }
 
+const memo = new Map<string, { at: number; result: Promise<InstructionSet> }>()
+
+/**
+ * loadInstructions for the agent loop, which asks before every model call: the same project and working set reuse
+ * the last answer for a few seconds (a busy PC took up to 400 ms per scan), and a new file being worked on, a new
+ * @mention or the time limit rescans.
+ */
+export function loadInstructionsCached(root: string, w: WorkingSet, ttlMs = 15_000): Promise<InstructionSet> {
+  const key = JSON.stringify([root, w.files, w.dirs ?? [], (w.prompt ?? '').match(/@[\w.-]+/g) ?? []])
+  const hit = memo.get(key)
+  if (hit && Date.now() - hit.at < ttlMs) return hit.result
+  const result = loadInstructions(root, w)
+  memo.set(key, { at: Date.now(), result })
+  result.catch(() => memo.delete(key))
+  if (memo.size > 64) memo.delete(memo.keys().next().value!)
+  return result
+}
+
 /** Read every instruction file that applies and build the labelled, size-capped prompt section. */
 export async function loadInstructions(root: string, w: WorkingSet = { files: [] }, cap = INSTRUCTIONS_TOTAL_CAP): Promise<InstructionSet> {
   const sources = await gather(root, w)

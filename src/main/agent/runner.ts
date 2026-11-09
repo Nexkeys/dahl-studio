@@ -14,7 +14,7 @@ import { progressFinish, progressPlan, progressStart, readProgress } from './pro
 import type { RunResult } from '../terminal'
 import type { Skill } from '../skills/loader'
 import { expandSkillCommand, skillsPromptSection } from '../skills/prompt'
-import { loadInstructions, workingSet } from '../instructions'
+import { loadInstructionsCached, workingSet } from '../instructions'
 
 export { repairHistory, closeDanglingToolCalls, compact } from './history'
 
@@ -365,7 +365,7 @@ export class AgentRunner {
     // CLAUDE.md, AGENTS.md and Cursor/Copilot rules for the files this agent is working on (re-read every step)
     const attached = run.transcript.flatMap((t) => (t.kind === 'user' ? (t.attachments ?? []).filter((x) => x.kind === 'file' || x.kind === 'selection').map((x) => x.name) : []))
     const ws = workingSet(a.messages, a.isLead ? attached : a.info.files)
-    const ins = await loadInstructions(run.project, { ...ws, prompt: lastText }).catch((e) => (this.log(ctl, 'error', `instruction files: ${(e as Error).message}`), null))
+    const ins = await loadInstructionsCached(run.project, { ...ws, prompt: lastText }).catch((e) => (this.log(ctl, 'error', `instruction files: ${(e as Error).message}`), null))
     if (a.isLead && ins?.files.length) this.noteInstructions(ctl, ins.files)
     return systemPrompt({
       role: a.info.role, mode: run.mode, projectName: path.basename(run.project), outline: await projectOutline(run.project), memory,

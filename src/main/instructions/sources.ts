@@ -1,7 +1,7 @@
 // Finds and reads the instruction files other coding tools use: CLAUDE.md (with @path imports), AGENTS.md,
 // .cursor/rules/*.mdc, the legacy .cursorrules and .github/copilot-instructions.md. Every path stays inside the project.
 import path from 'node:path'
-import { promises as fs } from 'node:fs'
+import { promises as fs, readdirSync, statSync, type Dirent } from 'node:fs'
 import type { InstructionFileInfo } from '@shared/types'
 import { IGNORED_DIRS, resolveInside } from '../fs/workspace'
 import { parseFrontmatter } from '../skills/frontmatter'
@@ -26,11 +26,15 @@ const posix = (p: string): string => p.replace(/\\/g, '/')
 /** Read a project-relative file, or null when it is missing, a folder, too large, binary or outside the project. */
 export async function readProjectFile(root: string, rel: string): Promise<string | null> {
   try {
-    const abs = await resolveInside(root, rel)
-    const st = await fs.stat(abs)
-    if (!st.isFile() || st.size > MAX_FILE_BYTES) return null
+    // most of these files do not exist, so the common case is one stat. It is synchronous on purpose: on a busy PC
+    // an async stat waited about 200 ms for the fs thread pool, a sync one 6 ms. The full boundary check (realpath,
+    // symlinks) runs only before reading a file that exists and changed.
+    const abs = path.resolve(root, rel)
+    const st = statSync(abs, { throwIfNoEntry: false })
+    if (!st || !st.isFile() || st.size > MAX_FILE_BYTES) return null
     const hit = cache.get(abs)
     if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.text
+    await resolveInside(root, rel)
     const buf = await fs.readFile(abs)
     if (buf.subarray(0, 4000).includes(0)) return null
     const text = buf.toString('utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n')
@@ -94,9 +98,14 @@ async function listMdc(root: string, dir: string): Promise<string[]> {
   const out: string[] = []
   const walk = async (rel: string, depth: number): Promise<void> => {
     if (depth > 3 || out.length > 100) return
-    const abs = await resolveInside(root, rel).catch(() => null)
-    if (!abs) return
-    for (const e of await fs.readdir(abs, { withFileTypes: true }).catch(() => [])) {
+    // readProjectFile checks the boundary of each rule file it reads; sync for the same reason as there
+    let entries: Dirent[] = []
+    try {
+      entries = readdirSync(path.resolve(root, rel), { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
       const child = `${rel}/${e.name}`
       if (e.isDirectory()) await walk(child, depth + 1)
       else if (e.name.toLowerCase().endsWith('.mdc')) out.push(child)

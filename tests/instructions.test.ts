@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { loadInstructions, workingSet } from '../src/main/instructions'
+import { loadInstructions, loadInstructionsCached, workingSet } from '../src/main/instructions'
 import { findImports } from '../src/main/instructions/sources'
 import { matchGlob, splitGlobs } from '../src/main/instructions/glob'
 import type { ChatMessage } from '../src/shared/types'
@@ -114,6 +114,15 @@ describe('instruction files', () => {
     expect(r.text).toContain('[truncated: 12000 more characters; read the rest with read_file]')
     expect(r.files.find((f) => f.path === '.cursorrules')?.reason).toMatch(/not loaded, over the size limit/)
     expect(r.text.length).toBeLessThan(12_000)
+  })
+
+  it('the agent loop reuses a scan for the same working set and rescans when it changes', async () => {
+    await write('AGENTS.md', 'root')
+    await write('src/AGENTS.md', 'src')
+    const a = loadInstructionsCached(root, { files: ['README.md'] })
+    expect(loadInstructionsCached(root, { files: ['README.md'] })).toBe(a)
+    expect(paths(await a)).toEqual(['AGENTS.md'])
+    expect(paths(await loadInstructionsCached(root, { files: ['src/x.ts'] }))).toEqual(['AGENTS.md', 'src/AGENTS.md'])
   })
 
   it('workingSet collects tool paths, @mentions and attachments, newest last', () => {

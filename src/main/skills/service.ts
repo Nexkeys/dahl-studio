@@ -11,8 +11,18 @@ export interface SkillService {
 /** Skipped skills are logged once per reason, not on every agent step. */
 export function createSkillService(o: { builtinDir: () => string; userDir: string; log?: (msg: string) => void }): SkillService {
   const logged = new Set<string>()
+  // the runner asks before every model call; a scan of about 50 folders is reused for a few seconds
+  const recent = new Map<string, { at: number; result: ReturnType<typeof loadSkills> }>()
+  const scan = (project: string | null) => {
+    const key = project ?? ''
+    const hit = recent.get(key)
+    if (hit && Date.now() - hit.at < 10_000) return hit.result
+    const result = loadSkills(skillRoots(o.builtinDir(), o.userDir, project))
+    recent.set(key, { at: Date.now(), result })
+    return result
+  }
   const run = async (project: string | null) => {
-    const r = await loadSkills(skillRoots(o.builtinDir(), o.userDir, project))
+    const r = await scan(project)
     for (const p of r.problems) {
       const key = `${p.path}: ${p.reason}`
       if (logged.has(key)) continue

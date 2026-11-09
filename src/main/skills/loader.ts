@@ -1,7 +1,7 @@
 // Agent Skills (agentskills.io): every folder with a SKILL.md is a skill. Only name and description go into the
 // prompt; the body is loaded when the skill is used (use_skill or a / command), other files on demand.
 import path from 'node:path'
-import { promises as fs } from 'node:fs'
+import { promises as fs, readdirSync, statSync, type Dirent } from 'node:fs'
 import type { AgentMode, SkillProblem, SkillSource, SkillSummary } from '@shared/types'
 import { parseFrontmatter, type FmValue } from './frontmatter'
 
@@ -71,7 +71,7 @@ const cache = new Map<string, { mtimeMs: number; size: number; result: { skill?:
 
 async function readSkill(dir: string, root: SkillRoot): Promise<{ skill?: Skill; error?: string; warnings: string[] }> {
   const file = path.join(dir, 'SKILL.md')
-  const st = await fs.stat(file)
+  const st = statSync(file)
   const hit = cache.get(file)
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.result
   const result = await parseSkill(file, dir, root, st.size)
@@ -115,12 +115,18 @@ export async function loadSkills(roots: SkillRoot[]): Promise<{ skills: Skill[];
   const byName = new Map<string, Skill>()
   const problems: SkillProblem[] = []
   for (const root of roots) {
-    const entries = await fs.readdir(root.dir, { withFileTypes: true }).catch(() => [])
+    // directory listing and stats are synchronous: the runner asks before model calls, and on a busy PC each async
+    // fs call queued for about 200 ms (sync: a few ms); file contents are read (async) only when they changed
+    let entries: Dirent[] = []
+    try {
+      entries = readdirSync(root.dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
     for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (!e.isDirectory() || e.name.startsWith('.')) continue
       const dir = path.join(root.dir, e.name)
-      const has = await fs.stat(path.join(dir, 'SKILL.md')).then((s) => s.isFile(), () => false)
-      if (!has) continue
+      if (!statSync(path.join(dir, 'SKILL.md'), { throwIfNoEntry: false })?.isFile()) continue
       const where = root.source === 'builtin' ? `built-in/${e.name}` : `${root.label}/${e.name}`
       try {
         const r = await readSkill(dir, root)
