@@ -5,6 +5,7 @@ import { fileUrlFor } from '@shared/preview'
 import { api, openFile, openPreview, updateSettings, useStore, type View } from '../store'
 import { newChat } from '../chats'
 import { togglePanel } from '../layout'
+import { openChief } from '../chief'
 import { THEMES, applyTheme } from '../themes'
 
 interface Item { id: string; label: string; hint?: string; run: () => void; file?: boolean }
@@ -56,6 +57,7 @@ export function CommandPalette() {
     { id: 'v-log', label: 'Open Logs', run: go('logs') },
     { id: 'v-set', label: 'Open Settings / API keys', run: go('settings') },
     { id: 'wn', label: "What's new in Dahl Studio", run: () => (set({ whatsNew: { since: null } }), close()) },
+    { id: 'chief', label: 'Chief of Staff: briefing across all open projects', hint: '/chief', run: () => (close(), openChief()) },
     { id: 'expl', label: 'Toggle explorer (Ctrl+B)', run: () => (togglePanel('explorer'), close()) },
     { id: 'chatp', label: 'Toggle chat panel (Ctrl+Alt+B)', run: () => (togglePanel('chat'), close()) },
     { id: 'term', label: 'Toggle terminal (Ctrl+J)', run: () => (set({ showTerminal: !useStore.getState().showTerminal }), close()) },

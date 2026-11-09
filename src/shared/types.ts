@@ -480,3 +480,42 @@ export interface LocalProviderStatus {
   /** LM Studio: the smallest loaded context length when it is too small for agent prompts */
   smallContext?: number
 }
+
+// ---------------- Connector prerequisites, mobile setup checker, Chief of Staff (0.4.0) ----------------
+/** One way to fix a failed check. `command` is PowerShell; `admin` steps are shown for the user to do, never run by Dahl. */
+export interface SetupFix {
+  label: string
+  command?: string
+  admin?: boolean
+  url?: string
+}
+
+/** Whether a catalogue connector's own requirements (for example a Node version) are met on this PC. */
+export interface PrereqStatus {
+  catalogId: string
+  ok: boolean
+  summary: string
+  detail?: string
+  fixes: SetupFix[]
+  /** a folder to put first on PATH for this server (a suitable Node that another install shadows) */
+  pathDir?: string
+}
+
+export interface MobileCheck {
+  id: string
+  label: string
+  status: 'pass' | 'warn' | 'fail'
+  detail: string
+  fixes: SetupFix[]
+}
+
+export interface ChiefFollowup {
+  id: string
+  text: string
+  /** project folder it belongs to, or null for general follow-ups */
+  project: string | null
+  /** YYYY-MM-DD */
+  due: string | null
+  createdAt: string
+  doneAt: string | null
+}
