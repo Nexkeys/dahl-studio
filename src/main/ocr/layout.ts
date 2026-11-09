@@ -90,6 +90,8 @@ function isGrid(cols: Block[][], span: number): boolean {
   if (median(widths) > 0.35 * span) return false
   const sizes = centres.flat().map((c) => c.s)
   if (Math.max(...sizes) / Math.max(1, Math.min(...sizes)) > 1.3) return false
+  // cells are short; lines of running text in two columns also line up, but are long
+  if (median(cols.flatMap((c) => c.flatMap((b) => b.lines.map((l) => l.text.length)))) > 30) return false
   for (let i = 0; i + 1 < cols.length; i++) {
     const [a, b] = [centres[i], centres[i + 1]]
     const hits = a.filter((p) => b.some((q) => Math.abs(p.cy - q.cy) < 0.4 * Math.min(p.h, q.h) + 1)).length
@@ -114,7 +116,11 @@ function order(blocks: Block[], unit: number, grids: Block[][][]): Block[] {
     const cols = splitAt(blocks, vx, 'x')
     const innerTop = Math.max(...cols.map((c) => Math.min(...c.map((b) => b.y))))
     const innerBottom = Math.min(...cols.map((c) => Math.max(...c.map((b) => b.y + b.h))))
-    const outer = gaps(blocks, 'y', 0.8 * unit).filter(([s, e]) => e <= innerTop + 1 || s >= innerBottom - 1)
+    // only a gap clearly wider than the spacing inside the columns: a sidebar that simply runs longer than the main
+    // content is not cut (its last items stay with it)
+    const inner = cols.flatMap((c) => [...c].sort((p, q) => p.y - q.y).map((b, i, s) => (i ? b.y - (s[i - 1].y + s[i - 1].h) : 0)).filter((g) => g > 0))
+    const min = Math.max(0.8 * unit, 1.3 * median(inner))
+    const outer = gaps(blocks, 'y', min).filter(([s, e]) => e - s > min && (e <= innerTop + 1 || s >= innerBottom - 1))
     if (outer.length) return splitAt(blocks, outer, 'y').flatMap((g) => order(g, unit, grids))
     if (isGrid(cols, span)) {
       // a column of cells may have been joined into one block: every line is a cell here
@@ -175,9 +181,13 @@ export function buildLayout(o: { width: number; height: number; lines: OcrLine[]
   const unit = median(text.map((b) => b.size)) || 12
   const tiers = sizeTiers(text.map((b) => b.size))
   for (const b of text) b.tier = 1 + tiers.findIndex((t) => t.members.includes(b.size))
-  const body = tiers.reduce((a, t) => (t.members.length > a.members.length ? t : a), tiers[0] ?? { size: unit, members: [] })
+  // body text size: the size most of the characters are set in
+  const bySize = [...text].sort((a, b) => a.size - b.size)
+  const half = bySize.reduce((a, b) => a + b.text.length, 0) / 2
+  let acc = 0
+  const body = bySize.find((b) => (acc += b.text.length) >= half)?.size ?? unit
   const page = o.px ? (palette(o.px, 1)[0]?.hex ?? null) : null
-  for (const b of text) classify(b, body?.size ?? unit, o.px, page)
+  for (const b of text) classify(b, body, o.px, page)
   const grids: Block[][][] = []
   const ordered = order(blocks, unit, grids)
   const cols = gaps(blocks.length ? blocks : [{ x: 0, y: 0, w: o.width, h: o.height }], 'x', Math.max(8, 0.9 * unit))
