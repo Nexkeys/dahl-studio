@@ -58,14 +58,17 @@ export function mix(a: Rgb, b: Rgb, t: number): Rgb {
   return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t }
 }
 
-/** Smallest change of lightness (away from the background) that reaches the target contrast. Hue is kept. */
+const round8 = (c: Rgb): Rgb => ({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) })
+
+/** Smallest change of lightness (away from the background) that reaches the target contrast. Hue is kept.
+ * Contrast is measured on 8-bit values: the result is shown as a hex colour, and rounding can lose a little contrast. */
 export function ensureContrast(c: Rgb, bg: Rgb, ratio: number): Rgb {
-  if (contrast(c, bg) >= ratio) return c
+  if (contrast(round8(c), bg) >= ratio) return c
   const hsl = rgbToHsl(c)
   const lighter = luminance(bg) < 0.4
   for (let i = 1; i <= 50; i++) {
     const l = Math.min(1, Math.max(0, hsl.l + (lighter ? 0.02 : -0.02) * i))
-    const next = hslToRgb({ ...hsl, l })
+    const next = round8(hslToRgb({ ...hsl, l }))
     if (contrast(next, bg) >= ratio || l === 0 || l === 1) return next
   }
   return lighter ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 }
