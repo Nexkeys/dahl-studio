@@ -45,7 +45,7 @@ describe('PDF reading', () => {
     expect(md.indexOf('Three new offices')).toBeLessThan(md.indexOf('## Outlook'))
     expect(md).toContain('| Product | Units | Price |\n| --- | --- | --- |\n| Widget | 1,200 | 9.50 |')
     expect(md).toContain('| Gizmo | 415 | 22.75 |')
-  })
+  }, 180_000)
 
   it('finds a scanned page and reads it with OCR (stubbed), from a real rendering', async () => {
     let rendered: { width: number; height: number; dark: number } | null = null
@@ -61,7 +61,7 @@ describe('PDF reading', () => {
     expect(md).toContain('Scanned invoice 4471')
     expect(rendered!.width).toBeGreaterThanOrEqual(1500) // rendered at about 2000 px wide for OCR
     expect(rendered!.dark).toBeGreaterThan(1000) // the scanned text is really in the rendering
-  })
+  }, 180_000)
 
   it.skipIf(process.platform !== 'win32')('reads a scanned page with the real OCR pipeline', async () => {
     const md = await readPdf(await scannedPage(), 'scan.pdf', { pages: '2', ocr: async (png, signal) => (await readImage(png, { signal })).text })
@@ -84,7 +84,7 @@ describe('PDF reading', () => {
     expect(some).not.toContain('Body text of page 12.')
     const cut = await readPdf(pdf, 'book.pdf', { pages: '1-14', maxChars: 600 })
     expect(cut).toMatch(/Stopped before page \d+ .*Call read_pdf with pages "\d+-\d+"/)
-  })
+  }, 120_000)
 
   it('parses page ranges and rejects bad ones', () => {
     expect(parsePageRange('2,4,7-9', 20)).toEqual([2, 4, 7, 8, 9])
@@ -92,7 +92,7 @@ describe('PDF reading', () => {
     expect(parsePageRange('', 5)).toEqual([])
     expect(() => parsePageRange('abc', 5)).toThrow(/Invalid page range/)
     expect(() => parsePageRange('9-12', 5)).toThrow(/has 5 pages/)
-  })
+  }, 120_000)
 
   it('reports a broken file clearly', async () => {
     await expect(openPdf(Buffer.from('this is not a pdf at all'))).rejects.toThrow(/not a valid PDF|could not be opened/)

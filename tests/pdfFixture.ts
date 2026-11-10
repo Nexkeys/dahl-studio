@@ -17,7 +17,7 @@ export interface PdfPage {
   image?: { jpeg: Buffer; w: number; h: number; x: number; y: number; dw: number; dh: number }
 }
 
-const esc = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+const esc = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/•/g, '\\225') // 0x95 is the bullet in WinAnsi
 
 export function makePdf(pages: PdfPage[], title = 'Test document'): Buffer {
   const objs: (string | Buffer)[] = []

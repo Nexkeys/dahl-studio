@@ -73,10 +73,24 @@ export function pageMarkdown(items: PdfItem[], width: number, height: number, bo
       }
       continue
     }
-    out.push(blockMarkdown(b, body))
+    for (const part of splitBySize(b)) out.push(blockMarkdown(part, body))
   }
   const markdown = out.filter(Boolean).join('\n\n')
   return { markdown, columns: Math.max(1, layout.columns.length), tables: grids.size, chars: lines.reduce((a, l) => a + l.text.length, 0) }
+}
+
+const isBold = (l: OcrLine): boolean => !!(l as OcrLine & { bold?: boolean }).bold
+
+/** A heading set close above its paragraph lands in the same block: split where the font size or weight changes. */
+function splitBySize(b: Block): Block[] {
+  const parts: Block[] = []
+  for (const l of b.lines) {
+    const last = parts[parts.length - 1]
+    const prev = last?.lines[last.lines.length - 1]
+    if (prev && Math.max(prev.h, l.h) / Math.min(prev.h, l.h) < 1.12 && isBold(prev) === isBold(l)) last.lines.push(l)
+    else parts.push({ ...b, lines: [l], size: l.h })
+  }
+  return parts.length > 1 ? parts : [b]
 }
 
 function blockMarkdown(b: Block, body: number): string {

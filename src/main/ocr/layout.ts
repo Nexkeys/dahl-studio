@@ -130,6 +130,20 @@ function order(blocks: Block[], unit: number, grids: Block[][][]): Block[] {
       for (const b of cells) b.grid = id
       return rows.flat()
     }
+    // a table below (or above) columns of text can have cells on both sides of the text gutter without any cell
+    // crossing it: cut where the part below (above) is a grid with more gutters than the whole
+    const min2 = Math.max(8, 0.9 * unit)
+    for (const [, e] of gaps(blocks, 'y', 0.5 * unit)) {
+      const lower = blocks.filter((b) => b.y >= e)
+      const upper = blocks.filter((b) => b.y < e)
+      for (const [part, rest, first] of [[lower, upper, false], [upper, lower, true]] as const) {
+        const g = gaps(part, 'x', min2)
+        if (g.length > vx.length && isGrid(splitAt(part, g, 'x'), span)) {
+          const [a, b] = [order(part, unit, grids), order(rest, unit, grids)]
+          return first ? [...a, ...b] : [...b, ...a]
+        }
+      }
+    }
     return cols.flatMap((c) => order(c, unit, grids))
   }
   const hy = gaps(blocks, 'y', 1)
