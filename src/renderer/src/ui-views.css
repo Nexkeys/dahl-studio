@@ -70,3 +70,6 @@
 .log-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11.5px; }
 .key-remove { color: var(--muted); }
 .key-remove:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.check.strong { font-weight: 600; }
+.check.indent { padding-left: 24px; }
+.warn-note { margin: 2px 0 4px 24px; padding: 6px 10px; border-left: 2px solid var(--warn); }

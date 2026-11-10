@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks } from 'lucide-react'
+import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIcon, ListTodo, Search, Hammer, Brain, AtSign, Plug, Blocks, Clock, OctagonX, Briefcase } from 'lucide-react'
 import type { AgentMode, Attachment, McpServerConfig, SkillList, SkillSummary, StartRunRequest, ThinkingLevel } from '@shared/types'
 import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
+import { sendHow, type SendHow } from '@shared/outbox'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { skillIcon, skillLabel } from './skills'
+import { ModelMenu } from './ModelMenu'
+import { CHIEF_PROMPT } from '../chief'
 
 const NO_ATTS: Attachment[] = []
 const MODES: { id: AgentMode; label: string; icon: typeof Hammer; hint: string }[] = [
@@ -31,7 +34,7 @@ function fileToAttachment(f: File): Promise<Attachment> {
   })
 }
 
-export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string, mcpServers?: StartRunRequest['mcpServers']) => void }) {
+export function Composer({ root, running, onSend }: { root: string; running: boolean; onSend: (text: string, mcpServers?: StartRunRequest['mcpServers'], how?: SendHow) => void }) {
   const [input, setInput] = useState('')
   const [menu, setMenu] = useState<null | 'attach' | 'skills' | 'mention'>(null)
   const [files, setFiles] = useState<string[]>([])
@@ -119,14 +122,14 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
       notify((e as Error).message, 'error')
     }
   }
-  const send = async () => {
+  const send = async (how?: SendHow) => {
     const text = input.trim()
-    if (!text || running) return
+    if (!text) return
     setInput('')
     setMenu(null)
     // "/<server> request" or "/mcp request": focus the run on that server (or on all MCP tools)
     const hit = text.startsWith('/') ? parseMcpCommand(text, mcp.length ? mcp : await loadMcp()) : null
-    onSend(text, hit ? (hit.id ? [hit.id] : 'all') : undefined)
+    onSend(text, hit ? (hit.id ? [hit.id] : 'all') : undefined, running ? how ?? 'steer' : undefined)
   }
 
   return (
@@ -144,12 +147,12 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
         </div>
       )}
       <div className="composer-box">
-        <textarea ref={ta} value={input} rows={3} disabled={running} aria-label="Message Dahl" onPaste={onPaste}
-          placeholder={running ? 'Dahl is working. Pause or cancel to send a new instruction.' : 'Ask Dahl to build, fix or explain. Type / for skills and MCP servers, @ to attach a file, paste images.'}
+        <textarea ref={ta} value={input} rows={3} aria-label="Message Dahl" onPaste={onPaste}
+          placeholder={running ? 'Dahl is working. Enter: tell Dahl now (it reads this at its next step). Alt+Enter: send after this task. Ctrl+Enter: stop and send.' : 'Ask Dahl to build, fix or explain. Type / for skills and MCP servers, @ to attach a file, paste images.'}
           onChange={(e) => void onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setMenu(null)
-            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); void send() }
+            if (e.key === 'Enter' && !e.shiftKey && menu !== 'mention') { e.preventDefault(); void send(sendHow(e)) }
           }} />
         {menu === 'mention' && (
           <div className="popover up">
@@ -171,7 +174,13 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
                 </button>
               )
             })}
-            {skipped.length > 0 && typed === '/' && <div className="muted small pad" title={skipped.join('\n')}>{skipped.length} skill folder{skipped.length > 1 ? 's' : ''} skipped (invalid SKILL.md); hover for the reason</div>}
+            {cmdMatch('/chief') && (
+              <button className="popover-item skill-item" title="Chief of Staff: briefing across all open projects"
+                onClick={() => { setInput(CHIEF_PROMPT); set({ mode: 'plan' }); setMenu(null); ta.current?.focus() }}>
+                <Briefcase size={14} /><span className="skill-row"><b>/chief</b> <span className="muted">Chief of Staff: briefing across all open projects</span></span>
+              </button>
+            )}
+            {skipped.length > 0 && typed === '/' &&<div className="muted small pad" title={skipped.join('\n')}>{skipped.length} skill folder{skipped.length > 1 ? 's' : ''} skipped (invalid SKILL.md); hover for the reason</div>}
             {mcpHits.length > 0 && <div className="popover-title"><Plug size={12} /> MCP servers</div>}
             {mcpHits.map((c) => (
               <button key={c.cmd} className="popover-item" title={c.id ? `Type a request after ${c.cmd}, or send it alone to see what ${c.name} can do` : 'Type a request after /mcp, or send it alone to list connected servers and tools'}
@@ -204,8 +213,15 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
             {THINK.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
         </label>
+        <ModelMenu />
         <span className="grow" />
-        <button className="btn primary send" onClick={() => void send()} disabled={running || !input.trim()} aria-label="Send"><Send size={15} /></button>
+        {running && input.trim() && (
+          <>
+            <button className="tool-toggle" title="Send after this task (Alt+Enter)" onClick={() => void send('queue')}><Clock size={13} /> <span>After task</span></button>
+            <button className="tool-toggle danger" title="Stop the task and send this now (Ctrl+Enter)" onClick={() => void send('stop')}><OctagonX size={13} /> <span>Stop and send</span></button>
+          </>
+        )}
+        <button className="btn primary send" onClick={() => void send('steer')} disabled={!input.trim()} aria-label={running ? 'Tell Dahl now' : 'Send'} title={running ? 'Tell Dahl now: it reads this at its next step (Enter)' : 'Send (Enter)'}><Send size={15} /></button>
       </div>
     </div>
   )

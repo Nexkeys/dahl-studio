@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Square, Pause, Bookmark, CircleAlert, CircleCheck, Circle, CircleDot, Play, ScrollText, Hammer } from 'lucide-react'
 import type { RunSummary, StartRunRequest } from '@shared/types'
+import { isLocalProvider } from '@shared/models'
 import { api, useStore } from '../store'
 import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from '../chats'
 import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
 import { ProjectInstructions } from './InstructionsChip'
+import { Outbox } from './Outbox'
 import { LiveMarkdown } from './Markdown'
+import { useWhileWorking } from '../whileWorking'
 import iconUrl from '../assets/icon.png'
+
+const NO_ATTS: unknown[] = []
 
 const SUGGESTIONS = [
   'Explain how this project is structured',
@@ -50,7 +55,8 @@ export function ChatPanel({ root }: { root: string }) {
     if (running) return
     if (!settings?.defaultModel) return notify('Select a model first.', 'error')
     const provider = settings.defaultModel.split(':')[0]
-    const hasKey = provider === 'dahl' ? keys.some((k) => k.provider === 'dahl' && k.configured) : keys.some((k) => k.provider === provider && k.configured)
+    // Ollama and LM Studio run on this PC and need no key
+    const hasKey = isLocalProvider(provider) || keys.some((k) => k.provider === provider && k.configured)
     if (!hasKey) return notify(`Add a ${provider} API key in Settings first.`, 'error')
     const busy = otherBusyChat(root)
     if (busy) return notify(`"${busy.title}" is still working in this project. Wait for it to finish or cancel it first.`, 'error')
@@ -70,6 +76,7 @@ export function ChatPanel({ root }: { root: string }) {
   }
 
   const transcript = p?.transcript ?? []
+  const { submit, sendNow } = useWhileWorking(root, { runId: p?.runId ?? null, status: p?.status ?? null, transcript, attachments: p?.attachments ?? NO_ATTS }, !!running, send)
   const canContinue = p?.runId && (p.status === 'paused' || p.status === 'interrupted' || p.status === 'failed')
   // a Plan or Review answer that says the work needs Build mode: one click switches and continues
   const lastAnswer = [...transcript].reverse().find((t) => t.kind === 'assistant')?.text ?? ''
@@ -79,6 +86,7 @@ export function ChatPanel({ root }: { root: string }) {
     <div className="panel chat">
       <div className="panel-head">
         <span className="panel-title">Dahl</span>
+        {settings?.autoApproveAll && <span className="auto-badge" title={settings.askBeforePublishing ? 'Never ask is on: Dahl does not stop for approvals (publishing to GitHub still asks). Change it in Settings > Approvals.' : 'Never ask is on: Dahl does not stop for any approval. Change it in Settings > Approvals.'}>Auto-approve on</span>}
         <span className={`run-badge ${p?.status ?? 'idle'}`}>{statusLabel(p?.status ?? null)}</span>
         {running && <Elapsed since={p?.turnStartedAt ?? null} />}
         <div className="row-actions">
@@ -133,7 +141,8 @@ export function ChatPanel({ root }: { root: string }) {
         )}
       </div>
       {!transcript.length && <ProjectInstructions root={root} />}
-      <Composer root={root} running={!!running} onSend={send} />
+      <Outbox runId={p?.runId ?? null} transcript={transcript} running={!!running} onSendNow={(m) => void sendNow(m)} />
+      <Composer root={root} running={!!running} onSend={(t, m, how) => void submit(t, m, how)} />
     </div>
   )
 }

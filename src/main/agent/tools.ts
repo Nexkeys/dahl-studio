@@ -1,4 +1,5 @@
 import type { AgentMode, AgentRole, ThinkingLevel } from '@shared/types'
+import { CHIEF_DEFS, CHIEF_TOOLS } from '../chief/tools'
 
 const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function',
@@ -68,7 +69,9 @@ export const TOOL_DEFS = {
   }, ['agents']),
   // skills (src/main/skills): offered to the lead by the runner when skills are available, not through toolsFor
   use_skill: fn('use_skill', 'Load a skill listed under SKILLS: returns its step-by-step instructions (and the list of its extra files). Call it before starting a task that matches the skill\'s description, then follow the instructions.', { name: { type: 'string', description: 'Skill name as listed' }, arguments: { type: 'string', description: 'The user\'s request or target, passed to the skill' } }, ['name']),
-  read_skill_file: fn('read_skill_file', 'Read a file inside a skill\'s folder (references, scripts, templates) that use_skill listed. Paths are relative to the skill folder; nothing outside it can be read.', { skill: S, path: S }, ['skill', 'path'])
+  read_skill_file: fn('read_skill_file', 'Read a file inside a skill\'s folder (references, scripts, templates) that use_skill listed. Paths are relative to the skill folder; nothing outside it can be read.', { skill: S, path: S }, ['skill', 'path']),
+  // Chief of Staff (chief/tools.ts): briefing, follow-ups, goals, delegation to another project
+  ...CHIEF_DEFS
 } as const
 
 export type ToolName = keyof typeof TOOL_DEFS
@@ -80,7 +83,7 @@ export const WRITE_ROLES: AgentRole[] = ['implementer', 'debugger', 'test_engine
 
 export function toolsFor(role: AgentRole, mode: AgentMode, web: boolean): ToolName[] {
   const t: ToolName[] = [...READ]
-  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github')
+  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github', ...CHIEF_TOOLS)
   if (mode === 'build' && (role === 'lead' || WRITE_ROLES.includes(role))) t.push(...WRITE)
   if (mode === 'build' && role === 'lead') t.push('git_push')
   // the user's Web toggle applies to every agent: a Researcher sub-agent must not browse when web research is off

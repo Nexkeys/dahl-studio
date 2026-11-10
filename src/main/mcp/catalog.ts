@@ -1,4 +1,5 @@
 import type { McpCatalogEntry } from '@shared/types'
+import { EXTRA_CATALOG } from './catalogExtra'
 
 /**
  * Curated Dahl Free Toolbox. Versions are pinned. "verified" is filled in only from a real capability test
@@ -256,7 +257,8 @@ export const CATALOG: McpCatalogEntry[] = [
     },
     // harmless reads that need a valid token (get_project_url does not: it only formats a URL)
     capabilityTest: { tool: 'list_projects', args: {}, expect: 'projects' }
-  }
+  },
+  ...EXTRA_CATALOG
 ]
 
 /** Alternative capability tests, used when the main test's tool is not exposed (Supabase scoped to one project has no list_projects). */

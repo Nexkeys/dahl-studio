@@ -13,6 +13,9 @@ import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { registerCompletionIpc } from './completion/ipc'
+import { allPrereqs } from './mcp/prereqs'
+import { runMobileChecks } from './mobileCheck'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -111,6 +114,8 @@ export function registerIpc(): void {
   handle('usage:reset', () => usage.reset())
   handle('models:list', () => models.list())
   handle('models:refresh', () => models.refresh())
+  // Settings > Local models: check Ollama and LM Studio now (after their address changed, or on demand)
+  handle('models:checkLocal', () => models.refresh(['ollama', 'lmstudio']))
 
   // ---- projects ----
   handle('project:pick', async () => {
@@ -207,6 +212,7 @@ export function registerIpc(): void {
     return runner.start(req)
   })
   handle('agent:pause', (project: string) => runner.pause(project))
+  handle('agent:steer', async (project: string, id: string, text: string) => runner.steer(await assertProject(project), String(id), String(text)))
   handle('agent:cancel', (project: string) => runner.cancel(project))
   handle('agent:checkpoint', (project: string) => runner.checkpoint(project))
   handle('agent:approve', (id: string, approved: boolean, feedback?: string) => runner.resolveApproval(id, approved, feedback))
@@ -258,6 +264,9 @@ export function registerIpc(): void {
   handle('mcp:export', () => mcp.exportConfig())
   handle('mcp:import', (json: string) => mcp.importConfig(json))
   handle('mcp:prereq', (cmd: string) => mcp.checkPrereq(cmd))
+  // catalogue connector requirements (REA's Node version, Maestro's CLI and Java, adb) and the mobile setup checker: read-only
+  handle('mcp:prereqs', (fresh?: boolean) => allPrereqs(!!fresh))
+  handle('mobile:check', () => runMobileChecks())
 
   // ---- storage & logs ----
   handle('storage:report', async (): Promise<StorageReport> => {
@@ -306,4 +315,6 @@ export function registerIpc(): void {
     // used by the renderer's 'auto' effects mode
     gpu: String(app.getGPUFeatureStatus().gpu_compositing), cpus: os.cpus().length
   }))
+  // ---- Tab completions (completion/ipc.ts) ----
+  registerCompletionIpc()
 }
