@@ -16,6 +16,7 @@ import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
 import { execChief } from '../chief/tools'
+import { changedRefusal, seenKey, unreadRefusal } from './guards'
 
 export interface ToolResult {
   ok: boolean
@@ -34,6 +35,8 @@ export interface ExecCtx {
   leases: Map<string, string>
   images: Map<string, { mediaType: string; data: string }>
   mcpTools: McpToolRef[]
+  /** read before edit (guards.ts): per agent and file, the modification time when the agent last read or wrote it */
+  seen?: Map<string, number>
   turn: { changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number }
   approve(a: Omit<PendingApproval, 'id' | 'runId' | 'project'>): Promise<{ approved: boolean; feedback?: string }>
   emitPlan(steps: PlanStep[]): void
@@ -44,6 +47,26 @@ export interface ExecCtx {
 /** Normalised lease key, so "./src/a.ts", "src\\a.ts" and "SRC/a.ts" are the same file. */
 export function leaseKey(rel: string): string {
   return path.posix.normalize(rel.replace(/\\/g, '/')).replace(/^(\.\/)+/, '').replace(/\/+$/, '').toLowerCase()
+}
+
+async function mtimeOf(root: string, rel: string): Promise<number | null> {
+  try {
+    return (await fsp.stat(await resolveInside(root, rel))).mtimeMs
+  } catch {
+    return null
+  }
+}
+/** Remember that this agent now knows the file's content (it just read or wrote it). */
+async function markSeen(c: ExecCtx, rel: string): Promise<void> {
+  const m = await mtimeOf(c.run.project, rel)
+  if (m !== null) (c.seen ??= new Map()).set(seenKey(c.agentId, leaseKey(rel)), m)
+}
+/** Read before edit: does this agent know the current content of an existing file? */
+async function seenState(c: ExecCtx, rel: string): Promise<'ok' | 'unread' | 'changed'> {
+  const at = c.seen?.get(seenKey(c.agentId, leaseKey(rel)))
+  if (at === undefined) return 'unread'
+  const now = await mtimeOf(c.run.project, rel)
+  return now !== null && now !== at ? 'changed' : 'ok'
 }
 
 async function checkLease(c: ExecCtx, rel: string): Promise<string | null> {
@@ -62,6 +85,7 @@ async function applyWrite(c: ExecCtx, rel: string, before: string | null, after:
   }
   if (!(rel in c.run.backups)) c.run.backups[rel] = before
   await writeText(c.run.project, rel, after)
+  await markSeen(c, rel)
   c.turn.changed.add(rel)
   if (!c.run.changedFiles.includes(rel)) c.run.changedFiles.push(rel)
   c.onChanged()
@@ -86,6 +110,7 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
       }
       case 'read_file': {
         const text = await readText(root, a.path)
+        await markSeen(c, a.path)
         const lines = text.split(/\r?\n/)
         const s = Math.max(1, a.start_line ?? 1)
         const e = Math.min(lines.length, a.end_line ?? Math.min(lines.length, s + 999))
@@ -115,6 +140,11 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         const lease = await checkLease(c, a.path)
         if (lease) return { ok: false, text: lease }
         const before = await readTextOrNull(root, a.path)
+        // hallucination guard: an existing file is only changed by an agent that knows its current content
+        if (before !== null && before !== '') {
+          const state = await seenState(c, a.path)
+          if (state !== 'ok') return { ok: false, text: state === 'unread' ? unreadRefusal(name, a.path) : changedRefusal(name, a.path) }
+        }
         let after: string
         // product rule: no em or en dashes in anything Dahl writes (only the new text is rewritten)
         if (name === 'write_file') after = stripDashes(String(a.content ?? ''))
@@ -152,6 +182,12 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return await execGit(c, a ?? {}, settings)
       case 'github':
         return await execGithub(c, a ?? {})
+      case 'report_blocked': {
+        const reason = stripDashes(String(a.reason ?? '').trim())
+        if (!reason) return { ok: false, text: 'Say what is blocked in reason.' }
+        c.status(`${c.agentName} reported a blocker: ${reason.slice(0, 300)}`)
+        return { ok: true, text: 'Recorded. Stop working on the blocked part and tell the user plainly what is blocked, what you tried and what you need from them. Do not invent a result or pretend it worked.' }
+      }
       case 'ask_user':
         return await execAskUser(c, a ?? {})
       case 'chief_briefing':

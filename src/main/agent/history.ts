@@ -157,6 +157,7 @@ export function summariseTool(name: string, args: string): string {
   try {
     const a = JSON.parse(args)
     if (name === 'delegate_agents') return `Delegated to ${(a.agents ?? []).map((x: { role: string }) => x.role).join(', ')}`
+    if (name === 'report_blocked') return `Blocked: ${String(a.reason ?? '').slice(0, 200)}`
     if (a.path !== undefined) return `${name.replace(/_/g, ' ')} ${a.path || '.'}`
     if (a.command) return `run: ${a.command}`
     if (a.query) return `${name.replace(/_/g, ' ')} "${a.query}"`

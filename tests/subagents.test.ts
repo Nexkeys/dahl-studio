@@ -161,7 +161,8 @@ describe('sub-agents (delegate_agents)', () => {
       [{ role: 'implementer', task: 'own-a', files: ['a.ts'] }, { role: 'implementer', task: 'own-b', files: ['b.ts'] }],
       async (task, step) => {
         if (task === 'own-b' && step === 1) return { tool: { name: 'write_file', args: { path: './A.ts', content: 'stolen' } } }
-        if (task === 'own-a' && step === 1) return { tool: { name: 'edit_file', args: { path: 'a.ts', old_string: 'a', new_string: 'A' } } }
+        if (task === 'own-a' && step === 1) return { tool: { name: 'read_file', args: { path: 'a.ts' } } }
+        if (task === 'own-a' && step === 2) return { tool: { name: 'edit_file', args: { path: 'a.ts', old_string: 'a', new_string: 'A' } } }
         return { content: `${task} finished` }
       },
       { autoApproveWrites: true }
@@ -212,7 +213,7 @@ describe('sub-agents (delegate_agents)', () => {
 
   it('attributes approvals to the sub-agent and clears "waiting" once approved', async () => {
     const h = setup([{ role: 'implementer', task: 'w', files: ['a.ts'] }], (_t, step) =>
-      step === 1 ? { tool: { name: 'write_file', args: { path: 'a.ts', content: 'new' } } } : { content: 'wrote it' }
+      step === 1 ? { tool: { name: 'read_file', args: { path: 'a.ts' } } } : step === 2 ? { tool: { name: 'write_file', args: { path: 'a.ts', content: 'new' } } } : { content: 'wrote it' }
     )
     const seen: PendingApproval[] = []
     h.setApprover((a) => {

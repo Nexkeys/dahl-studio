@@ -24,6 +24,11 @@ export const TOOL_DEFS = {
     branch: { type: 'string', description: 'Remote branch to push to; defaults to the current branch name' },
     commit_message: { type: 'string', description: 'If set, commit all pending changes with this message before pushing' }
   }, []),
+  report_blocked: fn('report_blocked', 'Report that you cannot do or cannot verify something, instead of guessing or inventing a result. Use it when access is missing, a tool or command keeps failing, or information you need is not available. After calling it, tell the user plainly what is blocked.', {
+    reason: { type: 'string', description: 'What is blocked and why, in one or two sentences' },
+    tried: { type: 'string', description: 'What you already tried' },
+    needs: { type: 'string', description: 'What you need from the user to continue' }
+  }, ['reason']),
   ask_user: fn('ask_user', 'Ask the user 1 to 4 multiple-choice questions and wait for the answers. Use it only when a decision is genuinely the user\'s (scope, approach, naming, trade-offs) and you cannot settle it from the code or sensible defaults. Each question has 2 to 5 options; the user can always type their own answer instead. Put your recommended option first and end its label with " (Recommended)".', {
     questions: { type: 'array', items: { type: 'object', properties: {
       question: S, header: { type: 'string', description: 'Short chip label, at most 3 words' }, multiSelect: { type: 'boolean', description: 'true when several options can apply' },
@@ -73,7 +78,7 @@ export const TOOL_DEFS = {
 
 export type ToolName = keyof typeof TOOL_DEFS
 
-const READ: ToolName[] = ['list_dir', 'read_file', 'search', 'remember', 'view_image', 'analyze_image', 'git']
+const READ: ToolName[] = ['list_dir', 'read_file', 'search', 'remember', 'view_image', 'analyze_image', 'git', 'report_blocked']
 const WRITE: ToolName[] = ['write_file', 'append_file', 'edit_file', 'run_command']
 const WEB: ToolName[] = ['web_search', 'web_fetch']
 export const WRITE_ROLES: AgentRole[] = ['implementer', 'debugger', 'test_engineer']
@@ -175,6 +180,8 @@ export function systemPrompt(o: {
     '- Large files: keep each write_file/append_file call under ~250 lines so tool calls are not truncated.',
     '- Do not use emoji. Use clear Markdown: short paragraphs, lists, fenced code blocks with a language.',
     '- Never write em dashes (\u2014) or en dashes (\u2013) anywhere: replies, code, comments, docs, UI text, commit messages. Use a comma, colon, period, parentheses or a plain hyphen instead. (Exception: edit_file old_string must still copy existing text exactly.)',
+    '- Read a file with read_file before you change it: edit_file, append_file and overwriting with write_file are refused for an existing file you have not read in this task, or that changed after you read it.',
+    '- Only state results you saw in a tool output in this task. Never say tests pass, a build works or a file exists unless a command or tool in this task showed it; Dahl Studio checks such claims against what really ran. If you cannot do or verify something (missing access, a tool keeps failing, missing information), call report_blocked and say so plainly instead of guessing.',
     '- To see an image, use view_image (vision models) or analyze_image (any model).',
     lead ? '- When a decision is genuinely the user\'s (scope, approach, naming, trade-offs) and you cannot settle it from the code or sensible defaults, call ask_user with 1 to 4 short multiple-choice questions instead of guessing. Do not ask about things you can find out yourself, and do not ask permission for what the user already asked you to do.' : '',
     '- Use the git tool for Git (status, diff, log, branches, pull, merge, commit, tag) and git_push to push. ' + (lead ? 'Use the github tool for pull requests, CI status and logs, and releases. ' : '') + 'Never force-push or rewrite published history.',

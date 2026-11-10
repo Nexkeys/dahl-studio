@@ -82,7 +82,7 @@ function harness(backend: ChatBackend, settings: Partial<Settings> = {}, mcp?: M
 
 describe('agent approval flow', () => {
   it('does not write a file until the user approves, then applies it', async () => {
-    const backend = scripted([{ tool: { name: 'edit_file', args: { path: 'a.txt', old_string: 'world', new_string: 'Dahl', reason: 'greet' } } }, { content: 'Changed a.txt' }])
+    const backend = scripted([{ tool: { name: 'read_file', args: { path: 'a.txt' } } }, { tool: { name: 'edit_file', args: { path: 'a.txt', old_string: 'world', new_string: 'Dahl', reason: 'greet' } } }, { content: 'Changed a.txt' }])
     const h = harness(backend)
     let pending = null as PendingApproval | null
     h.setApprover((a) => (pending = a))
@@ -106,13 +106,13 @@ describe('agent approval flow', () => {
   })
 
   it('leaves the file untouched when rejected and passes feedback to the model', async () => {
-    const backend = scripted([{ tool: { name: 'write_file', args: { path: 'a.txt', content: 'gone', reason: 'x' } } }, { content: 'ok, leaving it' }])
+    const backend = scripted([{ tool: { name: 'read_file', args: { path: 'a.txt' } } }, { tool: { name: 'write_file', args: { path: 'a.txt', content: 'gone', reason: 'x' } } }, { content: 'ok, leaving it' }])
     const h = harness(backend)
     h.setApprover((a) => h.runner.resolveApproval(a.id, false, 'keep it'))
     await h.runner.start({ project: dir, prompt: 'overwrite', mode: 'build', model: 'm' })
     await h.done()
     expect(await fs.readFile(path.join(dir, 'a.txt'), 'utf8')).toBe('hello world\n')
-    const toolMsg = backend.seen[1].find((m) => m.role === 'tool')!
+    const toolMsg = backend.seen[2].filter((m) => m.role === 'tool').pop()!
     expect(toolMsg.content).toContain('rejected')
     expect(toolMsg.content).toContain('keep it')
   })

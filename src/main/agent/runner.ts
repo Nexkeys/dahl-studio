@@ -11,6 +11,7 @@ import { buildUserContent, compact, repairHistory, summariseTool, summary } from
 import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
 import { parseToolArgs } from './args'
 import { compatFor, dropTuning, profileFor, samplingFor, tierGuidance, withReplay } from './modelProfile'
+import { evidenceNote, evidenceNudge, missingClaimedFiles, unsupportedClaims } from './guards'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
 
@@ -55,6 +56,8 @@ interface RunCtl {
   pauseRequested: boolean
   approvals: Map<string, { approval: PendingApproval; resolve: (d: { approved: boolean; feedback?: string }) => void }>
   leases: Map<string, string>
+  /** read before edit: what each agent has read or written, kept for the whole task (guards.ts) */
+  seen: Map<string, number>
   web: boolean
   images: Map<string, { mediaType: string; data: string }>
   mcpTools: McpToolRef[]
@@ -136,7 +139,7 @@ export class AgentRunner {
     const images = new Map<string, { mediaType: string; data: string }>()
     run.messages.push({ role: 'user', content: buildUserContent(req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
-      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '',
+      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), seen: this.seenFor(run.id), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '',
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
@@ -222,6 +225,26 @@ export class AgentRunner {
   }
 
   // ---------------------------------------------------------------- internals
+  /** Read-before-edit memory per task: it survives follow-up messages, and a file changed on disk has to be read again. */
+  private seenByRun = new Map<string, Map<string, number>>()
+  private seenFor(runId: string): Map<string, number> {
+    let m = this.seenByRun.get(runId)
+    if (!m) this.seenByRun.set(runId, (m = new Map()))
+    return m
+  }
+  /** Hallucination guard: results the reply states that nothing in this task supports (guards.ts). */
+  private async unverified(ctl: RunCtl, content: string): Promise<{ unsupported: ReturnType<typeof unsupportedClaims>; missing: string[] }> {
+    const exists = async (rel: string): Promise<boolean> => {
+      try {
+        await fsp.access(await resolveInside(ctl.run.project, rel))
+        return true
+      } catch {
+        // a bare file name may have been created anywhere by a command that ran (a scaffolder): give it the benefit of the doubt
+        return !rel.includes('/') && ctl.run.commandsRun.some((c) => c.exitCode === 0)
+      }
+    }
+    return { unsupported: unsupportedClaims(content, ctl.run.commandsRun), missing: await missingClaimedFiles(content, ctl.run.changedFiles, exists) }
+  }
   private addItem(ctl: RunCtl, item: Omit<TranscriptItem, 'id' | 'at'>): TranscriptItem {
     const full: TranscriptItem = { id: shortId(), at: nowIso(), ...item }
     ctl.run.transcript.push(full)
@@ -400,6 +423,7 @@ export class AgentRunner {
     let iter = 0
     let nudges = 0
     let verified = false
+    let evidenceAsked = false
     let lastText = ''
     while (true) {
       if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
@@ -495,6 +519,22 @@ export class AgentRunner {
           a.messages.push({ role: 'user', content: 'Your previous reply was cut off by the output length limit. Continue exactly where you stopped; split large files into several write_file/append_file calls.' })
           continue
         }
+        // Claims need evidence: "tests pass" needs a passing run in this task, "I created x" needs the file to exist.
+        if (a.isLead && content.trim()) {
+          const { unsupported, missing } = await this.unverified(ctl, content)
+          if (unsupported.length || missing.length) {
+            if (!evidenceAsked && iter < maxIter) {
+              evidenceAsked = true
+              this.log(ctl, 'info', `Reply states results without evidence (${evidenceNote(unsupported, missing)}); asked the model to verify or correct once`)
+              this.addItem(ctl, { kind: 'status', text: 'Dahl Studio found a statement without evidence in that reply and asked for it to be verified or corrected.' })
+              a.messages.push({ role: 'user', content: evidenceNudge(unsupported, missing) })
+              continue
+            }
+            // asked once already and the reply still says it: tell the user plainly instead of letting it stand
+            this.log(ctl, 'info', `Reply still states results without evidence: ${evidenceNote(unsupported, missing)}`)
+            this.addItem(ctl, { kind: 'status', text: evidenceNote(unsupported, missing) })
+          }
+        }
         return content
       }
       // only the lead may delegate: a sub-agent's delegate_agents call goes through execTool and is refused (no nesting)
@@ -537,7 +577,7 @@ export class AgentRunner {
   private execCtx(ctl: RunCtl, a: AgentCtx): ExecCtx {
     return {
       run: ctl.run, store: ctl.store, deps: this.deps, signal: ctl.abort.signal, agentId: a.info.id, agentName: a.info.name, ownedFiles: a.info.files,
-      leases: ctl.leases, images: ctl.images, mcpTools: ctl.mcpTools, turn: ctl.turn,
+      leases: ctl.leases, seen: ctl.seen, images: ctl.images, mcpTools: ctl.mcpTools, turn: ctl.turn,
       approve: (x) => this.requestApproval(ctl, a, x),
       emitPlan: (plan) => {
         this.deps.emit({ runId: ctl.run.id, project: ctl.run.project, type: 'plan', plan })

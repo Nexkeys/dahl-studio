@@ -48,6 +48,7 @@ describe('never ask', () => {
 
   it('runs writes, commands and connector tools without an approval card', async () => {
     const t = ctx({ autoApproveAll: true })
+    await t.run('read_file', { path: 'a.txt' })
     expect((await t.run('write_file', { path: 'a.txt', content: 'two\n' })).ok).toBe(true)
     expect(await fs.readFile(path.join(dir, 'a.txt'), 'utf8')).toBe('two\n')
     expect((await t.run('run_command', { command: 'echo hi' })).ok).toBe(true)
@@ -57,6 +58,7 @@ describe('never ask', () => {
 
   it('still asks for everything when it is off', async () => {
     const t = ctx({})
+    await t.run('read_file', { path: 'a.txt' })
     await t.run('write_file', { path: 'a.txt', content: 'two\n' })
     await t.run('run_command', { command: 'echo hi' })
     await t.run('mcp__srv__write_thing', {})
