@@ -40,3 +40,12 @@ kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--borde
 .palette-item { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; padding: 7px 10px; border-radius: 7px; text-align: left; }
 .palette-item.on { background: var(--accent-soft); color: var(--accent); }
 .palette-item .muted { margin-left: auto; max-width: 45%; }
+/* messages typed while Dahl works (Outbox.tsx) */
+.outbox { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 0; }
+.out-chip { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); font-size: 12px; animation: reveal .2s both; }
+.out-chip.queued { border-color: var(--border); background: var(--surface); }
+.out-when { color: var(--accent); font-weight: 600; white-space: nowrap; font-size: 11px; }
+.out-chip.queued .out-when { color: var(--muted); }
+.out-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-toggle.danger:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.msg-steer { font-size: 10.5px; color: var(--muted); margin-left: 6px; font-weight: 400; }

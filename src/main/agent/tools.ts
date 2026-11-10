@@ -1,5 +1,6 @@
 import type { AgentMode, AgentRole, ThinkingLevel } from '@shared/types'
 import { BROWSER_TOOL_DEFS, browserToolsFor } from './browserDefs'
+import { CHIEF_DEFS, CHIEF_TOOLS } from '../chief/tools'
 
 const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function',
@@ -68,7 +69,9 @@ export const TOOL_DEFS = {
     agents: { type: 'array', items: { type: 'object', properties: { role: { type: 'string', enum: ['architect', 'implementer', 'debugger', 'test_engineer', 'code_reviewer', 'security_reviewer', 'researcher'] }, task: S, files: { type: 'array', items: S } }, required: ['role', 'task'] } }
   }, ['agents']),
   // Preview pane tools (browser_open, browser_snapshot, browser_click...): agent/browserDefs.ts
-  ...BROWSER_TOOL_DEFS
+  ...BROWSER_TOOL_DEFS,
+  // Chief of Staff (chief/tools.ts): briefing, follow-ups, goals, delegation to another project
+  ...CHIEF_DEFS
 } as const
 
 export type ToolName = keyof typeof TOOL_DEFS
@@ -80,7 +83,7 @@ export const WRITE_ROLES: AgentRole[] = ['implementer', 'debugger', 'test_engine
 
 export function toolsFor(role: AgentRole, mode: AgentMode, web: boolean): ToolName[] {
   const t: ToolName[] = [...READ]
-  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github')
+  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github', ...CHIEF_TOOLS)
   if (mode === 'build' && (role === 'lead' || WRITE_ROLES.includes(role))) t.push(...WRITE)
   if (mode === 'build' && role === 'lead') t.push('git_push')
   t.push(...browserToolsFor(role, mode))

@@ -11,10 +11,12 @@ import type { RunnerDeps, McpToolRef } from './runner'
 import type { RunResult } from '../terminal'
 import { execAskUser } from './askUser'
 import { parseToolArgs } from './args'
+import { autoApproved } from './approvals'
 import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
 import { execBrowser } from './browserTools'
+import { execChief } from '../chief/tools'
 
 export interface ToolResult {
   ok: boolean
@@ -55,7 +57,7 @@ async function checkLease(c: ExecCtx, rel: string): Promise<string | null> {
 
 async function applyWrite(c: ExecCtx, rel: string, before: string | null, after: string, reason: string | undefined, settings: Settings, forceAsk: boolean): Promise<ToolResult> {
   if (before === after) return { ok: true, text: 'No change needed (content identical).' }
-  if (!settings.autoApproveWrites || forceAsk) {
+  if (!autoApproved(settings, 'write') || forceAsk) {
     const d = await c.approve({ kind: 'write', agent: c.agentName, path: rel, before: before ?? '', after, reason })
     if (!d.approved) return { ok: false, text: `User rejected the change to ${rel}.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
   }
@@ -134,7 +136,7 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         if (!command) return { ok: false, text: 'Empty command.' }
         command = unwrapPowershell(command)
         if (/\bgit\b[\s\S]*\b(commit|tag)\b/.test(command)) command = stripDashes(command)
-        if (!settings.autoApproveCommands) {
+        if (!autoApproved(settings, 'command')) {
           const d = await c.approve({ kind: 'command', agent: c.agentName, command, reason: a.reason })
           if (!d.approved) return { ok: false, text: `User declined to run the command.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
         }
@@ -153,6 +155,11 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return await execGithub(c, a ?? {})
       case 'ask_user':
         return await execAskUser(c, a ?? {})
+      case 'chief_briefing':
+      case 'chief_followups':
+      case 'chief_goals':
+      case 'chief_delegate':
+        return await execChief(c, name, a ?? {})
       case 'web_search': {
         if (!c.deps.web) return { ok: false, text: 'Web research is not available.' }
         const res = await c.deps.web.search(String(a.query), Math.min(Number(a.max_results) || 8, 15), c.signal)
@@ -187,12 +194,12 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
   }
 }
 
-async function execMcp(c: ExecCtx, name: string, args: Record<string, unknown>, _s: Settings): Promise<ToolResult> {
+async function execMcp(c: ExecCtx, name: string, args: Record<string, unknown>, settings: Settings): Promise<ToolResult> {
   const ref = c.mcpTools.find((t) => t.fnName === name)
   if (!ref || !c.deps.mcp) return { ok: false, text: `MCP tool ${name} is not connected.` }
   // Plan and Review must not change anything without the user: any tool the server does not mark read-only asks there
   const needsAsk = ref.policy === 'ask' || (ref.policy === 'readonly' && !ref.tool.readOnly) || (c.run.mode !== 'build' && !ref.tool.readOnly)
-  if (needsAsk) {
+  if (needsAsk && !autoApproved(settings, 'mcp')) {
     const d = await c.approve({ kind: 'mcp', agent: c.agentName, tool: `${ref.serverName} / ${ref.tool.name}`, args: JSON.stringify(args, null, 2).slice(0, 4000) })
     if (!d.approved) return { ok: false, text: `User declined the ${ref.tool.name} call.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
   }
@@ -214,11 +221,13 @@ async function execGitPush(c: ExecCtx, a: { remote_url?: string; branch?: string
   const branch = plan.branch ?? 'main'
   const target = (a.branch ? String(a.branch) : '') || branch
   const auth = (await gitTokenSaved()) && isGithubHttps(remote) ? 'saved GitHub token' : 'Git Credential Manager (a sign-in window may open)'
-  const d = await c.approve({
-    kind: 'push', agent: c.agentName, tool: `git push to ${remote}`,
-    push: { remote, branch, target, commits: plan.commits, commitMessage: willCommit ? msg : undefined, pending: plan.repo ? plan.pending : -1, auth }
-  })
-  if (!d.approved) return { ok: false, text: `User declined the push.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
+  if (!autoApproved(await c.deps.getSettings(), 'publish')) {
+    const d = await c.approve({
+      kind: 'push', agent: c.agentName, tool: `git push to ${remote}`,
+      push: { remote, branch, target, commits: plan.commits, commitMessage: willCommit ? msg : undefined, pending: plan.repo ? plan.pending : -1, auth }
+    })
+    if (!d.approved) return { ok: false, text: `User declined the push.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
+  }
   c.status(`Pushing to ${remote}`)
   const steps: string[] = []
   const command = `git push -u origin ${branch}${target !== branch ? `:${target}` : ''}`

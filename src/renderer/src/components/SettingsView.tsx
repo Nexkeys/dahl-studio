@@ -3,6 +3,8 @@ import { KeyRound, RefreshCw, Trash2, CheckCircle2, XCircle, ShieldCheck, Palett
 import type { EffectsMode, KeyInfo, KeyTestResult, ThemeId } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
 import { THEMES, applyEffects, applyTheme, isLowEnd, type Theme } from '../themes'
+import { CompletionSettings } from './CompletionSettings'
+import { LocalModels } from './LocalModels'
 
 const KEY_HELP: Record<string, string> = {
   primary: 'Main Dahl key. Used first for Dahl models.',
@@ -10,7 +12,9 @@ const KEY_HELP: Record<string, string> = {
   openai: 'platform.openai.com API key (sk-...). Unlocks OpenAI models.',
   anthropic: 'console.anthropic.com API key. Unlocks Claude models.',
   gemini: 'aistudio.google.com API key. Unlocks Gemini models.',
-  nvidia: 'build.nvidia.com API key (nvapi-...). Unlocks NVIDIA-hosted models.'
+  nvidia: 'build.nvidia.com API key (nvapi-...). Unlocks NVIDIA-hosted models.',
+  groq: 'console.groq.com API key (gsk_...). Unlocks Groq models (very fast; the free tier has low rate limits).',
+  openrouter: 'openrouter.ai API key (sk-or-...). Unlocks hundreds of models, including free ones (look for the Free badge).'
 }
 
 function KeyCard({ k }: { k: KeyInfo }) {
@@ -131,8 +135,9 @@ export function SettingsView() {
         <p className="muted small">Discovered live from each provider for your keys, refreshed every 30 minutes. Newly released models appear automatically, marked New. <Eye size={11} /> = accepts images, <Brain size={11} /> = native reasoning control.</p>
         {Object.entries(errors).map(([p, e]) => <div key={p} className="error-text small">{PROVIDER_NAMES[p as keyof typeof PROVIDER_NAMES]}: {e}</div>)}
         {providers.map((p) => (
-          <div key={p} className="model-group">
-            <div className="label">{PROVIDER_NAMES[p]} · {models.filter((m) => m.provider === p).length} models</div>
+          // long lists (OpenRouter lists hundreds) start folded; the model menu in the chat box searches them
+          <details key={p} className="model-group" open={models.filter((m) => m.provider === p).length <= 40}>
+            <summary className="label">{PROVIDER_NAMES[p]} · {models.filter((m) => m.provider === p).length} models</summary>
             <div className="model-list">
               {models.filter((m) => m.provider === p).map((m) => (
                 <button key={m.key} className={`model-chip ${s.defaultModel === m.key ? 'on' : ''}`} onClick={() => updateSettings({ defaultModel: m.key })} title={m.id}>
@@ -141,16 +146,32 @@ export function SettingsView() {
                 </button>
               ))}
             </div>
-          </div>
+          </details>
         ))}
       </section>
+      <CompletionSettings />
+      <LocalModels />
       <section>
         <h2><ShieldCheck size={16} /> Behaviour</h2>
         <label className="check"><input type="checkbox" checked={s.notifications} onChange={(e) => updateSettings({ notifications: e.target.checked })} /> Windows notifications when Dahl needs approval, finishes, fails or pauses (only while Dahl Studio is in the background) <button className="btn tiny ghost" onClick={async (e) => { e.preventDefault(); const ok = await api.invoke<boolean>('notify:test'); if (!ok) useStore.getState().notify('Notifications are not supported or are blocked in Windows settings', 'error') }}>Send test notification</button></label>
         <label className="check"><input type="checkbox" checked={s.maintainProgress} onChange={(e) => updateSettings({ maintainProgress: e.target.checked })} /> Keep a PROGRESS.md work log in each project (task, plan, results, next steps; read back at the start of every task)</label>
         <label className="check"><input type="checkbox" checked={s.autoMemory} onChange={(e) => updateSettings({ autoMemory: e.target.checked })} /> Learn project memory automatically after tasks (one small extra model call)</label>
-        <label className="check"><input type="checkbox" checked={s.autoApproveWrites} onChange={(e) => updateSettings({ autoApproveWrites: e.target.checked })} /> Apply file changes without asking (not recommended)</label>
-        <label className="check"><input type="checkbox" checked={s.autoApproveCommands} onChange={(e) => updateSettings({ autoApproveCommands: e.target.checked })} /> Run agent commands without asking (not recommended)</label>
+      </section>
+      <section>
+        <h2><ShieldCheck size={16} /> Approvals</h2>
+        <label className="check strong"><input type="checkbox" checked={s.autoApproveAll} onChange={(e) => updateSettings({ autoApproveAll: e.target.checked })} /> Never ask: let Dahl use every tool, skill and connector without approval (file changes, commands, connectors and git, in every mode)</label>
+        {s.autoApproveAll && (
+          <>
+            <p className="muted small warn-note">Dahl will change files and run commands on this PC without stopping to ask. Writes still cannot leave the project folder, and secrets stay hidden from output. Questions Dahl asks you are still shown.</p>
+            <label className="check indent"><input type="checkbox" checked={s.askBeforePublishing} onChange={(e) => updateSettings({ askBeforePublishing: e.target.checked })} /> Still ask before publishing to GitHub (push, pull requests, merges, releases)</label>
+          </>
+        )}
+        {!s.autoApproveAll && (
+          <>
+            <label className="check"><input type="checkbox" checked={s.autoApproveWrites} onChange={(e) => updateSettings({ autoApproveWrites: e.target.checked })} /> Apply file changes without asking</label>
+            <label className="check"><input type="checkbox" checked={s.autoApproveCommands} onChange={(e) => updateSettings({ autoApproveCommands: e.target.checked })} /> Run agent commands without asking</label>
+          </>
+        )}
       </section>
       <section>
         <h2><Palette size={16} /> Theme</h2>

@@ -28,6 +28,10 @@ Format: date, what changed, why, and evidence (the commands and results actually
 - Chat messages scrolled out of view are not laid out or painted (`content-visibility`).
 - Test timeouts raised to 30 s (git tests 120 s): tests that start real processes timed out at random under load, which could fail `npm run dist`.
 
+### Added (phase 2)
+- **Never ask** (Settings > Approvals): one switch lets Dahl change files, run commands, use git and every connector tool without approval cards, in every mode. Publishing to GitHub (push, pull requests, merges, comments, releases) still asks unless "Still ask before publishing to GitHub" is also turned off. Questions Dahl asks you are never answered for you. Tests: `tests/approvals.test.ts`.
+- **Send messages while Dahl works**, like Claude Code. The chat box stays open during a task. Enter tells Dahl now: the task reads it at its next step, and it shows in the chat as "Sent while Dahl was working". Alt+Enter (or "After task") keeps it until the task finishes and then sends it; several waiting messages go out as one turn. Ctrl+Enter (or "Stop and send") stops the task and sends at once, continuing the same conversation. Waiting messages show as chips above the box with Send now and Remove. If a task pauses or fails before reading a message, the message stays on screen instead of being lost. A message that arrives while the final answer is being written makes Dahl take one more step. Tests: `tests/steer.test.ts` (3), `tests/outbox.test.ts` (6).
+
 ### Verification (phase 1)
 - `npm run typecheck`: exit 0. `npx vitest run`: 150 passed, 9 skipped (live). `npx electron-vite build`: exit 0. Smoke run of the built app: chat tabs and composer render, no console errors.
 

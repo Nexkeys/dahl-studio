@@ -1,0 +1,40 @@
+/* ---------- model menu in the composer bar (components/ModelMenu.tsx), local models in Settings ---------- */
+.composer { position: relative; }
+.model-btn { max-width: 210px; }
+.model-btn-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.model-pop { display: flex; flex-direction: column; padding: 0; max-height: min(460px, 70vh); overflow: hidden; }
+.model-search { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.model-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 13px; }
+.model-rows { flex: 1; overflow: auto; padding: 4px; }
+.model-section { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 7px 8px 3px; }
+.model-prow, .model-row { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 12.5px; min-height: 30px; }
+.model-prow:hover, .model-row:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.model-prow.hl, .model-row.hl { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.model-prow b { font-weight: 600; }
+.model-prow .count { color: var(--muted); font-size: 11.5px; }
+.model-row { padding-left: 26px; }
+.model-row.recent { padding-left: 8px; }
+.model-row.on .model-name { color: var(--accent); font-weight: 600; }
+.model-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-from { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.model-ctx { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+.mbadges { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.mbadge { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; line-height: 1; padding: 2px 5px; border-radius: 99px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+.mbadge.free { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.mbadge.local { color: var(--accent); }
+.mbadge.new { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.access { margin-left: auto; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.access.key, .access.running { color: var(--ok); }
+.access.key_error { color: var(--danger); }
+.model-warn { color: var(--warn); font-size: 11px; padding: 0 8px 4px 26px; }
+.model-foot { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+.model-foot .grow { flex: 1; }
+.model-foot button { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; }
+[data-effect='tactical'] .model-section, [data-effect='grid'] .model-section { font-family: var(--mono); }
+[data-effect='glow'] .model-row.hl, [data-effect='glow'] .model-prow.hl { box-shadow: inset 2px 0 0 var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* Settings > Local models */
+.local-card { display: flex; flex-direction: column; gap: 8px; }
+.local-card .row { align-items: center; }
+.local-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.local-dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }

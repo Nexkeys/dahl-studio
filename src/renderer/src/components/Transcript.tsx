@@ -129,6 +129,7 @@ export const Transcript = memo(function Transcript({ root, items, running }: { r
       out.push(
         <div key={it.id} className="msg user reveal">
           <div className="msg-text">{it.text}</div>
+          {it.steerId && <div className="msg-steer">Sent while Dahl was working</div>}
           {it.attachments?.length ? <div className="msg-atts">{it.attachments.map((a, i) => <span key={i} className="chip"><Paperclip size={11} /> {a.name}</span>)}</div> : null}
         </div>
       )

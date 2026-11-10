@@ -5,6 +5,7 @@ import { gitStatus, gitToken } from '../git'
 import { github, GitHubError, parseGithubRepo, type CheckRun } from '../github'
 import { resolveInside } from '../fs/workspace'
 import type { ExecCtx, ToolResult } from './toolExec'
+import { autoApproved } from './approvals'
 
 // The agent's github tool. Reads run directly. create_pr, merge_pr, comment and create_release are outward-facing,
 // so they always ask the user (auto-approve does not apply) and only run in Build mode, for the lead agent.
@@ -28,6 +29,7 @@ export async function execGithub(c: ExecCtx, raw: Record<string, unknown>): Prom
   const token = await gitToken()
   if (!token) return { ok: false, text: 'No GitHub token is saved. Ask the user to save one in Source Control (GitHub token). It needs access to this repository: Contents and Pull requests (read and write), Actions (read).' }
   const ask = async (title: string, details: string): Promise<string | null> => {
+    if (autoApproved(await c.deps.getSettings(), 'publish')) return null
     const d = await c.approve({ kind: 'github', agent: c.agentName, tool: title, args: details })
     return d.approved ? null : `User declined: ${title}.${d.feedback ? ` Feedback: ${d.feedback}` : ''}`
   }
