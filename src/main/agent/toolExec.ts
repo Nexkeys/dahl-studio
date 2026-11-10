@@ -15,6 +15,7 @@ import { autoApproved } from './approvals'
 import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
+import { execBrowser } from './browserTools'
 import { execChief } from '../chief/tools'
 import { changedRefusal, seenKey, unreadRefusal } from './guards'
 
@@ -220,6 +221,7 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
         return { ok: true, text: await c.deps.analyzeImage(String(a.path), img.mediaType, img.data, c.signal) }
       }
     }
+    if (name.startsWith('browser_')) return await execBrowser(c, name, a ?? {})
     if (name.startsWith('mcp__')) return execMcp(c, name, a, settings)
     return { ok: false, text: `Unknown tool ${name}` }
   } catch (e) {

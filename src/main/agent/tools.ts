@@ -1,4 +1,5 @@
 import type { AgentMode, AgentRole, ThinkingLevel } from '@shared/types'
+import { BROWSER_TOOL_DEFS, browserToolsFor } from './browserDefs'
 import { CHIEF_DEFS, CHIEF_TOOLS } from '../chief/tools'
 
 const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
@@ -72,6 +73,8 @@ export const TOOL_DEFS = {
   delegate_agents: fn('delegate_agents', 'Run specialised sub-agents in parallel and get their reports. Roles: architect, implementer, debugger, test_engineer, code_reviewer, security_reviewer, researcher. Give each a focused task and (for implementer/debugger/test_engineer) the files it owns; agents cannot edit files owned by another agent.', {
     agents: { type: 'array', items: { type: 'object', properties: { role: { type: 'string', enum: ['architect', 'implementer', 'debugger', 'test_engineer', 'code_reviewer', 'security_reviewer', 'researcher'] }, task: S, files: { type: 'array', items: S } }, required: ['role', 'task'] } }
   }, ['agents']),
+  // Preview pane tools (browser_open, browser_snapshot, browser_click...): agent/browserDefs.ts
+  ...BROWSER_TOOL_DEFS,
   // Chief of Staff (chief/tools.ts): briefing, follow-ups, goals, delegation to another project
   ...CHIEF_DEFS
 } as const
@@ -88,6 +91,7 @@ export function toolsFor(role: AgentRole, mode: AgentMode, web: boolean): ToolNa
   if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github', ...CHIEF_TOOLS)
   if (mode === 'build' && (role === 'lead' || WRITE_ROLES.includes(role))) t.push(...WRITE)
   if (mode === 'build' && role === 'lead') t.push('git_push')
+  t.push(...browserToolsFor(role, mode))
   // the user's Web toggle applies to every agent: a Researcher sub-agent must not browse when web research is off
   if (web) t.push(...WEB)
   return t
@@ -135,7 +139,7 @@ export function capabilities(mode: AgentMode, lead: boolean, environment?: strin
   const build = [
     'In Build mode you can edit files and run any PowerShell command on this PC (the user approves them unless auto-approve is on): install packages (npm, pip, winget), start dev servers, build and test apps.',
     'If a tool the task needs is missing (see "This PC"), install it yourself instead of telling the user you cannot: winget for programs (Node.js: winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements; Git: Git.Git; Python: Python.Python.3.12; Java 17: EclipseAdoptium.Temurin.17.JDK), npm/pip/uv for packages. A newly installed program may need a new terminal session or its full path until PATH refreshes.',
-    'Web apps: start the dev server with run_command and tell the user the URL; it opens in the Preview pane beside the editor.',
+    'Web apps: start the dev server with run_command and tell the user the URL; it opens in the Preview pane beside the editor. Check your UI there yourself: browser_open the URL (or an HTML file), then browser_snapshot, browser_click/browser_type/browser_press, browser_console and browser_network for errors, browser_screenshot for layout.',
     'Android apps: possible when the Android SDK and Java are installed (see "This PC"): build with Expo or Gradle and run on the Android emulator. iOS apps cannot be built or run on Windows: that needs a Mac, or Expo EAS cloud builds with an Apple developer account. Say so plainly.'
   ].join(' ')
   const readOnly = `In ${mode === 'plan' ? 'Plan' : 'Review'} mode you can read and search the project but cannot edit files or run commands. If the request needs that, say exactly what you would do and ask the user to switch to Build mode (they can press "Switch to Build"). Never say you have no access to the user's machine or terminal: Build mode has it.`

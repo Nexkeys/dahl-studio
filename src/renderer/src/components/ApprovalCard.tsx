@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShieldCheck, Plug, X, GitPullRequest } from 'lucide-react'
+import { ShieldCheck, Plug, X, GitPullRequest, Globe } from 'lucide-react'
 import { api, useStore } from '../store'
 import { QuestionCard } from './QuestionCard'
 
@@ -33,7 +33,7 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
   return (
     <div className="approval-card reveal">
       <div className="approval-head">
-        {approval.kind === 'mcp' ? <Plug size={14} /> : approval.kind === 'github' ? <GitPullRequest size={14} /> : <ShieldCheck size={14} />}
+        {approval.kind === 'mcp' ? <Plug size={14} /> : approval.kind === 'github' ? <GitPullRequest size={14} /> : approval.kind === 'browser' ? <Globe size={14} /> : <ShieldCheck size={14} />}
         Approval needed{approval.agent && approval.agent !== 'Dahl' ? ` from ${approval.agent}` : ''}
       </div>
       {approval.kind === 'command' && <pre className="approval-cmd">{approval.command}</pre>}
@@ -54,6 +54,12 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
           <pre className="approval-cmd">{approval.args}</pre>
         </>
       )}
+      {approval.kind === 'browser' && (
+        <>
+          <div className="small"><b>{approval.tool}</b> (always asked: the code runs with the page's access)</div>
+          <pre className="approval-cmd">{approval.args}</pre>
+        </>
+      )}
       {approval.kind === 'push' && approval.push && (
         <>
           <div className="small">Publish to GitHub (never force-pushed)</div>
@@ -63,7 +69,7 @@ export function ApprovalCard({ root, id }: { root: string; id: string }) {
       {approval.reason && <div className="muted small">{approval.reason}</div>}
       <div className="row-actions end">
         <RejectButton onReject={(f) => void decide(false, f)} />
-        <button className="btn small primary" onClick={() => decide(true)}>{approval.kind === 'command' ? 'Run command' : approval.kind === 'mcp' ? 'Allow' : approval.kind === 'push' ? 'Push' : approval.kind === 'github' ? 'Go ahead' : 'Apply change'}</button>
+        <button className="btn small primary" onClick={() => decide(true)}>{approval.kind === 'command' ? 'Run command' : approval.kind === 'mcp' ? 'Allow' : approval.kind === 'push' ? 'Push' : approval.kind === 'github' ? 'Go ahead' : approval.kind === 'browser' ? 'Run in page' : 'Apply change'}</button>
       </div>
     </div>
   )

@@ -14,6 +14,7 @@ import { compatFor, dropTuning, profileFor, samplingFor, tierGuidance, withRepla
 import { evidenceNote, evidenceNudge, missingClaimedFiles, unsupportedClaims } from './guards'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
+import type { BrowserBridge } from './browserTools'
 
 export { repairHistory, closeDanglingToolCalls, compact } from './history'
 
@@ -47,6 +48,8 @@ export interface RunnerDeps {
   maxIterations?: number
   /** installed developer tools on this PC, one line (see envProbe.ts) */
   environment?(): Promise<string>
+  /** the Preview pane, driven by the browser_* tools (preview/controller.ts) */
+  browser?: BrowserBridge
 }
 
 interface RunCtl {
