@@ -14,7 +14,7 @@ function on(channel: string, cb: (payload: any) => void): () => void {
   return () => ipcRenderer.removeListener(channel, fn)
 }
 
-const ALLOWED_EVENTS = new Set(['agent:event', 'term:event', 'keys:changed', 'usage:changed', 'models:changed', 'mcp:changed', 'update:status', 'app:focusProject', 'preview:open'])
+const ALLOWED_EVENTS = new Set(['agent:event', 'term:event', 'keys:changed', 'usage:changed', 'models:changed', 'mcp:changed', 'update:status', 'app:focusProject', 'preview:open', 'pty:event'])
 
 /** The only surface the renderer gets. No Node, no raw ipcRenderer, no secrets returned. */
 const api = {

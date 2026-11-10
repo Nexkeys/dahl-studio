@@ -13,6 +13,7 @@ import { mediaTypeFor } from './agent/history'
 import { turnDiff } from './agent/turnDiff'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { registerPtyIpc } from './pty/ipc'
 import { registerCompletionIpc } from './completion/ipc'
 import { allPrereqs } from './mcp/prereqs'
 import { runMobileChecks } from './mobileCheck'
@@ -205,6 +206,8 @@ export function registerIpc(): void {
     return true
   })
   handle('term:stop', (id: string) => procs.stop(id))
+  // the terminal panel: real shells in a PTY host (pty/)
+  registerPtyIpc(handle, assertProject)
 
   // ---- agent ----
   handle('agent:start', async (req: StartRunRequest) => {

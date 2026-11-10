@@ -7,6 +7,8 @@ import { SPECS_C } from './themes-c'
 import { SPECS_D } from './themes-d'
 
 export type { Palette } from './themegen'
+/** Mono stack used outside CSS (the terminal's xterm instance); the same faces as --mono. */
+export const CASCADIA = "'Cascadia Code', 'Cascadia Mono', Consolas, monospace"
 
 /**
  * Theme registry. Each theme is generated from a few OKLCH inputs plus a structure (themegen.ts). Colours become CSS

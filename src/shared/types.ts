@@ -400,6 +400,31 @@ export interface McpStatus {
   startedAt?: string
 }
 
+// ---- integrated terminal (PTY host, xterm.js panel) ----
+
+export type ShellKind = 'pwsh' | 'powershell' | 'cmd' | 'gitbash'
+
+/** A shell found on this PC. The renderer picks by id; main resolves the path, so it never runs an arbitrary exe. */
+export interface ShellInfo {
+  id: ShellKind
+  name: string
+  path: string
+}
+
+export interface PtyShells {
+  shells: ShellInfo[]
+  /** Windows build number, for xterm.js ConPTY handling (0 elsewhere) */
+  buildNumber: number
+}
+
+/** Output of a terminal (data) or the end of its shell (exit). Sent on the 'pty:event' channel. */
+export interface PtyEvent {
+  id: string
+  type: 'data' | 'exit'
+  data?: string
+  code?: number | null
+}
+
 // ---------------- Tab completions (grey ghost text in the editor) ----------------
 // The two settings fields are merged into Settings here (interface merging), so they stay in this block.
 export interface Settings {

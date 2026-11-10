@@ -161,14 +161,7 @@ h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; display: flex; gap: 8px
 .segmented button.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .btn.send { width: 36px; padding: 0; justify-content: center; }
 
-/* terminal */
-.terminal .term-out { flex: 1; overflow: auto; padding: 8px 12px; font-family: var(--mono); font-size: 12px; background: var(--editor-bg); cursor: text; }
-.term-line { white-space: pre-wrap; word-break: break-all; }
-.term-line.cmd { color: var(--accent); font-weight: 600; margin-top: 6px; }
-.term-line.err { color: var(--danger); }
-.term-line.exit { color: var(--muted); font-style: italic; }
-.term-input-row { display: flex; gap: 4px; align-items: center; color: var(--accent); margin-top: 4px; }
-.term-input-row input { flex: 1; border: 0; background: transparent; font: inherit; color: var(--text); outline: none; }
+/* terminal: see ui-terminal.css */
 
 /* views */
 .view { overflow: auto; padding: 28px 36px; max-width: 980px; }

@@ -1,0 +1,52 @@
+/* ---------- integrated terminal (xterm.js) ---------- */
+.terminal { background: var(--editor-bg); }
+.terminal .term-head { height: 36px; padding: 0 6px 0 0; gap: 2px; align-items: stretch; background: var(--surface); }
+.terminal .term-head > .row-actions { gap: 2px; }
+.term-tabs { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.term-tabs::-webkit-scrollbar { display: none; }
+/* tabs shrink (command first, then name) before any of them scrolls out of view */
+.term-tab { flex: 0 1 auto; min-width: 74px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 11px; max-width: 240px; border-right: 1px solid var(--border); color: var(--muted); cursor: pointer; white-space: nowrap; font-size: 12px; user-select: none; transition: color .12s, background .12s; }
+.term-tab-name, .term-tab-cmd { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.term-tab-name { flex: 0 1 auto; }
+.term-tab-cmd { flex: 0 100 auto; }
+.term-tab:hover { color: var(--text); background: color-mix(in srgb, var(--editor-bg) 55%, var(--surface)); }
+.term-tab.on { color: var(--text); background: var(--editor-bg); box-shadow: inset 0 -2px 0 var(--accent); }
+.term-tab.on .shell-icon { color: var(--accent); }
+.term-tab .tab-close { opacity: 0; flex-shrink: 0; }
+.term-tab:hover .tab-close, .term-tab.on .tab-close, .term-tab .tab-close:focus-visible { opacity: 1; }
+.term-tab.exited .term-tab-name { opacity: .55; font-style: italic; }
+.term-tab-name { font-weight: 500; }
+.term-tab-cmd { max-width: 130px; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.terminal .term-head > .row-actions { flex-shrink: 0; margin-left: 4px; }
+.term-tabs { flex: 0 1 auto; }
+.term-busy { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex-shrink: 0; animation: pulse 1.6s ease-in-out infinite; }
+.shell-icon { flex-shrink: 0; }
+.term-new { position: relative; display: flex; align-items: center; padding-left: 4px; }
+.term-new .icon-btn { width: 26px; height: 26px; }
+.term-new .term-new-more { width: 16px; margin-left: -2px; }
+.term-menu { top: calc(100% - 2px); left: 0; min-width: 250px; }
+.term-menu .popover-item { color: var(--text); }
+.term-menu .popover-item .pill { font-size: 10.5px; padding: 1px 7px; }
+.term-menu .term-def { font-size: 12px; color: var(--muted); }
+.term-menu .term-def:hover { color: var(--text); }
+.term-check { width: 14px; display: inline-grid; place-items: center; color: var(--accent); }
+.term-preview { max-width: 210px; }
+.term-preview .ellipsis { min-width: 0; }
+.terminal .term-head .icon-btn:disabled { opacity: .4; }
+
+.term-body { position: relative; flex: 1; min-height: 0; background: var(--editor-bg); }
+.term-xterms { position: absolute; inset: 0; }
+.xterm-host { position: absolute; inset: 6px 4px 2px 12px; }
+.xterm-host .xterm { height: 100%; }
+.xterm-host .xterm:focus, .xterm-host .xterm .xterm-helper-textarea:focus { outline: none; }
+/* ligatures would shift cells (Cascadia Code has them) */
+.xterm-host .xterm-rows { font-variant-ligatures: none; }
+.xterm-host .xterm-viewport { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent; }
+.xterm-host .xterm-viewport::-webkit-scrollbar { width: 10px; }
+.xterm-host .xterm-viewport::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 18%, transparent); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+.xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text) 32%, transparent); }
+.xterm-host .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm-host .xterm-screen .xterm-decoration-overview-ruler { display: none; }
+
+.term-resume-float { position: absolute; z-index: 5; top: 8px; right: 18px; max-width: calc(100% - 36px); margin: 0; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.term-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; }

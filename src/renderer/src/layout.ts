@@ -3,7 +3,8 @@ import { useStore } from './store'
 
 // Workspace layout shortcuts: Ctrl+B explorer, Ctrl+Alt+B chat, Ctrl+J or Ctrl+` terminal.
 
-export const panels: { explorer: PanelImperativeHandle | null; chat: PanelImperativeHandle | null } = { explorer: null, chat: null }
+// editor: collapsed by the terminal's maximise button
+export const panels: { explorer: PanelImperativeHandle | null; chat: PanelImperativeHandle | null; editor: PanelImperativeHandle | null } = { explorer: null, chat: null, editor: null }
 
 export function togglePanel(name: keyof typeof panels): void {
   const p = panels[name]
