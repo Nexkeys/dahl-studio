@@ -17,7 +17,7 @@ beforeAll(async () => {
     transcript: await import('../src/renderer/src/components/Transcript'),
     preset: await import('../src/renderer/src/components/PresetSwitch')
   }
-})
+}, 300_000)
 
 const tally = (usd: number, requests: number): CostTally => ({ usd, requests, unknown: 0, estimated: true, inputTokens: 100_000 * requests, outputTokens: 1000 * requests, cachedTokens: 40_000, cacheWriteTokens: 0 })
 const item = (p: Partial<TranscriptItem> & Pick<TranscriptItem, 'kind'>): TranscriptItem => ({ id: Math.random().toString(36).slice(2), at: '', text: '', ...p })

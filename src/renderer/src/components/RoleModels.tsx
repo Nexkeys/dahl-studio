@@ -9,8 +9,7 @@ const ROLES: { id: ModelRole | 'main'; label: string; hint: string }[] = [
   { id: 'research', label: 'Search / Researcher', hint: 'Researcher helpers: code and web research.' },
   { id: 'helpers', label: 'Helpers', hint: 'Implementer, Debugger and Test Engineer helpers.' },
   { id: 'checker', label: 'Checker / Reviewer', hint: 'Code Reviewer and Security Reviewer helpers.' },
-  { id: 'image', label: 'Image reading', hint: 'Describes images for analyze_image. Only models that accept images are listed.' },
-  { id: 'autocomplete', label: 'Autocomplete', hint: 'Inline suggestions in the editor, for when that feature is on.' }
+  { id: 'image', label: 'Image reading', hint: 'Describes images for analyze_image. Only models that accept images are listed.' }
 ]
 
 const NO_ROWS: PriceRow[] = []
