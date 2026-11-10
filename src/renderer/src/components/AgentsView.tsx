@@ -3,6 +3,8 @@ import { Compass, Hammer, Bug, FlaskConical, SearchCheck, ShieldAlert, Globe, Bo
 import type { AgentInfo, AgentRole } from '@shared/types'
 import { baseName, useStore } from '../store'
 import { Markdown } from './Markdown'
+import { StatusIcon } from './StatusIcon'
+import { agentKind } from '../status'
 
 const ROLE_ICON: Record<AgentRole, typeof Bot> = {
   lead: Bot, architect: Compass, implementer: Hammer, debugger: Bug, test_engineer: FlaskConical, code_reviewer: SearchCheck, security_reviewer: ShieldAlert, researcher: Globe
@@ -33,7 +35,8 @@ export function AgentCard({ a, now }: { a: AgentInfo; now: number }) {
       <button className="agent-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className={`agent-icon ${live ? 'live' : ''}`}><Icon size={14} /></span>
         <span className="agent-name">{a.name}</span>
-        <span className="agent-step">{a.status === 'done' ? 'Finished' : a.status === 'waiting_approval' ? 'Waiting for approval' : a.step}</span>
+        <StatusIcon kind={agentKind(a)} size={13} />
+        <span className="agent-step">{a.status === 'done' ? 'Finished' : a.status === 'waiting_approval' ? 'Waiting for your approval' : a.status === 'cancelled' ? 'Stopped' : a.step}</span>
         <span className="muted small">{a.toolCount} tools · {elapsed(a, now)}</span>
         <ChevronRight size={13} className={`chev ${open ? 'open' : ''}`} />
       </button>

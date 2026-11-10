@@ -10,6 +10,7 @@ import { gitBranch, gitCheckRemote, gitCommit, gitInitOrRemote, gitPush, gitShow
 import { GITHUB_TOKEN_SLOT } from './secrets'
 import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
+import { turnDiff } from './agent/turnDiff'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
 import { registerCompletionIpc } from './completion/ipc'
@@ -221,6 +222,7 @@ export function registerIpc(): void {
   handle('agent:revert', async (project: string, id: string) => runner.revert(await assertProject(project), id))
   handle('agent:runs', async (project: string) => new ProjectStore(await assertProject(project)).listRuns())
   handle('agent:loadRun', async (project: string, id: string) => new ProjectStore(await assertProject(project)).loadRun(id))
+  handle('agent:turnDiff', async (project: string, id: string) => turnDiff(await assertProject(project), String(id)))
   handle('agent:deleteRun', async (project: string, id: string) => {
     if (runner.activeRunId(project) === id) throw new Error('Task is running.')
     return new ProjectStore(await assertProject(project)).deleteRun(id)

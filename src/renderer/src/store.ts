@@ -4,6 +4,7 @@ import type {
 } from '@shared/types'
 import { pickFallbackModel, PROVIDER_NAME, splitModelKey } from '@shared/models'
 import { newTab, patchChat, type ChatFields } from './chatState'
+import { markUnread } from './status'
 import type { ResumeOffer } from './resume'
 
 export const api = window.dahl
@@ -287,6 +288,12 @@ ${e.runId}`
         liveReasoning: running ? s.liveReasoning : '',
         turnStartedAt: running ? s.turnStartedAt ?? Date.now() : null
       })))
+      // a chat that finishes while you look elsewhere shows "done, not seen" until you open it
+      if (e.status === 'completed') {
+        const onScreen = st.settings?.activeProject === root && st.view === 'workspace' && (typeof document === 'undefined' || document.visibilityState === 'visible')
+        const unread = markUnread(st.project(root), e.runId, onScreen)
+        if (unread) st.patchProject(root, unread)
+      }
       break
     }
   }

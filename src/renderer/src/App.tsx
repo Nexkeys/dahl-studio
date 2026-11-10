@@ -11,6 +11,8 @@ import { notesSince } from './whatsNew'
 import { handleResumeOffer } from './resume'
 import { isBusy } from './chatState'
 import { ResumeCard } from './components/ResumeCard'
+import { ProjectStatus, StatusSummary } from './components/StatusBits'
+import { countNeeds } from './status'
 import { preloadMonaco } from './lazyMonaco'
 import { Explorer } from './components/Explorer'
 import { EditorArea } from './components/EditorArea'
@@ -77,7 +79,8 @@ function StatusBar({ root }: { root: string | null }) {
   return (
     <div className="statusbar">
       <span className={`dot ${ok ? 'ok' : 'bad'}`} /> {ok ? `${PROVIDER_NAMES[provider]}${local ? ' (local)' : ''} ready` : `No usable ${PROVIDER_NAMES[provider]} key`}
-      {model && <span className="sb-item">{model.label}{model.vision && <Eye size={11} />}</span>}
+      <StatusSummary root={root} />
+      {model && <span className="sb-item">{model.label}{model.vision && <Eye size={12} />}</span>}
       {git?.repo && <button className="sb-btn sb-item" onClick={() => set({ view: 'git' })}><GitBranch size={12} /> {git.branch ?? 'detached'}{git.files.length ? ` · ${git.files.length} changed` : ''}</button>}
       {agents > 0 && <button className="sb-btn sb-item" onClick={() => set({ view: 'agents' })}><Users size={12} /> {agents} agents running</button>}
       <span className="grow" />
@@ -154,12 +157,12 @@ export default function App() {
       <nav className="rail" aria-label="Main">
         <img src={iconUrl} alt="Dahl Studio" className="rail-logo" />
         {NAV.map((n) => (
-          <button key={n.id} className={`rail-btn ${view === n.id ? 'on' : ''}`} onClick={() => set({ view: n.id })} aria-label={n.label} aria-current={view === n.id}>
-            <n.icon size={19} strokeWidth={1.7} /><span className="rail-tip">{n.label}</span>
+          <button key={n.id} className={`rail-btn ${view === n.id ? 'on' : ''}`} onClick={() => set({ view: n.id })} aria-label={n.label} aria-current={view === n.id ? 'page' : undefined}>
+            <n.icon size={20} /><RailBadge id={n.id} /><span className="rail-tip" role="tooltip">{n.label}</span>
           </button>
         ))}
         <span className="grow" />
-        <button className={`rail-btn ${view === 'settings' ? 'on' : ''}`} onClick={() => set({ view: 'settings' })} aria-label="Settings"><SettingsIcon size={19} strokeWidth={1.7} /><span className="rail-tip">Settings</span></button>
+        <button className={`rail-btn ${view === 'settings' ? 'on' : ''}`} onClick={() => set({ view: 'settings' })} aria-label="Settings" aria-current={view === 'settings' ? 'page' : undefined}><SettingsIcon size={20} /><span className="rail-tip" role="tooltip">Settings</span></button>
       </nav>
 
       <div className="main">
@@ -167,7 +170,7 @@ export default function App() {
           <div className="project-tabs" role="tablist" aria-label="Open projects">
             {projects.map((p) => (
               <div key={p} role="tab" aria-selected={p === root} className={`ptab ${p === root ? 'on' : ''}`} onClick={() => updateSettings({ activeProject: p })} title={p}>
-                <ProjectDot root={p} /><span>{baseName(p)}</span>
+                <ProjectStatus root={p} /><span>{baseName(p)}</span>
                 <button className="tab-close" aria-label={`Close ${baseName(p)}`} onClick={(e) => { e.stopPropagation(); void closeProject(p) }}><X size={12} /></button>
               </div>
             ))}
@@ -255,7 +258,9 @@ function UpdateBadge() {
   return <span className="sb-item" title={u.error}>Update check failed</span>
 }
 
-function ProjectDot({ root }: { root: string }) {
-  const status = useStore((s) => overallStatus(s.projects[root]))
-  return <span className={`pdot ${status ?? 'idle'}`} />
+/** Rail counters: chats waiting for you on Workspace, running sub-agents on Agents. */
+function RailBadge({ id }: { id: View }) {
+  const n = useStore((s) => (id === 'workspace' ? countNeeds(s.projects) : id === 'agents' ? Object.values(s.projects).reduce((k, p) => k + Object.values(p.agents).filter((a) => !a.endedAt).length, 0) : 0))
+  if (!n) return null
+  return <span className={`rail-badge ${id === 'workspace' ? 'needs' : 'busy'}`} aria-label={id === 'workspace' ? `${n} waiting for you` : `${n} running`}>{n > 9 ? '9+' : n}</span>
 }

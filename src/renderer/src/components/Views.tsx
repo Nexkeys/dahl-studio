@@ -3,6 +3,8 @@ import { KeyRound, RefreshCw, CheckCircle2, XCircle, Trash2, FolderOpen, Downloa
 import type { MemoryEntry, RunSummary, StorageReport } from '@shared/types'
 import { api, baseName, loadRunsSummary, updateSettings, useStore } from '../store'
 import { loadRunIntoChat } from './ChatPanel'
+import { StatusIcon } from './StatusIcon'
+import { statusKind, statusText } from '../status'
 import wordmarkUrl from '../assets/wordmark.png'
 
 function fmtBytes(n: number): string {
@@ -46,7 +48,7 @@ export function TasksView() {
       <div className="list">
         {runs.map((r) => (
           <div key={r.project + r.id} className="list-row">
-            <span className={`run-badge ${r.status}`}>{r.status.replace('_', ' ')}</span>
+            <span className={`run-badge ${r.status}`}><StatusIcon kind={statusKind(r.status)} size={11} /> {statusText(r.status)}</span>
             <div className="grow">
               <div className="ellipsis">{r.objective}</div>
               <div className="muted small">{baseName(r.project)} · {r.mode} · {new Date(r.updatedAt).toLocaleString()} · {r.changedFiles.length} files changed</div>

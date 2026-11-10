@@ -1,4 +1,4 @@
-import type { RunState } from '@shared/types'
+import type { RunState, RunSummary } from '@shared/types'
 import { api, flushDeltas, useStore } from './store'
 import { blankSnap, isBusy, MAX_CHATS, NEW_CHAT, newTab, pickSnap, titleFrom, type ChatSnap, type ChatTab } from './chatState'
 
@@ -37,6 +37,16 @@ export function restoreChats(root: string): void {
   const active = tabs.find((t) => t.key === saved!.active) ?? tabs[0]
   st.patchProject(root, { ...blankSnap(), runId: active.runId, chats: tabs, chat: active.key, startingChat: null })
   if (active.runId) void fillFromRun(root, active.key, active.runId)
+  if (tabs.some((t) => t.key !== active.key && t.runId)) void fillStatuses(root)
+}
+
+/** Restored background tabs show their task's last status right away; the history itself loads when opened. */
+async function fillStatuses(root: string): Promise<void> {
+  const runs = await api.invoke<RunSummary[]>('agent:runs', root).catch(() => [] as RunSummary[])
+  const status = new Map(runs.map((r) => [r.id, r.status]))
+  useStore.getState().patchProject(root, (c) => ({
+    chats: c.chats.map((t) => (t.key !== c.chat && t.runId && !t.status && status.has(t.runId) ? { ...t, status: status.get(t.runId)! } : t))
+  }))
 }
 
 /** Load a saved run into a chat tab (the view if that tab is active, its snapshot otherwise). */

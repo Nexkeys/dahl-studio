@@ -8,7 +8,7 @@ export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 export type ThemeId =
   | 'dahl-classic' | 'hacker-mode' | 'baddie-mode' | 'vibe-coder' | 'pen-tester'
   | 'midnight-terminal' | 'sakura-flow' | 'arctic-focus' | 'forest-syntax' | 'solar-flare'
-  | 'blueprint' | 'ink-paper'
+  | 'blueprint' | 'ink-paper' | 'high-contrast'
 
 export const PROVIDER_OF_SLOT: Record<KeySlot, ProviderId> = {
   primary: 'dahl', secondary: 'dahl', openai: 'openai', anthropic: 'anthropic', gemini: 'gemini', nvidia: 'nvidia', groq: 'groq', openrouter: 'openrouter'
