@@ -1,8 +1,8 @@
 // Shared types between main, preload and renderer. No runtime imports here.
 
-export type ProviderId = 'dahl' | 'openai' | 'anthropic' | 'gemini' | 'nvidia'
-/** Secret slots: two Dahl keys plus one key per additional provider. */
-export type KeySlot = 'primary' | 'secondary' | 'openai' | 'anthropic' | 'gemini' | 'nvidia'
+export type ProviderId = 'dahl' | 'openai' | 'anthropic' | 'gemini' | 'nvidia' | 'groq' | 'openrouter' | 'ollama' | 'lmstudio'
+/** Secret slots: two Dahl keys plus one key per additional provider (Ollama and LM Studio are local and need none). */
+export type KeySlot = 'primary' | 'secondary' | 'openai' | 'anthropic' | 'gemini' | 'nvidia' | 'groq' | 'openrouter'
 export type AgentMode = 'plan' | 'review' | 'build'
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 export type ThemeId =
@@ -11,7 +11,7 @@ export type ThemeId =
   | 'blueprint' | 'ink-paper'
 
 export const PROVIDER_OF_SLOT: Record<KeySlot, ProviderId> = {
-  primary: 'dahl', secondary: 'dahl', openai: 'openai', anthropic: 'anthropic', gemini: 'gemini', nvidia: 'nvidia'
+  primary: 'dahl', secondary: 'dahl', openai: 'openai', anthropic: 'anthropic', gemini: 'gemini', nvidia: 'nvidia', groq: 'groq', openrouter: 'openrouter'
 }
 
 export interface KeyInfo {
@@ -77,6 +77,10 @@ export interface Settings {
   keyNames: Record<KeySlot, string>
   autoApproveWrites: boolean
   autoApproveCommands: boolean
+  /** "Never ask": file changes, commands, connector tools and git run without approval cards, in every mode */
+  autoApproveAll: boolean
+  /** with autoApproveAll on, still ask before pushing to GitHub, pull requests and releases */
+  askBeforePublishing: boolean
   autoMemory: boolean
   /** keep an app-maintained PROGRESS.md work log in the project root */
   maintainProgress: boolean
@@ -125,6 +129,10 @@ export interface ChatMessage {
   name?: string
   /** provider-specific blocks that must be replayed verbatim (Anthropic thinking signatures) */
   providerBlocks?: unknown[]
+  /** the model's own reasoning for this reply; sent back only to families that need it (agent/modelProfile.ts) */
+  thought?: string
+  /** DeepSeek / Kimi thinking: reasoning sent back on the wire during a tool loop (set by withReplay, never stored) */
+  reasoning_content?: string
 }
 
 export interface Attachment {
@@ -161,6 +169,8 @@ export interface TranscriptItem {
   agentIds?: string[]
   /** a model call is being retried: drop the partly streamed reply on screen (it is not part of the conversation) */
   resetLive?: boolean
+  /** user messages sent while the agent was working: the id the composer gave it, so its pending chip can be cleared */
+  steerId?: string
   /** assistant replies: how fast the model answered (time to first token, generation speed), shown under the reply */
   stats?: { ttftMs: number; tokensPerSec: number; tokens: number; estimated: boolean; model: string }
 }
@@ -413,4 +423,124 @@ export interface PtyEvent {
   type: 'data' | 'exit'
   data?: string
   code?: number | null
+}
+
+// ---------------- Tab completions (grey ghost text in the editor) ----------------
+// The two settings fields are merged into Settings here (interface merging), so they stay in this block.
+export interface Settings {
+  /** Tab completions on or off. Unset counts as off: nothing is sent until a completion model is chosen. */
+  tabCompletions?: boolean
+  /** model key ("<provider id>:<model id>") used for Tab completions; null or unset = none chosen */
+  completionModel?: string | null
+}
+
+export interface CompletionRequest {
+  /** renderer sequence number; completion:cancel uses it */
+  id: number
+  /** file path relative to the project root (shown to the model as the file name) */
+  path: string
+  /** Monaco language id */
+  language: string
+  /** text before and after the cursor (the main process trims both to its prompt budget) */
+  prefix: string
+  suffix: string
+  /** a few lines from other open tabs, as extra context */
+  related?: { path: string; text: string }[]
+  /** asked for by the user (Alt+\, "Trigger Inline Suggestion") rather than by typing: skips the cache and the rate limit */
+  explicit?: boolean
+}
+
+export interface CompletionResponse {
+  /** the suggestion; missing or empty = nothing to show */
+  text?: string
+  cached?: boolean
+  ms?: number
+  /** why no model call was made */
+  skipped?: 'off' | 'no_model' | 'cancelled' | 'rate_limited' | 'paused'
+  /** the model call failed (shown by the status bar indicator) */
+  error?: string
+}
+
+// ---------------- Providers: Groq, OpenRouter, local models, capabilities (0.4.0) ----------------
+// ModelInfo and Settings below extend the interfaces above (TypeScript interface merging), so this block stays additive.
+
+export type LocalProviderId = 'ollama' | 'lmstudio'
+
+/** One normalised capability record per model, filled by every provider's discovery. undefined = not reported. */
+export interface ModelCaps {
+  tools: boolean
+  vision: boolean
+  reasoning: boolean
+  contextTokens?: number
+  /** OpenRouter ":free" variants or zero prompt and completion pricing */
+  free: boolean
+  /** runs on this PC (Ollama, LM Studio) */
+  local: boolean
+}
+
+export interface ModelInfo {
+  /** native tool calling (function calling) */
+  tools?: boolean
+  /** a reasoning / thinking model (shown as a badge; `thinking` says whether a parameter controls it) */
+  reasoning?: boolean
+  free?: boolean
+  local?: boolean
+}
+
+export interface Settings {
+  /** base URLs of local model servers (defaults: Ollama http://localhost:11434, LM Studio http://localhost:1234) */
+  localUrls?: Partial<Record<LocalProviderId, string>>
+  /** model keys picked most recently, newest first (shown at the top of the model menu) */
+  recentModels?: string[]
+}
+
+/** Whether a local model server answered on the last check, and what it offers. */
+export interface LocalProviderStatus {
+  provider: LocalProviderId
+  baseUrl: string
+  running: boolean
+  models: number
+  checkedAt: string
+  error?: string
+  /** LM Studio: the smallest loaded context length when it is too small for agent prompts */
+  smallContext?: number
+}
+
+// ---------------- Connector prerequisites, mobile setup checker, Chief of Staff (0.4.0) ----------------
+/** One way to fix a failed check. `command` is PowerShell; `admin` steps are shown for the user to do, never run by Dahl. */
+export interface SetupFix {
+  label: string
+  command?: string
+  admin?: boolean
+  url?: string
+}
+
+/** Whether a catalogue connector's own requirements (for example a Node version) are met on this PC. */
+export interface PrereqStatus {
+  catalogId: string
+  ok: boolean
+  summary: string
+  detail?: string
+  fixes: SetupFix[]
+  /** a folder to put first on PATH for this server (a suitable Node that another install shadows) */
+  pathDir?: string
+}
+
+export interface MobileCheck {
+  id: string
+  label: string
+  status: 'pass' | 'warn' | 'fail'
+  detail: string
+  fixes: SetupFix[]
+}
+
+export interface ChiefFollowup {
+  id: string
+  text: string
+  /** project folder it belongs to, or null for general follow-ups */
+  project: string | null
+  /** YYYY-MM-DD */
+  due: string | null
+  createdAt: string
+  doneAt: string | null
 }

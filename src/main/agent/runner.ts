@@ -10,6 +10,7 @@ import { ROLE_INFO, systemPrompt, THINKING_GUIDANCE, TOOL_DEFS, toolsFor, WRITE_
 import { buildUserContent, compact, repairHistory, summariseTool, summary } from './history'
 import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
 import { parseToolArgs } from './args'
+import { compatFor, dropTuning, profileFor, samplingFor, tierGuidance, withReplay } from './modelProfile'
 import { progressFinish, progressPlan, progressStart, readProgress } from './progress'
 import type { RunResult } from '../terminal'
 
@@ -59,6 +60,8 @@ interface RunCtl {
   mcpTools: McpToolRef[]
   /** connectors whose tools are sent to the model; the rest are listed by name and loaded with use_connector */
   mcpActive: Set<string>
+  /** messages the user sent while the task was running; delivered to the lead at its next step */
+  steers: { id: string; text: string }[]
   connectors: McpConnectorInfo[]
   turn: { start: number; toolCount: number; changed: Set<string>; commands: { command: string; exitCode: number | null }[]; memories: number; delegations?: number }
   prompt: string
@@ -133,7 +136,7 @@ export class AgentRunner {
     const images = new Map<string, { mediaType: string; data: string }>()
     run.messages.push({ role: 'user', content: buildUserContent(req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
-      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], prompt: req.prompt, answer: '',
+      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '',
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
@@ -143,6 +146,31 @@ export class AgentRunner {
     this.emitRun(ctl)
     void this.runTurn(ctl)
     return summary(run)
+  }
+
+  /**
+   * A message sent while the task runs. It reaches the lead agent at its next step (after the tools in flight finish,
+   * before the next model call), inside the same task. Never counts as approving anything. Returns false when no
+   * task is running here, so the caller can start a normal turn instead.
+   */
+  steer(p: string, id: string, text: string): boolean {
+    const c = this.active.get(this.key(p))
+    if (!c || !text.trim()) return false
+    c.steers.push({ id, text: text.trim() })
+    this.log(c, 'info', 'User message queued for the next step')
+    return true
+  }
+
+  /** Deliver waiting messages into the lead's conversation and the transcript. */
+  private drainSteers(ctl: RunCtl, a: AgentCtx): boolean {
+    if (!a.isLead || !ctl.steers.length) return false
+    for (const s of ctl.steers.splice(0)) {
+      a.messages.push({ role: 'user', content: `${s.text}
+
+(Sent by the user while you were working. Take it into account from now on, and say in your final answer how you handled it.)` })
+      this.addItem(ctl, { kind: 'user', text: s.text, steerId: s.id })
+    }
+    return true
   }
 
   pause(p: string): void {
@@ -348,7 +376,7 @@ export class AgentRunner {
     const lastText = typeof last?.content === 'string' ? last.content : (last?.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ')
     const memory = (await ctl.store.relevantMemory(`${run.objective} ${lastText} ${a.isLead ? '' : a.info.task}`)).map((m) => m.text)
     const reasoning = this.deps.reasoning ? await this.deps.reasoning(run.project) : { name: 'Default', prompt: 'Reason carefully and verify your work.' }
-    return systemPrompt({
+    const base = systemPrompt({
       role: a.info.role, mode: run.mode, projectName: path.basename(run.project), outline: await projectOutline(run.project), memory,
       plan: run.plan.map((s) => `[${s.status}] ${s.title}`).join('\n'), reasoning, thinking: THINKING_GUIDANCE[run.thinking ?? 'off'],
       task: a.isLead ? undefined : a.info.task, files: a.info.files, mcp: a.isLead ? this.activeMcp(ctl).map((t) => t.fnName) : [],
@@ -357,6 +385,9 @@ export class AgentRunner {
       mcpFocus: !a.isLead || !run.mcpServers ? undefined : run.mcpServers === 'all' ? 'all' : [...new Set(ctl.mcpTools.map((t) => t.serverName))],
       progress: (await this.deps.getSettings()).maintainProgress ? await readProgress(run.project) : ''
     })
+    // smaller models get stricter working rules (model variance, see modelProfile.ts)
+    const guide = tierGuidance(profileFor(run.model).tier)
+    return guide ? `${base}\n\n${guide}` : base
   }
 
   /** The agent loop shared by the lead agent and sub-agents. Returns the agent's final text. */
@@ -373,6 +404,7 @@ export class AgentRunner {
     while (true) {
       if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
       if (a.isLead && ctl.pauseRequested) throw new PauseSignal('Paused. State is checkpointed; send "Continue" to resume.')
+      this.drainSteers(ctl, a)
       // sub-agents stop at their next step so Pause does not wait for (and pay for) every remaining sub-agent step
       if (!a.isLead && ctl.pauseRequested) return `${lastText}\n[Stopped early: the user paused the task]`
       if (iter >= maxIter) {
@@ -388,7 +420,9 @@ export class AgentRunner {
       let streamed = ''
       let t0 = 0
       let firstAt = 0
-      const ask = () => ((streamed = ''), (t0 = Date.now()), (firstAt = 0), this.deps.backend.chat({ model: run.model, messages, tools: this.toolDefs(ctl, a), thinking: run.thinking, vision }, ctl.abort.signal, a.isLead
+      // each family gets its own sampling and, where it needs it, its own reasoning back during the tool loop
+      const prof = profileFor(run.model)
+      const ask = () => ((streamed = ''), (t0 = Date.now()), (firstAt = 0), this.deps.backend.chat({ model: run.model, messages: withReplay(messages, compatFor(run.model).noReplay ? 'none' : prof.replay), tools: this.toolDefs(ctl, a), thinking: run.thinking, vision, ...samplingFor(run.model, prof) }, ctl.abort.signal, a.isLead
         ? {
             onDelta: (t) => ((firstAt ||= Date.now()), (streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
             onReasoning: (t) => ((firstAt ||= Date.now()), this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t }))
@@ -399,10 +433,18 @@ export class AgentRunner {
       // repeat: the lead clears the partial text on screen first, so nothing shows twice. Sub-agents get one retry.
       const tries = a.isLead ? 2 : 1
       let res: Awaited<ReturnType<typeof ask>> | null = null
+      let tuningDropped = false
       for (let attempt = 0; !res; attempt++) {
         try {
           res = await ask()
         } catch (e) {
+          // a host that rejects the family's sampling or replayed reasoning (HTTP 400): once, then provider defaults
+          if (!tuningDropped && e instanceof DahlError && e.kind === 'bad_request' && dropTuning(run.model, prof, messages)) {
+            tuningDropped = true
+            this.log(ctl, 'info', `${a.info.name}: ${run.model} refused its tuned settings (${e.message.slice(0, 160)}); using provider defaults from now on`)
+            attempt--
+            continue
+          }
           if (attempt >= tries || ctl.abort.signal.aborted || !(e instanceof DahlError) || !['network', 'timeout', 'server'].includes(e.kind)) throw e
           this.log(ctl, 'error', `${a.info.name}: model call failed (${e.message}); retrying (${attempt + 1} of ${tries})`)
           if (a.isLead) this.addItem(ctl, { kind: 'status', text: `The connection dropped mid-reply. Retrying (${attempt + 1} of ${tries})`, resetLive: true })
@@ -422,7 +464,7 @@ export class AgentRunner {
       }
       lastText = content
       if (a.isLead && reasoning) this.addItem(ctl, { kind: 'reasoning', text: reasoning })
-      a.messages.push({ role: 'assistant', content: content || null, ...(calls.length ? { tool_calls: calls } : {}), ...(res.providerBlocks?.length ? { providerBlocks: res.providerBlocks } : {}) })
+      a.messages.push({ role: 'assistant', content: content || null, ...(calls.length ? { tool_calls: calls } : {}), ...(res.providerBlocks?.length ? { providerBlocks: res.providerBlocks } : {}), ...(prof.replay !== 'none' && calls.length && res.reasoning ? { thought: res.reasoning } : {}) })
       if (a.isLead && content.trim()) {
         // speed is shown under the reply, so a slow provider is visible instead of feeling like the app is slow
         const end = Date.now()
@@ -433,6 +475,8 @@ export class AgentRunner {
       }
       if (res.finishReason === 'length') this.log(ctl, 'error', `${a.info.name}: model output hit the length limit (finish_reason=length)`)
       if (!calls.length) {
+        // a message arrived while this reply was being written: take one more step so it is answered in this task
+        if (a.isLead && ctl.steers.length) continue
         // "Lazy" models announce work ("Here it comes", "Let me...") and stop without calling a tool. Nudge them (max 2x).
         if (run.mode === 'build' && nudges < 2 && announcesWork(content)) {
           nudges++

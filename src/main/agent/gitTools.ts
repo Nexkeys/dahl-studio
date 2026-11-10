@@ -4,6 +4,7 @@ import { stripDashes } from '@shared/dashes'
 import { explainRemoteError, git, gitCommit, gitStatus, normalizeRemoteUrl, remoteGit } from '../git'
 import { resolveInside } from '../fs/workspace'
 import type { ExecCtx, ToolResult } from './toolExec'
+import { autoApproved } from './approvals'
 
 // The agent's git tool. Read actions run directly; everything that changes the repository is lead-only, Build-only and
 // approved like a command. There is no force, reset --hard or history rewrite. Remote actions use the saved GitHub
@@ -99,7 +100,7 @@ export async function execGit(c: ExecCtx, raw: Record<string, unknown>, settings
   if (action === 'clone' && (!a.url || !a.dir)) return { ok: false, text: 'git clone needs url and dir (a new folder inside the project).' }
 
   const command = describe(action, a, st.branch)
-  if (!settings.autoApproveCommands) {
+  if (!autoApproved(settings, 'command')) {
     const d = await c.approve({ kind: 'command', agent: c.agentName, command, reason: raw.reason ? String(raw.reason) : undefined })
     if (!d.approved) return { ok: false, text: `User declined: ${command}.${d.feedback ? ` Feedback: ${d.feedback}` : ''}` }
   }
