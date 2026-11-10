@@ -27,6 +27,7 @@ import { GitView } from './components/GitView'
 import { LogsView } from './components/LogsView'
 import { CommandPalette } from './components/CommandPalette'
 import { CompletionStatus } from './components/CompletionStatus'
+import { CostStatus } from './components/CostStatus'
 import iconUrl from './assets/icon.png'
 
 // the preview browser (and its <webview>) loads only when the panel is first opened
@@ -83,6 +84,7 @@ function StatusBar({ root }: { root: string | null }) {
       {model && <span className="sb-item">{model.label}{model.vision && <Eye size={12} />}</span>}
       {git?.repo && <button className="sb-btn sb-item" onClick={() => set({ view: 'git' })}><GitBranch size={12} /> {git.branch ?? 'detached'}{git.files.length ? ` · ${git.files.length} changed` : ''}</button>}
       {agents > 0 && <button className="sb-btn sb-item" onClick={() => set({ view: 'agents' })}><Users size={12} /> {agents} agents running</button>}
+      <CostStatus />
       <span className="grow" />
       <UpdateBadge />
       {root && <CompletionStatus />}

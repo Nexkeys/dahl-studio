@@ -4,6 +4,7 @@ import { isLocalProvider, LOCAL_DEFAULT_URL, LOCAL_PROVIDERS, PROVIDER_ORDER, sp
 import { DAHL_DOCUMENTED_CONTEXT, DahlError, extractRemaining, getKeyBalance, listModels as listDahlModels, streamChat, type ChatRequest, type ChatResult, type FetchLike, type StreamCallbacks } from '../dahl/client'
 import { DahlRouter } from '../dahl/router'
 import { ANTHROPIC_BASE, anthropicHeaders, anthropicStream } from './anthropic'
+import { ledgerFields, usageRequestFields } from './usage'
 import { fetchLmStudioModels, fetchOllamaModels, getJson as getJsonWith, GROQ_BASE, NON_CHAT, OPENROUTER_BASE, parseGroqModels, parseOpenRouterModels, type RawModel } from './discovery'
 import { extractContentToolCalls, OPENROUTER_HEADERS, shapeGroq, shapeOpenRouter } from './quirks'
 import { ollamaNumCtx, ollamaStream } from './ollama'
@@ -348,7 +349,8 @@ export class ModelRegistry {
       let started = false
       const wrapped = { ...cb, onDelta: (t: string) => ((started = true), cb.onDelta?.(t)), onReasoning: (t: string) => ((started = true), cb.onReasoning?.(t)) }
       try {
-        const res = await this.send(provider, id, key, base, { ...req, model: id, vision, extra: ex }, { maxTokens, nativeTools, numCtx: ollamaNumCtx(info?.contextTokens) }, signal, wrapped)
+        // usageRequestFields: OpenAI and Gemini only report usage in a stream when asked (needed for cost)
+        const res = await this.send(provider, id, key, base, { ...req, model: id, vision, extra: { ...usageRequestFields(provider), ...ex } }, { maxTokens, nativeTools, numCtx: ollamaNumCtx(info?.contextTokens) }, signal, wrapped)
         if (slot) {
           const reported = typeof res.usage?.prompt_tokens === 'number'
           this.deps.onUsage(slot, {
@@ -357,7 +359,8 @@ export class ModelRegistry {
             completionTokens: res.usage?.completion_tokens ?? Math.ceil((res.content + res.reasoning).length / 4),
             estimated: !reported,
             lastModel: req.model,
-            lastLatencyMs: Date.now() - t0
+            lastLatencyMs: Date.now() - t0,
+            ...ledgerFields(res.usage)
           })
           this.deps.onHealth(slot, 'ok')
         }

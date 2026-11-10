@@ -475,6 +475,99 @@ export interface TranscriptItem {
   instructions?: InstructionFileInfo[]
 }
 
+// ---------------- Cost awareness: prices, budgets, quality presets, per-role models ----------------
+// Interfaces below that reuse a name from above (Settings, KeyUsageLocal, TurnSummary, RunState, TranscriptItem) are
+// TypeScript interface merges: they add fields to those interfaces without touching their definitions.
+
+export type QualityPreset = 'economy' | 'balanced' | 'best'
+/** Roles that can use a model other than the main one ("same as main" when unset). */
+export type ModelRole = 'research' | 'helpers' | 'checker' | 'image' | 'autocomplete'
+
+/** Money and tokens for a set of model requests. usd covers only requests with a known price. */
+export interface CostTally {
+  usd: number
+  requests: number
+  /** requests whose price is unknown (not included in usd) */
+  unknown: number
+  /** part of usd comes from the dated price table (an estimate), not from a cost the provider reported */
+  estimated: boolean
+  inputTokens: number
+  outputTokens: number
+  /** input tokens read from the provider's prompt cache */
+  cachedTokens: number
+  /** input tokens written to the provider's prompt cache */
+  cacheWriteTokens: number
+}
+
+/** One day's spend (local date) by provider, for the status bar and Settings > Usage. */
+export interface CostDay {
+  date: string
+  total: CostTally
+  byProvider: Record<string, CostTally>
+}
+
+/** One row of the price list, as shown in Settings (USD per 1M tokens). */
+export interface PriceRow {
+  provider: string
+  model: string
+  input: number
+  output: number
+  cached?: number
+  cacheWrite?: number
+  /** higher prices for long prompts, e.g. "over 200,000 input tokens: $4 in, $18 out" */
+  tier?: string
+  /** e.g. "until 2026-11-30" */
+  period?: string
+  source: string
+  checked: string
+  note?: string
+}
+
+export interface Settings {
+  /** Economy / Balanced / Best: picks the thinking level, role models, helper count and image use */
+  qualityPreset: QualityPreset
+  /** model key per role; missing or null = same as the main model */
+  roleModels: Partial<Record<ModelRole, string | null>>
+  /** pause a task when one request (with its helpers) would cost more than this, USD; null = no limit */
+  budgetTaskUsd: number | null
+  /** pause tasks when today's total would go over this, USD; null = no limit */
+  budgetDayUsd: number | null
+  /** show a note before a model call with more input tokens than this */
+  warnInputTokens: number
+  /** show a note before a model call carrying more images than this */
+  warnImages: number
+  /** show a note when more helper agents than this would run at once */
+  warnHelpers: number
+  /** ask before those expensive steps instead of only noting them */
+  confirmExpensive: boolean
+}
+
+export interface KeyUsageLocal {
+  cachedTokens?: number
+  cacheWriteTokens?: number
+  /** cost of the request in USD when known (provider-reported or from the price table) */
+  costUsd?: number
+  /** costUsd was reported by the provider (exact) rather than computed from the price table */
+  costExact?: boolean
+}
+
+export interface TurnSummary {
+  /** this request (lead and helpers) */
+  cost?: CostTally
+  /** the whole chat so far, including this request */
+  chatCost?: CostTally
+}
+
+export interface RunState {
+  /** everything this chat has spent */
+  cost?: CostTally
+}
+
+export interface TranscriptItem {
+  /** a status note that must stay visible (not folded into the activity list): cost warnings, budget stops */
+  notice?: 'cost' | 'budget'
+}
+
 // ---------------- Tab completions (grey ghost text in the editor) ----------------
 // The two settings fields are merged into Settings here (interface merging), so they stay in this block.
 export interface Settings {

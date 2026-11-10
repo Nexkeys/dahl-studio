@@ -18,6 +18,8 @@ import { registerPtyIpc } from './pty/ipc'
 import { registerCompletionIpc } from './completion/ipc'
 import { allPrereqs } from './mcp/prereqs'
 import { runMobileChecks } from './mobileCheck'
+import { costs } from './services'
+import { priceRows } from './pricing'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -113,6 +115,10 @@ export function registerIpc(): void {
     return r
   })
   handle('usage:get', () => usage.get())
+  // cost awareness: today's spend by provider, recent days, and the dated price list used for estimates
+  handle('cost:today', () => costs.day())
+  handle('cost:recent', (days?: number) => costs.recent(Math.min(Math.max(1, Number(days) || 7), 90)))
+  handle('cost:prices', () => priceRows())
   handle('usage:reset', () => usage.reset())
   handle('models:list', () => models.list())
   handle('models:refresh', () => models.refresh())

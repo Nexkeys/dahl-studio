@@ -1,6 +1,8 @@
 import { memo, useState, type ReactElement } from 'react'
-import { ChevronRight, Wrench, Terminal, FileDiff, CircleAlert, CircleCheck, Brain, Globe, Image as ImageIcon, Users, Copy, Undo2, Files, Clock, BookmarkPlus, Paperclip } from 'lucide-react'
-import type { TranscriptItem } from '@shared/types'
+import { ChevronRight, Wrench, Terminal, FileDiff, CircleAlert, CircleCheck, Brain, Globe, Image as ImageIcon, Users, Copy, Undo2, Files, Clock, BookmarkPlus, Paperclip, Coins } from 'lucide-react'
+import type { CostTally, TranscriptItem } from '@shared/types'
+import { describeTally, formatUsd, PRICES_CHECKED } from '@shared/cost'
+import '../ui-cost.css'
 import { api, useStore } from '../store'
 import { Markdown } from './Markdown'
 import { ApprovalCard } from './ApprovalCard'
@@ -17,6 +19,13 @@ function SpeedLine({ s }: { s: NonNullable<TranscriptItem['stats']> }) {
       <Clock size={11} /> {(s.ttftMs / 1000).toFixed(1)} s to first word <span className="dotsep" /> {s.estimated ? '~' : ''}{s.tokensPerSec} tokens/s{slow ? ' (slow provider)' : ''} <span className="dotsep" /> {model}
     </div>
   )
+}
+
+/** What this request cost, and the whole chat so far (tooltip: tokens, cache use, how the number was made). */
+function CostChip({ task, chat }: { task: CostTally; chat?: CostTally }) {
+  const showChat = chat && chat.requests > task.requests
+  const title = [`This request: ${formatUsd(task)}. ${describeTally(task)}.`, showChat ? `This chat so far: ${formatUsd(chat)}. ${describeTally(chat)}.` : '', task.estimated ? `~ means an estimate from list prices checked ${PRICES_CHECKED}.` : ''].filter(Boolean).join('\n')
+  return <span className="chip muted cost" title={title}><Coins size={12} /> {formatUsd(task)}{showChat ? ` · chat ${formatUsd(chat)}` : ''}</span>
 }
 
 function toolIcon(name: string) {
@@ -92,6 +101,7 @@ function Summary({ root, item }: { root: string; item: TranscriptItem }) {
         {s.commands.length > 0 && <span className={`chip ${failed ? 'warn' : ''}`}><Terminal size={12} /> {s.commands.length} command{s.commands.length > 1 ? 's' : ''}{failed ? `, ${failed} failed` : ''}</span>}
         {s.memoriesSaved > 0 && <span className="chip"><BookmarkPlus size={12} /> {s.memoriesSaved} saved to memory</span>}
         <span className="chip muted"><Clock size={12} /> {Math.max(1, Math.round(s.durationMs / 1000))}s</span>
+        {s.cost && <CostChip task={s.cost} chat={s.chatCost} />}
       </button>
       {s.changedFiles.length > 0 && !reverted && <button className="btn tiny ghost" onClick={revert} title="Undo this turn's file changes"><Undo2 size={12} /> Revert</button>}
       {open && (
@@ -119,6 +129,12 @@ export const Transcript = memo(function Transcript({ root, items, running }: { r
     // the turn's instruction files; later "more instructions" notes stay inside the activity group
     if (it.instructions?.length && !group.length) {
       out.push(<InstructionsChip key={it.id} root={root} files={it.instructions} />)
+      continue
+    }
+    // cost notes and budget stops stay visible instead of folding into the activity list
+    if (it.kind === 'status' && it.notice) {
+      flush(false)
+      out.push(<div key={it.id} className={`status-line cost-note ${it.notice} reveal`} role="note"><Coins size={13} /> <span>{it.text}</span></div>)
       continue
     }
     if (it.kind === 'tool' || it.kind === 'reasoning' || it.kind === 'status' || it.kind === 'approval') {

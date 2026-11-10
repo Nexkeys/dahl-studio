@@ -18,6 +18,9 @@ import type { BrowserBridge } from './browserTools'
 import type { Skill } from '../skills/loader'
 import { expandSkillCommand, skillsPromptSection } from '../skills/prompt'
 import { loadInstructionsCached, workingSet } from '../instructions'
+import { afterModelCall, beforeModelCall, newCostState, type CostState } from './costGate'
+import { helpersWarning, maxHelpers, resolveModelForRole } from './budget'
+import { describeTally, formatUsd } from '@shared/cost'
 
 export { repairHistory, closeDanglingToolCalls, compact } from './history'
 
@@ -55,6 +58,10 @@ export interface RunnerDeps {
   browser?: BrowserBridge
   /** Agent Skills for this project (built-in, user, project); enables use_skill, read_skill_file and /<skill> */
   skills?(project: string): Promise<{ skills: Skill[] }>
+  /** USD spent today in all chats, for the daily budget (see costLedger.ts) */
+  spentToday?(): Promise<number>
+  /** whether a model is in the catalogue (a per-role model that disappeared falls back to the main model) */
+  hasModel?(model: string): Promise<boolean>
 }
 
 interface RunCtl {
@@ -79,13 +86,19 @@ interface RunCtl {
   answer: string
   /** instruction files already shown in this turn's "Instructions loaded" chip */
   instructionsShown?: Set<string>
+  /** spend of this request, warnings shown, budget stop (costGate.ts) */
+  costs: CostState
 }
 interface AgentCtx {
   info: AgentInfo
   messages: ChatMessage[]
   isLead: boolean
 }
-class PauseSignal extends Error {}
+class PauseSignal extends Error {
+  constructor(message: string, public notice?: 'budget') {
+    super(message)
+  }
+}
 
 /** Up to this many connector tools in total are always sent; above it, connectors are loaded on demand (use_connector). */
 const MCP_ALWAYS_LOADED = 15
@@ -153,7 +166,7 @@ export class AgentRunner {
       : null
     run.messages.push({ role: 'user', content: buildUserContent(skillRun?.text ?? req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
-      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), seen: this.seenFor(run.id), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '',
+      run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), seen: this.seenFor(run.id), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '', costs: newCostState(),
       turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
     }
     this.active.set(k, ctl)
@@ -284,8 +297,10 @@ export class AgentRunner {
   private async finish(ctl: RunCtl, status: RunState['status']): Promise<void> {
     const t = ctl.turn
     const s: TurnSummary = { changedFiles: [...t.changed], commands: t.commands, toolCount: t.toolCount, durationMs: Date.now() - t.start, memoriesSaved: t.memories, revertable: Object.keys(ctl.run.backups).length > 0 }
-    if (s.toolCount || s.changedFiles.length || s.memoriesSaved) this.addItem(ctl, { kind: 'summary', text: '', summary: s })
-    this.log(ctl, status === 'failed' ? 'error' : 'info', `Turn finished: ${status}, ${s.toolCount} tool calls, ${s.changedFiles.length} files changed, ${Math.round(s.durationMs / 1000)}s`)
+    // the cost of the request and of the chat so far are shown on the summary, so a turn with model calls always gets one
+    if (ctl.costs.task.requests) Object.assign(s, { cost: { ...ctl.costs.task }, chatCost: ctl.run.cost && { ...ctl.run.cost } })
+    if (s.toolCount || s.changedFiles.length || s.memoriesSaved || s.cost) this.addItem(ctl, { kind: 'summary', text: '', summary: s })
+    this.log(ctl, status === 'failed' ? 'error' : 'info', `Turn finished: ${status}, ${s.toolCount} tool calls, ${s.changedFiles.length} files changed, ${Math.round(s.durationMs / 1000)}s${s.cost ? `, cost ${formatUsd(s.cost)} (${describeTally(s.cost)})` : ''}`)
     if ((await this.deps.getSettings()).maintainProgress)
       await progressFinish(ctl.run.project, { run: ctl.run, prompt: ctl.prompt, status, answer: ctl.answer, summary: s, error: ctl.run.lastError }).catch((e) => this.log(ctl, 'error', `PROGRESS.md: ${(e as Error).message}`))
     await this.setStatus(ctl, status)
@@ -311,7 +326,7 @@ export class AgentRunner {
       void this.autoMemory(ctl).catch((e) => this.log(ctl, 'error', `auto-memory failed: ${(e as Error).message}`))
     } catch (e) {
       if (e instanceof PauseSignal) {
-        this.addItem(ctl, { kind: 'status', text: e.message })
+        this.addItem(ctl, { kind: 'status', text: e.message, ...(e.notice ? { notice: e.notice } : {}) })
         return this.finish(ctl, 'paused')
       }
       const err = e as Error
@@ -451,9 +466,10 @@ export class AgentRunner {
   private async agentLoop(ctl: RunCtl, a: AgentCtx): Promise<string> {
     const run = ctl.run
     const settings = await this.deps.getSettings()
-    void settings
+    // helpers can run on their own (often cheaper) model, see Settings > Usage > Models per role
+    const model = await this.modelFor(ctl, a, settings)
     const maxIter = this.deps.maxIterations ?? (run.thinking === 'high' ? 60 : 40)
-    const vision = this.deps.modelVision ? await this.deps.modelVision(run.model) : false
+    const vision = this.deps.modelVision ? await this.deps.modelVision(model) : false
     let iter = 0
     let nudges = 0
     let verified = false
@@ -474,13 +490,20 @@ export class AgentRunner {
       a.info.status = 'thinking'
       a.info.step = 'Thinking'
       if (!a.isLead) this.emitAgent(ctl, a.info)
-      const messages: ChatMessage[] = [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)]
+      // budgets, large-request notes and Economy's image limit are checked before every model call (costGate.ts)
+      const tools = this.toolDefs(ctl, a)
+      const gate = await this.costGate(ctl, a, model, [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)], tools)
+      if (gate.stop) {
+        if (a.isLead) throw new PauseSignal(gate.stop, 'budget')
+        return `${lastText}\n[Stopped: ${gate.stop}]`
+      }
+      const messages = gate.messages
       let streamed = ''
       let t0 = 0
       let firstAt = 0
       // each family gets its own sampling and, where it needs it, its own reasoning back during the tool loop
-      const prof = profileFor(run.model)
-      const ask = () => ((streamed = ''), (t0 = Date.now()), (firstAt = 0), this.deps.backend.chat({ model: run.model, messages: withReplay(messages, compatFor(run.model).noReplay ? 'none' : prof.replay), tools: this.toolDefs(ctl, a), thinking: run.thinking, vision, ...samplingFor(run.model, prof) }, ctl.abort.signal, a.isLead
+      const prof = profileFor(model)
+      const ask = () => ((streamed = ''), (t0 = Date.now()), (firstAt = 0), this.deps.backend.chat({ model, messages: withReplay(messages, compatFor(model).noReplay ? 'none' : prof.replay), tools, thinking: run.thinking, vision, ...samplingFor(model, prof) }, ctl.abort.signal, a.isLead
         ? {
             onDelta: (t) => ((firstAt ||= Date.now()), (streamed += t), this.deps.emit({ runId: run.id, project: run.project, type: 'delta', delta: t })),
             onReasoning: (t) => ((firstAt ||= Date.now()), this.deps.emit({ runId: run.id, project: run.project, type: 'reasoning_delta', delta: t }))
@@ -497,9 +520,9 @@ export class AgentRunner {
           res = await ask()
         } catch (e) {
           // a host that rejects the family's sampling or replayed reasoning (HTTP 400): once, then provider defaults
-          if (!tuningDropped && e instanceof DahlError && e.kind === 'bad_request' && dropTuning(run.model, prof, messages)) {
+          if (!tuningDropped && e instanceof DahlError && e.kind === 'bad_request' && dropTuning(model, prof, messages)) {
             tuningDropped = true
-            this.log(ctl, 'info', `${a.info.name}: ${run.model} refused its tuned settings (${e.message.slice(0, 160)}); using provider defaults from now on`)
+            this.log(ctl, 'info', `${a.info.name}: ${model} refused its tuned settings (${e.message.slice(0, 160)}); using provider defaults from now on`)
             attempt--
             continue
           }
@@ -510,6 +533,7 @@ export class AgentRunner {
           if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
         }
       }
+      afterModelCall(ctl.costs, run, model, res.usage, { prompt: Math.ceil(JSON.stringify(messages).length / 4), completion: Math.ceil(((res.content ?? '') + (res.reasoning ?? '') + JSON.stringify(res.toolCalls ?? [])).length / 4) })
       const calls = res.toolCalls ?? []
       let content = cleanModelText(res.content || streamed)
       let reasoning = stripDashes(trimRepetition(res.reasoning ?? ''))
@@ -528,7 +552,7 @@ export class AgentRunner {
         const end = Date.now()
         const tokens = res.usage?.completion_tokens ?? Math.ceil(((res.content ?? '') + (res.reasoning ?? '')).length / 4)
         const genMs = Math.max(1, end - (firstAt || t0))
-        const stats = { ttftMs: (firstAt || end) - t0, tokensPerSec: Math.round((tokens / genMs) * 10000) / 10, tokens, estimated: !res.usage?.completion_tokens, model: run.model }
+        const stats = { ttftMs: (firstAt || end) - t0, tokensPerSec: Math.round((tokens / genMs) * 10000) / 10, tokens, estimated: !res.usage?.completion_tokens, model }
         this.addItem(ctl, { kind: 'assistant', text: content, stats })
       }
       if (res.finishReason === 'length') this.log(ctl, 'error', `${a.info.name}: model output hit the length limit (finish_reason=length)`)
@@ -588,7 +612,7 @@ export class AgentRunner {
         // a tool that throws must never end the task: the model gets the error and can correct its call
         let result: ToolResult
         try {
-          result = delegations.includes(tc) ? await this.delegate(ctl, tc.function.arguments) : connectorCalls.includes(tc) ? await this.useConnector(ctl, tc.function.arguments) : await execTool(this.execCtx(ctl, a), tc.function.name, tc.function.arguments, this.allowedTools(ctl, a))
+          result = delegations.includes(tc) ? await this.delegate(ctl, tc.function.arguments, a) : connectorCalls.includes(tc) ? await this.useConnector(ctl, tc.function.arguments) : await execTool(this.execCtx(ctl, a), tc.function.name, tc.function.arguments, this.allowedTools(ctl, a))
         } catch (e) {
           if (e instanceof DahlError && e.kind === 'cancelled') throw e
           if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
@@ -623,13 +647,23 @@ export class AgentRunner {
   }
 
   /** Run sub-agents in parallel. Write-capable agents get file leases so they cannot overwrite each other. */
-  private async delegate(ctl: RunCtl, raw: string): Promise<ToolResult> {
+  private async delegate(ctl: RunCtl, raw: string, lead: AgentCtx): Promise<ToolResult> {
     const parsed = parseToolArgs(raw, TOOL_DEFS.delegate_agents.function.parameters as never)
     if (!parsed.ok) return { ok: false, text: parsed.error }
     const list: unknown = parsed.args.agents
     if (!Array.isArray(list)) return { ok: false, text: 'agents must be a list of {role, task, files} objects, for example {"agents": [{"role": "researcher", "task": "..."}]}.' }
-    const specs = list.filter((s): s is { role: AgentRole; task: string; files?: string[] } => !!s && typeof s === 'object' && typeof (s as { task?: unknown }).task === 'string').slice(0, 6)
+    const settings = await this.deps.getSettings()
+    const valid = list.filter((s): s is { role: AgentRole; task: string; files?: string[] } => !!s && typeof s === 'object' && typeof (s as { task?: unknown }).task === 'string')
+    // Economy runs at most 2 helpers at once (6 otherwise)
+    const specs = valid.slice(0, maxHelpers(settings))
     if (!specs.length) return { ok: false, text: 'Each agent needs a role and a task, for example {"agents": [{"role": "researcher", "task": "..."}]}.' }
+    const many = helpersWarning(specs.length, settings)
+    if (many) {
+      this.addItem(ctl, { kind: 'status', text: many, notice: 'cost' })
+      this.log(ctl, 'info', `Cost warning: ${many}`)
+      if (settings.confirmExpensive && !(await this.confirmCost(ctl, lead, `${many} Go ahead?`)))
+        return { ok: false, text: `The user declined starting ${specs.length} helper agents at once. Use fewer helpers (or none) and continue.` }
+    }
     if (!specs.length) return { ok: false, text: 'No agents specified.' }
     // cost guard: each delegation can run up to 6 agents x many steps, so cap it per user message
     if ((ctl.turn.delegations ?? 0) >= MAX_DELEGATIONS_PER_TURN) return { ok: false, text: `Delegation limit reached (${MAX_DELEGATIONS_PER_TURN} per request). Finish the task yourself with the reports you already have.` }
@@ -672,7 +706,37 @@ export class AgentRunner {
       })
     )
     if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
-    return { ok: agents.some((x) => x.info.status === 'done'), text: `Sub-agent reports:\n\n${reports.join('\n\n')}` }
+    const dropped = valid.length > specs.length ? `\n\nOnly the first ${specs.length} of ${valid.length} agents ran (at most ${specs.length} at once with the current quality preset). Do the rest yourself or delegate them in a later step.` : ''
+    return { ok: agents.some((x) => x.info.status === 'done'), text: `Sub-agent reports:\n\n${reports.join('\n\n')}${dropped}` }
+  }
+
+  /** The model for this agent: its role's model when set and still available, otherwise the task's main model. */
+  private async modelFor(ctl: RunCtl, a: AgentCtx, settings: Settings): Promise<string> {
+    const want = resolveModelForRole(a.info.role, ctl.run, settings)
+    if (want === ctl.run.model || !this.deps.hasModel || (await this.deps.hasModel(want).catch(() => false))) return want
+    this.log(ctl, 'error', `${a.info.name}: the model set for this role (${want}) is not available; using ${ctl.run.model}`)
+    return ctl.run.model
+  }
+
+  private async costGate(ctl: RunCtl, a: AgentCtx, model: string, messages: ChatMessage[], tools: unknown[]): ReturnType<typeof beforeModelCall> {
+    return beforeModelCall(ctl.costs, model, messages, tools, {
+      settings: await this.deps.getSettings(),
+      spentToday: this.deps.spentToday ? await this.deps.spentToday().catch(() => 0) : 0,
+      note: (text, notice) => void this.addItem(ctl, { kind: 'status', text: (a.isLead ? '' : `${a.info.name}: `) + text, notice }),
+      log: (text) => this.log(ctl, 'info', text),
+      confirm: (question) => this.confirmCost(ctl, a, question)
+    })
+  }
+
+  /** "Ask before expensive steps": a question card with Go ahead / Pause. Anything but Go ahead stops. */
+  private async confirmCost(ctl: RunCtl, a: AgentCtx, question: string): Promise<boolean> {
+    const d = await this.requestApproval(ctl, a, { kind: 'question', agent: a.info.name, questions: [{ question, header: 'Cost', options: [{ label: 'Go ahead' }, { label: 'Pause the task' }] }] })
+    if (!d.approved) return false
+    try {
+      return /^(go ahead|yes|ok|continue)/i.test(String((JSON.parse(d.feedback ?? '{}') as Record<string, unknown>)['0'] ?? '').trim())
+    } catch {
+      return false
+    }
   }
 
   private async requestApproval(ctl: RunCtl, a: AgentCtx, x: Omit<PendingApproval, 'id' | 'runId' | 'project'>): Promise<{ approved: boolean; feedback?: string }> {

@@ -1,4 +1,5 @@
 import type { ChatMessage, ContentPart, ToolCall } from '@shared/types'
+import { readUsage, type ChatUsage } from '../providers/usage'
 
 /** From Dahl_API_DOCS.md. Inference under /v1, key balance at service root. */
 export const DAHL_ROOT = 'https://inference.dahl.global'
@@ -152,7 +153,8 @@ export interface ChatResult {
   reasoning: string
   toolCalls: ToolCall[]
   finishReason: string | null
-  usage: { prompt_tokens?: number; completion_tokens?: number } | null
+  /** normalised by providers/usage.ts: prompt_tokens includes cache reads/writes; cached_tokens, cache_write_tokens, cost when reported */
+  usage: ChatUsage | null
   providerBlocks?: unknown[]
 }
 
@@ -304,7 +306,7 @@ export async function streamChat(
       think.push(msg.content ?? '', onText, onThink)
       result.toolCalls = (msg.tool_calls ?? []) as ToolCall[]
       result.finishReason = j?.choices?.[0]?.finish_reason ?? null
-      result.usage = j?.usage ?? null
+      result.usage = readUsage(j?.usage)
       return result
     }
 
@@ -345,7 +347,8 @@ export async function streamChat(
           continue
         }
         if (j.error) throw classifyHttpError(Number(j.error.code) || 500, JSON.stringify(j))
-        if (j.usage) result.usage = j.usage
+        // Groq sends its usage in x_groq.usage on the last chunk
+        if (j.usage || j.x_groq?.usage) result.usage = readUsage(j.usage ?? j.x_groq.usage)
         const choice = j.choices?.[0]
         if (!choice) continue
         const d = choice.delta ?? {}

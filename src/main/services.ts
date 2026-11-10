@@ -8,6 +8,7 @@ import { LOCAL_DEFAULT_URL, normalizeLocalBase } from '@shared/models'
 import { SettingsStore } from './settings'
 import { SecretVault } from './secrets'
 import { UsageLedger } from './dahl/usage'
+import { CostLedger } from './costLedger'
 import { ModelRegistry, PROVIDER_INFO } from './providers/registry'
 import { ProcessManager } from './terminal'
 import { AgentRunner } from './agent/runner'
@@ -38,6 +39,7 @@ export function send(channel: string, payload: unknown): void {
 export const settings = new SettingsStore(APP_DIR)
 export const vault = new SecretVault(APP_DIR, safeStorage)
 export const usage = new UsageLedger(APP_DIR)
+export const costs = new CostLedger(APP_DIR)
 export const procs = new ProcessManager()
 export const reasoning = new ReasoningStore(APP_DIR)
 
@@ -59,7 +61,10 @@ export const models = new ModelRegistry({
   appDir: APP_DIR,
   getKey: (s) => vault.get(s),
   getPreferred: async () => (await settings.get()).preferredKey,
-  onUsage: (slot, u) => void usage.record(slot, u).then(async () => send('usage:changed', await usage.get())),
+  // every request is also priced into today's spend (costLedger.ts); the per-request log keeps its cost
+  onUsage: (slot, u) => void costs.record(PROVIDER_OF_SLOT[slot] ?? slot, u).catch(() => null)
+    .then((c) => usage.record(slot, c && c.usd !== null ? { ...u, costUsd: c.usd, costExact: c.exact } : u))
+    .then(async () => send('usage:changed', await usage.get())),
   onHealth: (slot, h, err) => {
     health[slot] = { health: h, lastError: err ? redact(err) : undefined, lastCheckedAt: nowIso() }
     void keyInfos().then((k) => send('keys:changed', k))
@@ -136,7 +141,11 @@ const PREFERRED_VISION: [string, RegExp, RegExp?][] = [
 async function visionCandidates(): Promise<{ key: string; label: string }[]> {
   const list = (await models.list()).models.filter((m) => m.vision && !visionFailed.has(m.key))
   const out: { key: string; label: string }[] = []
-  const current = (await settings.get()).defaultModel
+  const s = await settings.get()
+  // Economy skips the paid vision-model description (pixel analysis and OCR still run)
+  if (s.qualityPreset === 'economy') return []
+  // the "Image reading" model from Settings > Usage comes first, then the main model
+  const current = s.roleModels?.image || s.defaultModel
   const selected = list.find((m) => m.key === current)
   if (selected) out.push(selected)
   for (const [p, good, bad] of PREFERRED_VISION) {
@@ -175,6 +184,8 @@ export const runner = new AgentRunner({
   environment: () => probeEnvironment(),
   browser: preview,
   skills: (p) => skills.load(p),
+  spentToday: () => costs.spentToday(),
+  hasModel: async (m) => !!(await models.find(m)),
   mcp: {
     toolsFor: (p, only, problems, waitMs) => mcp.toolsFor(p, only, problems, waitMs),
     connectors: (p) => mcp.connectors(p),

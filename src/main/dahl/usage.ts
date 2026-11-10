@@ -29,6 +29,10 @@ export class UsageLedger {
     cur.promptTokens += u.promptTokens ?? 0
     cur.completionTokens += u.completionTokens ?? 0
     if (u.estimated) cur.estimated = true
+    // prompt cache use and known cost (the per-request log keeps each request's own figures)
+    if (u.cachedTokens) cur.cachedTokens = (cur.cachedTokens ?? 0) + u.cachedTokens
+    if (u.cacheWriteTokens) cur.cacheWriteTokens = (cur.cacheWriteTokens ?? 0) + u.cacheWriteTokens
+    if (typeof u.costUsd === 'number') cur.costUsd = (cur.costUsd ?? 0) + u.costUsd
     cur.lastUsedAt = nowIso()
     if (u.lastModel) cur.lastModel = u.lastModel
     if (u.lastLatencyMs !== undefined) cur.lastLatencyMs = u.lastLatencyMs

@@ -4,6 +4,7 @@ import type { EffectsMode, KeyInfo, KeyTestResult } from '@shared/types'
 import { api, loadModels, PROVIDER_NAMES, updateSettings, useStore } from '../store'
 import { applyEffects, isLowEnd } from '../themes'
 import { ThemePicker } from './ThemeCards'
+import { CostSettings } from './CostSettings'
 import { CompletionSettings } from './CompletionSettings'
 import { LocalModels } from './LocalModels'
 
@@ -129,6 +130,7 @@ export function SettingsView() {
           </details>
         ))}
       </section>
+      <CostSettings />
       <CompletionSettings />
       <LocalModels />
       <section>
