@@ -1,0 +1,67 @@
+{
+  "skill": "open-pr",
+  "evals": [
+    {
+      "id": "openpr-new-function",
+      "prompt": "Add a subtract(a, b) function to src/math.js with a test, then open a pull request for it.",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project on the default branch with no GitHub remote. The skill should move the work to a new branch, run the tests, commit, try to push, and give the PR description (with how it was tested) even though the push or PR cannot complete in the harness.",
+        "files": {
+          "package.json": "{\n  \"name\": \"mathlib\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/math.js": "export function add(a, b) {\n  return a + b\n}\n",
+          "test/math.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { add } from '../src/math.js'\n\ntest('add', () => {\n  assert.equal(add(2, 3), 5)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "open-pr", "description": "Loaded the open-pr skill" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"create_branch\"", "description": "Created a branch instead of working on the default branch" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Ran the tests before opening the PR" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"commit\"", "description": "Committed the change" },
+        { "check": "answer_matches", "pattern": "how tested|tested|testing", "flags": "i", "description": "The PR description says how the change was tested" }
+      ]
+    },
+    {
+      "id": "openpr-preexisting-test-failure",
+      "prompt": "Fix the typo 'Recieved' in src/messages.js and open a PR.",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project where an unrelated test already fails (floating point comparison in test/math.test.js). After fixing the typo, the tests fail for a reason that predates the change, so the skill must report it and must not open a ready-for-review PR.",
+        "files": {
+          "package.json": "{\n  \"name\": \"inbox\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/messages.js": "export const received = (n) => `Recieved ${n} new messages`\n",
+          "src/math.js": "export const add = (a, b) => a + b\n",
+          "test/math.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { add } from '../src/math.js'\n\ntest('adds decimals', () => {\n  assert.equal(add(0.1, 0.2), 0.3)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "file_matches", "path": "src/messages.js", "pattern": "Received", "description": "The typo was fixed" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests" },
+        { "check": "answer_matches", "pattern": "fail", "flags": "i", "description": "Reports the failing test" },
+        { "check": "tool_not_called", "tool": "github", "args_pattern": "^(?![\\s\\S]*\"draft\"\\s*:\\s*true)[\\s\\S]*create_pr", "description": "No ready-for-review PR while a check fails" }
+      ]
+    },
+    {
+      "id": "openpr-draft-branch-naming",
+      "prompt": "Make greet() in src/greet.js accept an optional greeting word that defaults to 'Hello', then open a draft PR.",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project on the default branch with a greet function and a test. The skill should create a prefixed branch (feat/... or similar), commit with a Conventional Commit message, and treat the PR as a draft.",
+        "files": {
+          "package.json": "{\n  \"name\": \"greeter\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/greet.js": "export function greet(name) {\n  return `Hello, ${name}`\n}\n",
+          "test/greet.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { greet } from '../src/greet.js'\n\ntest('greets', () => {\n  assert.equal(greet('Ada'), 'Hello, Ada')\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"name\"\\s*:\\s*\"[a-z]+/[a-z0-9._-]+\"", "description": "Branch name has a type prefix such as feat/" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"message\"\\s*:\\s*\"(feat|fix|refactor)(\\([^)]*\\))?!?:", "description": "Conventional Commit message" },
+        { "check": "file_matches", "path": "src/greet.js", "pattern": "Hello", "description": "The default greeting is kept" },
+        { "check": "answer_matches", "pattern": "draft", "flags": "i", "description": "Treats the PR as a draft" }
+      ]
+    }
+  ]
+}

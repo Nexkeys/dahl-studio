@@ -1,0 +1,62 @@
+{
+  "skill": "review",
+  "evals": [
+    {
+      "id": "review-path-sql-and-await",
+      "prompt": "/review src/users.js",
+      "mode": "review",
+      "fixture": {
+        "description": "Small Express module. getUser builds SQL by string concatenation from req.params.id (SQL injection) and deleteUser calls an async db function without await, so errors are lost and the response is sent before the delete finishes.",
+        "files": {
+          "package.json": "{\n  \"name\": \"users-api\",\n  \"type\": \"module\",\n  \"dependencies\": { \"express\": \"^4.19.2\", \"pg\": \"^8.11.0\" }\n}\n",
+          "src/db.js": "import pg from 'pg'\nexport const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })\nexport async function removeUser(id) {\n  await pool.query('DELETE FROM users WHERE id = $1', [id])\n}\n",
+          "src/users.js": "import { pool, removeUser } from './db.js'\n\nexport async function getUser(req, res) {\n  const result = await pool.query(\"SELECT * FROM users WHERE id = '\" + req.params.id + \"'\")\n  res.json(result.rows[0])\n}\n\nexport function deleteUser(req, res) {\n  removeUser(req.params.id)\n  res.status(204).end()\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "users\\.js", "description": "Read the target file" },
+        { "check": "answer_matches", "pattern": "SQL injection|injection|parameteri[sz]ed|\\$1", "flags": "i", "description": "Flags the string-built SQL and suggests a parameterised query" },
+        { "check": "answer_matches", "pattern": "await", "flags": "i", "description": "Flags the missing await in deleteUser" },
+        { "check": "answer_matches", "pattern": "users\\.js:\\d+", "description": "Findings cite file:line" },
+        { "check": "file_unchanged", "path": "src/users.js", "description": "The review did not edit the code" }
+      ]
+    },
+    {
+      "id": "review-natural-pagination",
+      "prompt": "Can you look over src/orders.ts before I merge it? I think the pagination is fine but I'm not sure.",
+      "mode": "review",
+      "fixture": {
+        "description": "TypeScript service with page-based pagination where offset is computed as page * size (page is 1-based, so page 1 skips the first page) and the size query param is not capped, so a client can request millions of rows.",
+        "files": {
+          "src/orders.ts": "import { db } from './db'\n\n// page is 1-based: ?page=1 is the first page\nexport async function listOrders(query: { page?: string; size?: string }) {\n  const page = Number(query.page ?? 1)\n  const size = Number(query.size ?? 20)\n  const offset = page * size\n  return db.order.findMany({ skip: offset, take: size, orderBy: { createdAt: 'desc' } })\n}\n",
+          "src/db.ts": "import { PrismaClient } from '@prisma/client'\nexport const db = new PrismaClient()\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "review", "description": "Loaded the review skill" },
+        { "check": "answer_matches", "pattern": "\\(page\\s*-\\s*1\\)|page\\s*-\\s*1|off[- ]by[- ]one|skips the first", "flags": "i", "description": "Finds the off-by-one in the offset" },
+        { "check": "answer_matches", "pattern": "cap|max(imum)?|limit|clamp|Math\\.min", "flags": "i", "description": "Flags the unbounded page size" },
+        { "check": "file_unchanged", "path": "src/orders.ts", "description": "No edits during the review" }
+      ]
+    },
+    {
+      "id": "review-last-commit-default",
+      "prompt": "/review",
+      "mode": "review",
+      "fixture": {
+        "description": "Git repo whose only commit adds a password reset handler that compares tokens with == and never checks expiry. There are no uncommitted changes, so the skill must fall back to reviewing the last commit.",
+        "files": {
+          "src/reset.js": "export async function resetPassword(db, body) {\n  const row = await db.get('SELECT * FROM resets WHERE email = ?', body.email)\n  if (row.token == body.token) {\n    await db.run('UPDATE users SET password = ? WHERE email = ?', body.password, body.email)\n    return { ok: true }\n  }\n  return { ok: false }\n}\n",
+          "README.md": "# reset service\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "git", "args_pattern": "status|diff|show|log", "description": "Used git to find what to review" },
+        { "check": "answer_matches", "pattern": "expir", "flags": "i", "description": "Flags the missing token expiry check" },
+        { "check": "answer_matches", "pattern": "hash|plain ?text|bcrypt|argon|null|undefined|row\\s*(is|may be)", "flags": "i", "description": "Flags the plaintext password or the missing null check on row" },
+        { "check": "file_unchanged", "path": "src/reset.js", "description": "Read-only review" }
+      ]
+    }
+  ]
+}

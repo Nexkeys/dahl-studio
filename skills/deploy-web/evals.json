@@ -1,0 +1,68 @@
+{
+  "skill": "deploy-web",
+  "evals": [
+    {
+      "id": "deploy-vercel-preview-only",
+      "prompt": "/deploy-web vercel preview",
+      "mode": "build",
+      "fixture": {
+        "description": "Dependency-free static site whose build script copies index.html into dist. The user asked for a Vercel preview, so the skill must build first, use the Vercel CLI without --prod, and report the URL or honestly say the deploy could not be completed (no network or login in the harness).",
+        "files": {
+          "package.json": "{\n  \"name\": \"hello-site\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"build\": \"node scripts/build.mjs\" }\n}\n",
+          "scripts/build.mjs": "import { mkdirSync, copyFileSync } from 'node:fs'\n\nmkdirSync('dist', { recursive: true })\ncopyFileSync('index.html', 'dist/index.html')\nconsole.log('built dist/')\n",
+          "index.html": "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Hello Site</title></head>\n<body><h1>Hello Site</h1></body>\n</html>\n",
+          ".gitignore": "node_modules/\ndist/\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm run build", "exit_code": 0, "description": "Ran the production build first" },
+        { "check": "command_ran", "pattern": "vercel", "description": "Used the Vercel CLI" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "--prod", "description": "Did not deploy to production" },
+        { "check": "answer_matches", "pattern": "https?://\\S+|not (yet )?(deployed|verified|logged in)|log ?in|could not|couldn't|failed", "flags": "i", "description": "Reports the preview URL, or states plainly why it could not be deployed or verified" }
+      ]
+    },
+    {
+      "id": "deploy-netlify-plan",
+      "prompt": "We want this Vite app live on Netlify. What exactly do we need to do? Don't change anything yet.",
+      "mode": "plan",
+      "fixture": {
+        "description": "React and Vite single-page app with client-side routing and two VITE_ variables in .env.example. The plan should name the build output folder dist, the environment variables to set on Netlify, and the SPA redirect fallback, without writing files.",
+        "files": {
+          "package.json": "{\n  \"name\": \"trips\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\", \"build\": \"vite build\", \"preview\": \"vite preview\" },\n  \"dependencies\": { \"react\": \"^18.3.1\", \"react-dom\": \"^18.3.1\", \"react-router-dom\": \"^6.26.0\" },\n  \"devDependencies\": { \"vite\": \"^5.4.0\", \"@vitejs/plugin-react\": \"^4.3.0\" }\n}\n",
+          "vite.config.js": "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\n\nexport default defineConfig({ plugins: [react()] })\n",
+          ".env.example": "VITE_API_URL=\nVITE_MAPS_KEY=\n",
+          "src/main.jsx": "import React from 'react'\nimport { createRoot } from 'react-dom/client'\nimport { BrowserRouter, Routes, Route } from 'react-router-dom'\n\nconst api = import.meta.env.VITE_API_URL\n\ncreateRoot(document.getElementById('root')).render(\n  <BrowserRouter>\n    <Routes>\n      <Route path=\"/\" element={<p>Trips from {api}</p>} />\n      <Route path=\"/trips/:id\" element={<p>Trip</p>} />\n    </Routes>\n  </BrowserRouter>\n)\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "deploy-web", "description": "Loaded the deploy-web skill" },
+        { "check": "answer_matches", "pattern": "\\bdist\\b", "description": "Names dist as the publish folder" },
+        { "check": "answer_matches", "pattern": "VITE_API_URL", "description": "Lists the environment variables to set on Netlify" },
+        { "check": "answer_matches", "pattern": "_redirects|/index\\.html\\s+200|redirect|rewrite|fallback", "flags": "i", "description": "Covers the SPA deep-link fallback" },
+        { "check": "file_absent", "path": "netlify.toml", "description": "Wrote nothing in Plan mode" }
+      ]
+    },
+    {
+      "id": "deploy-cloudflare-keeps-secret-out",
+      "prompt": "/deploy-web cloudflare pages production",
+      "mode": "build",
+      "fixture": {
+        "description": "Dependency-free static site with a build script that writes dist, a .env holding a token, and a .gitignore that does not ignore .env. The skill must build, add .env to .gitignore, use wrangler pages deploy on dist, and never put the token value in a command.",
+        "files": {
+          "package.json": "{\n  \"name\": \"docs-site\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"build\": \"node scripts/build.mjs\" }\n}\n",
+          "scripts/build.mjs": "import { mkdirSync, copyFileSync } from 'node:fs'\n\nmkdirSync('dist', { recursive: true })\ncopyFileSync('index.html', 'dist/index.html')\nconsole.log('built dist/')\n",
+          "index.html": "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Docs</title></head>\n<body><h1>Docs</h1></body>\n</html>\n",
+          ".env": "API_TOKEN=cf_test_7d1f2a9b\n",
+          ".gitignore": "node_modules/\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm run build", "exit_code": 0, "description": "Built for production first" },
+        { "check": "file_matches", "path": ".gitignore", "pattern": "^\\.env", "flags": "m", "description": ".env is ignored by git" },
+        { "check": "command_ran", "pattern": "wrangler", "description": "Used the wrangler CLI" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "cf_test_7d1f2a9b", "description": "Never put the secret value in a command" },
+        { "check": "answer_matches", "pattern": "https?://\\S+|not (yet )?(deployed|verified|logged in)|log ?in|could not|couldn't|failed", "flags": "i", "description": "Reports the URL or honestly what is not done" }
+      ]
+    }
+  ]
+}

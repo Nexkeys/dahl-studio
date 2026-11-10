@@ -1,0 +1,62 @@
+{
+  "skill": "dependency-upgrade",
+  "evals": [
+    {
+      "id": "dependency-upgrade-uuid-deep-import",
+      "prompt": "/dependency-upgrade uuid to version 9",
+      "mode": "build",
+      "web": true,
+      "fixture": {
+        "description": "Node project on uuid 3 that uses the deep import require('uuid/v4'), which was removed in uuid 8. Needs network for npm install. The upgrade must change the import to the named export and keep the test green.",
+        "files": {
+          "package.json": "{\n  \"name\": \"ids\",\n  \"version\": \"1.0.0\",\n  \"scripts\": { \"test\": \"node --test\" },\n  \"dependencies\": { \"uuid\": \"^3.4.0\" }\n}\n",
+          "src/id.js": "const uuidv4 = require('uuid/v4')\n\nfunction newId(prefix) {\n  return `${prefix}_${uuidv4()}`\n}\n\nmodule.exports = { newId }\n",
+          "test/id.test.js": "const { test } = require('node:test')\nconst assert = require('node:assert')\nconst { newId } = require('../src/id')\n\ntest('prefixes ids', () => {\n  assert.match(newId('user'), /^user_[0-9a-f-]{36}$/)\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm (install|i|add) [^\\n]*uuid@", "description": "Installed the new uuid version with npm" },
+        { "check": "file_matches", "path": "package.json", "pattern": "\"uuid\":\\s*\"[\\^~]?9\\.", "description": "package.json now declares uuid 9" },
+        { "check": "file_not_matches", "path": "src/id.js", "pattern": "uuid/v4", "description": "The removed deep import is gone" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the upgrade" }
+      ]
+    },
+    {
+      "id": "dependency-upgrade-plan-next-majors",
+      "prompt": "We're still on Next 13. Can you plan an upgrade to Next 15?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Next 13 project with eslint-config-next 13 and React 18. Plan mode: no changes, a stepwise plan through 14 then 15, moving coupled packages together.",
+        "files": {
+          "package.json": "{\n  \"name\": \"web\",\n  \"scripts\": { \"dev\": \"next dev\", \"build\": \"next build\", \"lint\": \"next lint\" },\n  \"dependencies\": { \"next\": \"13.5.6\", \"react\": \"18.2.0\", \"react-dom\": \"18.2.0\" },\n  \"devDependencies\": { \"eslint-config-next\": \"13.5.6\", \"@types/react\": \"18.2.0\", \"typescript\": \"5.3.3\" }\n}\n",
+          "app/page.tsx": "import { cookies } from 'next/headers'\n\nexport default function Page() {\n  const theme = cookies().get('theme')?.value ?? 'light'\n  return <main data-theme={theme}>Hello</main>\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "dependency-upgrade", "description": "Loaded the dependency-upgrade skill" },
+        { "check": "answer_matches", "pattern": "\\b14\\b", "description": "Plans a step through Next 14 rather than jumping majors" },
+        { "check": "answer_matches", "pattern": "eslint-config-next", "description": "Moves the coupled eslint config with next" },
+        { "check": "answer_matches", "pattern": "codemod|migration guide|upgrade guide|changelog", "flags": "i", "description": "Plans to read the migration notes or use the official codemod" },
+        { "check": "file_unchanged", "path": "package.json", "description": "No changes in Plan mode" }
+      ]
+    },
+    {
+      "id": "dependency-upgrade-pydantic-v2-plan",
+      "prompt": "/dependency-upgrade pydantic to v2",
+      "mode": "plan",
+      "fixture": {
+        "description": "FastAPI 0.95 app on pydantic 1 using .dict() and @validator. FastAPI below 0.100 does not support pydantic v2, so the plan must upgrade both together and list the API renames. Plan mode: no changes.",
+        "files": {
+          "requirements.txt": "fastapi==0.95.2\npydantic==1.10.13\nuvicorn==0.22.0\n",
+          "app/models.py": "from pydantic import BaseModel, validator\n\n\nclass User(BaseModel):\n    name: str\n    email: str\n\n    @validator('email')\n    def lower_email(cls, v):\n        return v.lower()\n\n\ndef to_json(user: User) -> dict:\n    return user.dict()\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "fastapi", "flags": "i", "description": "Notices FastAPI must be upgraded with pydantic" },
+        { "check": "answer_matches", "pattern": "model_dump|field_validator", "description": "Lists the v2 API renames that affect this code" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks for Build mode to apply it" },
+        { "check": "file_unchanged", "path": "app/models.py", "description": "No changes in Plan mode" }
+      ]
+    }
+  ]
+}

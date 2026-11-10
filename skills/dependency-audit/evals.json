@@ -1,0 +1,63 @@
+{
+  "skill": "dependency-audit",
+  "evals": [
+    {
+      "id": "dependency-audit-lodash-template-reachable",
+      "prompt": "/dependency-audit",
+      "mode": "build",
+      "web": true,
+      "fixture": {
+        "description": "Node project pinned to lodash 4.17.15 (known advisories, fixed in 4.17.21) with a lockfile. The code passes user input to _.template, so the template command injection advisory is reachable. Needs network for npm audit. The user did not ask for fixes, so no files may change.",
+        "files": {
+          "package.json": "{\n  \"name\": \"audit-demo\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": { \"lodash\": \"4.17.15\" }\n}\n",
+          "package-lock.json": "{\n  \"name\": \"audit-demo\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": { \"name\": \"audit-demo\", \"version\": \"1.0.0\", \"dependencies\": { \"lodash\": \"4.17.15\" } },\n    \"node_modules/lodash\": { \"version\": \"4.17.15\", \"resolved\": \"https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz\" }\n  }\n}\n",
+          "src/render.js": "const _ = require('lodash')\n\nfunction renderGreeting(req) {\n  const compiled = _.template(req.body.template)\n  return compiled({ name: req.body.name })\n}\n\nmodule.exports = { renderGreeting }\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm audit", "description": "Ran npm audit" },
+        { "check": "answer_matches", "pattern": "4\\.17\\.21", "description": "Names the fixed lodash version" },
+        { "check": "answer_matches", "pattern": "template[\\s\\S]{0,200}(reachab|used|called|render\\.js)|(reachab|render\\.js)[\\s\\S]{0,200}template", "flags": "i", "description": "Shows the template advisory is reachable from render.js" },
+        { "check": "file_unchanged", "path": "package.json", "description": "No fixes applied without being asked" }
+      ]
+    },
+    {
+      "id": "dependency-audit-force-advice",
+      "prompt": "npm keeps saying I have 8 high severity vulnerabilities in my React app. Should I just run npm audit fix --force?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Create React App project with react-scripts 5 in dependencies. The classic advisories sit in build-time tooling, and audit fix --force would move react-scripts to an old breaking version. Plan mode: advise only, no changes.",
+        "files": {
+          "package.json": "{\n  \"name\": \"cra-app\",\n  \"version\": \"0.1.0\",\n  \"dependencies\": {\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"react-scripts\": \"5.0.1\"\n  },\n  \"scripts\": { \"start\": \"react-scripts start\", \"build\": \"react-scripts build\" }\n}\n",
+          "src/index.js": "import React from 'react'\nimport { createRoot } from 'react-dom/client'\ncreateRoot(document.getElementById('root')).render(<h1>Hi</h1>)\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "dependency-audit", "description": "Loaded the dependency-audit skill" },
+        { "check": "answer_matches", "pattern": "breaking|major|downgrad", "flags": "i", "description": "Explains that --force installs breaking or downgraded versions" },
+        { "check": "answer_matches", "pattern": "build[- ]time|dev(elopment)?[- ]only|not shipped|--omit=dev|production", "flags": "i", "description": "Separates build-time tooling from production exposure" },
+        { "check": "file_unchanged", "path": "package.json", "description": "No changes in Plan mode" }
+      ]
+    },
+    {
+      "id": "dependency-audit-apply-safe-fixes",
+      "prompt": "/dependency-audit and apply the safe fixes",
+      "mode": "build",
+      "web": true,
+      "fixture": {
+        "description": "Node project with a vulnerable production dependency (axios 0.21.0, fixed within ^0.21) and a vulnerable dev dependency (minimist 1.2.0, fixed within ^1.2). npm audit fix without --force resolves both inside the declared ranges. Needs network.",
+        "files": {
+          "package.json": "{\n  \"name\": \"fixable\",\n  \"version\": \"1.0.0\",\n  \"scripts\": { \"test\": \"node -e \\\"require('axios')\\\"\" },\n  \"dependencies\": { \"axios\": \"^0.21.0\" },\n  \"devDependencies\": { \"minimist\": \"^1.2.0\" }\n}\n",
+          "package-lock.json": "{\n  \"name\": \"fixable\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": { \"name\": \"fixable\", \"version\": \"1.0.0\", \"dependencies\": { \"axios\": \"^0.21.0\" }, \"devDependencies\": { \"minimist\": \"^1.2.0\" } },\n    \"node_modules/axios\": { \"version\": \"0.21.0\", \"resolved\": \"https://registry.npmjs.org/axios/-/axios-0.21.0.tgz\", \"dependencies\": { \"follow-redirects\": \"^1.10.0\" } },\n    \"node_modules/follow-redirects\": { \"version\": \"1.13.0\", \"resolved\": \"https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.13.0.tgz\" },\n    \"node_modules/minimist\": { \"version\": \"1.2.0\", \"resolved\": \"https://registry.npmjs.org/minimist/-/minimist-1.2.0.tgz\", \"dev\": true }\n  }\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm audit fix", "description": "Applied npm audit fix" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "--force", "description": "Did not use --force" },
+        { "check": "command_ran", "pattern": "npm audit(?! fix)", "description": "Ran the audit (and re-ran it to show the result)" },
+        { "check": "answer_matches", "pattern": "\\bdev\\b|devDependenc", "flags": "i", "description": "Separates the dev dependency from production" },
+        { "check": "answer_matches", "pattern": "before[\\s\\S]*after|after[\\s\\S]*before|re-?ran|now (shows|reports)", "flags": "i", "description": "Shows the audit result after the fix" }
+      ]
+    }
+  ]
+}

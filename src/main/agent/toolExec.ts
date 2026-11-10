@@ -16,6 +16,7 @@ import { TOOL_DEFS } from './tools'
 import { execGit } from './gitTools'
 import { execGithub } from './githubTool'
 import { execBrowser } from './browserTools'
+import { execReadSkillFile, execUseSkill } from '../skills/tools'
 import { execChief } from '../chief/tools'
 import { changedRefusal, seenKey, unreadRefusal } from './guards'
 
@@ -191,6 +192,11 @@ export async function execTool(c: ExecCtx, name: string, rawArgs: string, allowe
       }
       case 'ask_user':
         return await execAskUser(c, a ?? {})
+      case 'use_skill':
+      case 'read_skill_file': {
+        const skills = c.deps.skills ? (await c.deps.skills(root)).skills : []
+        return name === 'use_skill' ? await execUseSkill(skills, a ?? {}) : await execReadSkillFile(skills, a ?? {})
+      }
       case 'chief_briefing':
       case 'chief_followups':
       case 'chief_goals':

@@ -7,6 +7,7 @@ import { attachRun, beginRun, openRunInChat, otherBusyChat, restoreChats } from 
 import { ChatTabs } from './ChatTabs'
 import { Transcript } from './Transcript'
 import { Composer } from './Composer'
+import { ProjectInstructions } from './InstructionsChip'
 import { Outbox } from './Outbox'
 import { LiveMarkdown } from './Markdown'
 import { ChatStatus, ProgressStrip } from './ProgressStrip'
@@ -121,6 +122,7 @@ export function ChatPanel({ root }: { root: string }) {
           </div>
         )}
       </div>
+      {!transcript.length && <ProjectInstructions root={root} />}
       <Outbox runId={p?.runId ?? null} transcript={transcript} running={!!running} onSendNow={(m) => void sendNow(m)} />
       <Composer root={root} running={!!running} onSend={(t, m, how) => void submit(t, m, how)} />
     </div>

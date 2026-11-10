@@ -19,6 +19,7 @@ import { appendJsonl, nowIso, redact } from './util'
 import { probeEnvironment } from './envProbe'
 import { batchDeltas } from './eventBatch'
 import { PreviewController } from './preview/controller'
+import { createSkillService } from './skills/service'
 import { configureChief } from './chief/tools'
 
 export const localAppData = process.env.LOCALAPPDATA ?? app.getPath('appData')
@@ -153,6 +154,9 @@ export const preview = new PreviewController({
   activeProject: async () => (await settings.get()).activeProject,
   log: (m) => void log('info', m)
 })
+/** Built-in skills: the top-level skills/ folder (extraResources in the installed app, the repo in development). */
+export const builtinSkillsDir = (): string => (app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.join(app.getAppPath(), 'skills'))
+export const skills = createSkillService({ builtinDir: builtinSkillsDir, userDir: path.join(APP_DIR, 'skills'), log: (m) => void log('info', m) })
 
 const sendAgentEvent = batchDeltas((e) => send('agent:event', e))
 export const runner = new AgentRunner({
@@ -170,6 +174,7 @@ export const runner = new AgentRunner({
   analyzeImage,
   environment: () => probeEnvironment(),
   browser: preview,
+  skills: (p) => skills.load(p),
   mcp: {
     toolsFor: (p, only, problems, waitMs) => mcp.toolsFor(p, only, problems, waitMs),
     connectors: (p) => mcp.connectors(p),

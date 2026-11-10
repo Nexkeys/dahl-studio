@@ -425,6 +425,56 @@ export interface PtyEvent {
   code?: number | null
 }
 
+// ---------------- Skills (SKILL.md) and project instruction files (CLAUDE.md, AGENTS.md, Cursor rules) ----------------
+export type SkillSource = 'builtin' | 'user' | 'project'
+
+/** One skill as the / menu sees it (the body stays in the main process). */
+export interface SkillSummary {
+  name: string
+  description: string
+  source: SkillSource
+  /** where it was found, e.g. ".claude/skills/deploy" or "built-in" */
+  location: string
+  argumentHint?: string
+  /** false: hidden from the / menu (user-invocable: false) */
+  userInvocable: boolean
+  /** false: not listed to the model (disable-model-invocation: true); still runs from the / menu */
+  modelInvocable: boolean
+  /** metadata dahl-mode / dahl-icon / dahl-web */
+  mode?: AgentMode
+  icon?: string
+  web?: boolean
+}
+
+export interface SkillProblem {
+  path: string
+  reason: string
+  level: 'error' | 'warning'
+}
+
+export interface SkillList {
+  skills: SkillSummary[]
+  problems: SkillProblem[]
+}
+
+/** An instruction file Dahl read for this project (or listed for the model to read on request). */
+export interface InstructionFileInfo {
+  /** project-relative path, forward slashes */
+  path: string
+  kind: 'claude' | 'agents' | 'cursor-rule' | 'cursorrules' | 'copilot' | 'import'
+  /** why it applies: "project root", "applies to src/api/", "globs: src/**", "imported by CLAUDE.md" */
+  reason: string
+  chars: number
+  truncated?: boolean
+  /** description-only Cursor rule: named in the prompt, read with read_file when relevant */
+  listed?: boolean
+}
+
+// declaration merge: the "Instructions loaded" chip in the chat
+export interface TranscriptItem {
+  instructions?: InstructionFileInfo[]
+}
+
 // ---------------- Tab completions (grey ghost text in the editor) ----------------
 // The two settings fields are merged into Settings here (interface merging), so they stay in this block.
 export interface Settings {

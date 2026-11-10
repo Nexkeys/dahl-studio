@@ -1,0 +1,63 @@
+{
+  "skill": "architecture-decision",
+  "evals": [
+    {
+      "id": "architecture-decision-job-queue",
+      "prompt": "/architecture-decision job queue for sending emails: Redis with BullMQ or Postgres with pg-boss",
+      "mode": "build",
+      "fixture": {
+        "description": "Node API that already uses Postgres (ADR 0002) and sends emails in a setInterval loop. Two ADRs exist, so the new one must be numbered 0003, compare the options in a table and include consequences, without editing the existing ADRs.",
+        "files": {
+          "package.json": "{\n  \"name\": \"api\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"start\": \"node src/server.js\" },\n  \"dependencies\": { \"express\": \"^4.21.0\", \"pg\": \"^8.13.0\" }\n}\n",
+          "src/jobs.js": "import { sendEmail } from './mail.js'\nimport { pool } from './db.js'\n\n// Runs in the web process. Jobs are lost on restart.\nsetInterval(async () => {\n  const { rows } = await pool.query(\"select * from outbox where sent_at is null limit 10\")\n  for (const row of rows) await sendEmail(row)\n}, 5000)\n",
+          "docs/adr/0001-record-architecture-decisions.md": "# 0001. Record architecture decisions\n\n- Status: Accepted\n- Date: 2024-01-10\n\n## Context\nWe need to record decisions.\n\n## Decision\nWe use ADRs in docs/adr.\n\n## Consequences\nDecisions are documented.\n",
+          "docs/adr/0002-use-postgres.md": "# 0002. Use Postgres as the primary database\n\n- Status: Accepted\n- Date: 2024-02-02\n\n## Context\nWe need a relational database.\n\n## Decision\nPostgres on a managed host.\n\n## Consequences\nOne database to operate.\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "list_dir", "args_pattern": "adr", "description": "Checked existing ADRs for numbering" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "docs/adr/0003-[a-z0-9-]+\\.md", "description": "Saves the ADR with the next number 0003" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "Consequences", "description": "The ADR has a Consequences section" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "\\|[^|]*\\|[^|]*\\|[^|]*\\|", "description": "The ADR has a comparison table" },
+        { "check": "file_unchanged", "path": "docs/adr/0002-use-postgres.md", "description": "Existing ADRs untouched" }
+      ]
+    },
+    {
+      "id": "architecture-decision-graphql-natural",
+      "prompt": "We're debating whether to move our mobile app's API from REST to GraphQL. Can you write up the decision for the team?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Express REST API used by a mobile app. In Plan mode the model returns the full ADR text (context, options table, recommendation, consequences) without writing files.",
+        "files": {
+          "package.json": "{\n  \"name\": \"mobile-api\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"dependencies\": { \"express\": \"^4.21.0\", \"zod\": \"^3.23.0\" }\n}\n",
+          "src/routes/feed.js": "import { Router } from 'express'\n\nconst router = Router()\n\n// The app calls /feed, then /users/:id and /posts/:id/comments for each item.\nrouter.get('/', async (req, res) => {\n  res.json({ data: [] })\n})\n\nexport default router\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "architecture-decision", "description": "The model loaded the architecture-decision skill" },
+        { "check": "answer_matches", "pattern": "Consequences", "description": "Includes consequences" },
+        { "check": "answer_matches", "pattern": "\\|[^\\n]*\\|[^\\n]*\\|", "description": "Includes an options comparison table" },
+        { "check": "answer_matches", "pattern": "Proposed", "description": "Marks the ADR as proposed" },
+        { "check": "tool_not_called", "tool": "write_file", "description": "No files written in Plan mode" }
+      ]
+    },
+    {
+      "id": "architecture-decision-first-adr",
+      "prompt": "/architecture-decision choose a state management approach for the React app",
+      "mode": "build",
+      "fixture": {
+        "description": "React app with prop drilling and no ADR folder yet. The model must read the code, compare 2 to 4 options and save the first ADR as docs/adr/0001-*.md.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shop-web\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\", \"@tanstack/react-query\": \"^5.59.0\" }\n}\n",
+          "src/App.tsx": "import { useState } from 'react'\nimport { Header } from './Header'\nimport { Catalog } from './Catalog'\n\nexport default function App() {\n  const [cart, setCart] = useState<string[]>([])\n  const [user, setUser] = useState<{ name: string } | null>(null)\n  return (\n    <>\n      <Header cart={cart} user={user} onLogout={() => setUser(null)} />\n      <Catalog cart={cart} setCart={setCart} user={user} />\n    </>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "package\\.json|App\\.tsx", "description": "Reads the codebase for context" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "docs/adr/0001-[a-z0-9-]+\\.md", "description": "Saves the first ADR as 0001" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "Proposed", "description": "The ADR status is Proposed" },
+        { "check": "answer_matches", "pattern": "Context|Zustand|Redux|Jotai|React Query|TanStack", "description": "Names concrete options or the existing context" }
+      ]
+    }
+  ]
+}

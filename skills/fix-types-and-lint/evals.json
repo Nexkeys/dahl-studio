@@ -1,0 +1,62 @@
+{
+  "skill": "fix-types-and-lint",
+  "evals": [
+    {
+      "id": "fix-types-and-lint-ts-strict",
+      "prompt": "/fix-types-and-lint",
+      "mode": "build",
+      "fixture": {
+        "description": "Strict TypeScript project. src/user.ts dereferences an optional parameter (possibly undefined) and src/sum.ts has an implicitly any parameter. The fixes must use real types and narrowing, not any, @ts-ignore or a weaker tsconfig.",
+        "files": {
+          "package.json": "{\n  \"name\": \"strict-app\",\n  \"private\": true,\n  \"scripts\": { \"typecheck\": \"tsc --noEmit\" },\n  \"devDependencies\": { \"typescript\": \"^5.4.0\" }\n}\n",
+          "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"Bundler\",\n    \"strict\": true,\n    \"noEmit\": true\n  },\n  \"include\": [\"src\"]\n}\n",
+          "src/user.ts": "export interface User {\n  name: string\n}\n\nexport function greet(user?: User): string {\n  return `Hello ${user.name.toUpperCase()}`\n}\n",
+          "src/sum.ts": "export function sum(xs) {\n  return xs.reduce((a, b) => a + b, 0)\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "tsc|npm run typecheck", "description": "Ran the type checker" },
+        { "check": "file_not_matches", "path": "src/user.ts", "pattern": "@ts-ignore|@ts-nocheck|as any|:\\s*any\\b|user!", "description": "No suppression or non-null assertion in user.ts" },
+        { "check": "file_matches", "path": "src/sum.ts", "pattern": "xs\\s*:\\s*(readonly\\s+)?(number\\[\\]|Array<number>|ReadonlyArray<number>|Iterable<number>)", "description": "sum gets a real parameter type" },
+        { "check": "file_not_matches", "path": "tsconfig.json", "pattern": "\"strict\"\\s*:\\s*false|noImplicitAny\"\\s*:\\s*false", "description": "Did not weaken the tsconfig" }
+      ]
+    },
+    {
+      "id": "fix-types-and-lint-ruff",
+      "prompt": "ruff is complaining about a bunch of stuff in this repo, can you clean it up properly?",
+      "mode": "build",
+      "fixture": {
+        "description": "Python project with ruff configured for F and E rules. app.py has an unused import, an unused variable and a bare except. The fixes must not add noqa comments or ignore rules in pyproject.toml.",
+        "files": {
+          "pyproject.toml": "[tool.ruff]\nline-length = 100\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\"]\n",
+          "app.py": "import os\nimport json\n\n\ndef load(path):\n    unused = 42\n    try:\n        with open(path, encoding=\"utf-8\") as f:\n            return json.load(f)\n    except:\n        return {}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "fix-types-and-lint", "description": "The model loaded the fix-types-and-lint skill" },
+        { "check": "command_ran", "pattern": "ruff", "description": "Ran ruff" },
+        { "check": "file_not_matches", "path": "app.py", "pattern": "noqa|^import os|except\\s*:", "flags": "m", "description": "Removed the unused import and bare except without noqa" },
+        { "check": "file_not_matches", "path": "pyproject.toml", "pattern": "ignore", "description": "Did not ignore rules in the config" }
+      ]
+    },
+    {
+      "id": "fix-types-and-lint-plan-eslint",
+      "prompt": "/fix-types-and-lint src/",
+      "mode": "plan",
+      "fixture": {
+        "description": "JS project with an ESLint flat config enabling eqeqeq and no-unused-vars. src/a.js uses == and has an unused variable. In Plan mode nothing may change; the model should report the errors with correct fixes and ask for Build mode.",
+        "files": {
+          "package.json": "{\n  \"name\": \"lint-me\",\n  \"type\": \"module\",\n  \"scripts\": { \"lint\": \"eslint .\" },\n  \"devDependencies\": { \"eslint\": \"^9.0.0\" }\n}\n",
+          "eslint.config.js": "export default [\n  {\n    files: ['**/*.js'],\n    rules: {\n      eqeqeq: 'error',\n      'no-unused-vars': 'error'\n    }\n  }\n]\n",
+          "src/a.js": "export function isAdmin(user) {\n  const role = user.role\n  const legacy = user.legacyFlag\n  return role == 'admin'\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/a.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "eqeqeq|===|strict equality", "flags": "i", "description": "Reports the eqeqeq error with the strict equality fix" },
+        { "check": "answer_matches", "pattern": "unused|legacy", "flags": "i", "description": "Reports the unused variable" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

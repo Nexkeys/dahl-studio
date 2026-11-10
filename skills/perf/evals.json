@@ -1,0 +1,62 @@
+{
+  "skill": "perf",
+  "evals": [
+    {
+      "id": "perf-quadratic-dupes",
+      "prompt": "/perf findDuplicates in src/dupes.js is very slow for 50k ids",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project. findDuplicates uses nested includes checks (quadratic). A node:test file checks the result. The fix is a Set based single pass, proven with a timing before and after.",
+        "files": {
+          "package.json": "{\n  \"name\": \"dupes\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/dupes.js": "export function findDuplicates(ids) {\n  const dupes = []\n  for (let i = 0; i < ids.length; i++) {\n    const rest = ids.slice(i + 1)\n    if (rest.includes(ids[i]) && !dupes.includes(ids[i])) dupes.push(ids[i])\n  }\n  return dupes\n}\n",
+          "test/dupes.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { findDuplicates } from '../src/dupes.js'\n\ntest('finds duplicates in first-seen order', () => {\n  assert.deepEqual(findDuplicates([3, 1, 3, 2, 1, 3]), [3, 1])\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "Measure-Command|performance\\.now|console\\.time|bench|--cpu-prof", "description": "Measured a baseline" },
+        { "check": "file_matches", "path": "src/dupes.js", "pattern": "new (Set|Map)", "description": "Replaced the quadratic scan with a Set or Map" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests pass after the change" },
+        { "check": "answer_matches", "pattern": "\\d+(\\.\\d+)?\\s*(ms|s\\b|seconds|milliseconds)[\\s\\S]*\\d+(\\.\\d+)?\\s*(ms|s\\b|seconds|milliseconds)", "flags": "i", "description": "Reports before and after numbers" }
+      ]
+    },
+    {
+      "id": "perf-review-mode-endpoint",
+      "prompt": "The /report endpoint takes about 4 seconds. Why is it so slow?",
+      "mode": "review",
+      "fixture": {
+        "description": "Express handler that reads a template file with readFileSync for every row and awaits independent HTTP calls one by one in a loop. Review mode: no edits or commands, only ranked hypotheses and a measurement plan.",
+        "files": {
+          "src/report.js": "import fs from 'node:fs'\n\nexport async function report(req, res) {\n  const users = await fetch('http://localhost:4000/users').then((r) => r.json())\n  const rows = []\n  for (const u of users) {\n    const tpl = fs.readFileSync('templates/row.html', 'utf8')\n    const stats = await fetch(`http://localhost:4000/stats/${u.id}`).then((r) => r.json())\n    rows.push(tpl.replace('{{name}}', u.name).replace('{{total}}', stats.total))\n  }\n  res.send(rows.join(''))\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "perf", "description": "Loaded the perf skill" },
+        { "check": "answer_matches", "pattern": "serial|sequential|one (at a time|by one)|Promise\\.all", "flags": "i", "description": "Identifies the serial awaits in the loop" },
+        { "check": "answer_matches", "pattern": "readFileSync|sync(hronous)? (file )?(IO|read)", "flags": "i", "description": "Identifies the per-row synchronous file read" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks for Build mode to measure and change" },
+        { "check": "file_unchanged", "path": "src/report.js", "description": "No edits in Review mode" }
+      ]
+    },
+    {
+      "id": "perf-python-membership",
+      "prompt": "/perf scripts/tag_stats.py takes ages on large inputs",
+      "mode": "build",
+      "fixture": {
+        "description": "Python script that checks membership in a list inside a loop (quadratic) and a pytest file. The fix is a set, with a timing before and after.",
+        "files": {
+          "scripts/__init__.py": "",
+          "scripts/tag_stats.py": "def known_tag_count(tags, known):\n    known_list = list(known)\n    count = 0\n    for t in tags:\n        if t in known_list:\n            count += 1\n    return count\n\n\nif __name__ == '__main__':\n    import random\n    known = [f't{i}' for i in range(20000)]\n    tags = [f't{random.randint(0, 40000)}' for _ in range(20000)]\n    print(known_tag_count(tags, known))\n",
+          "tests/test_tag_stats.py": "from scripts.tag_stats import known_tag_count\n\n\ndef test_count():\n    assert known_tag_count(['a', 'b', 'a', 'z'], ['a', 'b']) == 3\n",
+          "pytest.ini": "[pytest]\npythonpath = .\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "cProfile|timeit|Measure-Command|perf_counter|time\\.time", "description": "Measured before changing" },
+        { "check": "file_matches", "path": "scripts/tag_stats.py", "pattern": "set\\(|frozenset\\(|\\{[^}]*\\bfor\\b", "description": "Uses a set for membership" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass" },
+        { "check": "answer_matches", "pattern": "before[\\s\\S]*after|after[\\s\\S]*before", "flags": "i", "description": "Reports a before and after comparison" }
+      ]
+    }
+  ]
+}

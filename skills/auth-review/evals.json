@@ -1,0 +1,60 @@
+{
+  "skill": "auth-review",
+  "evals": [
+    {
+      "id": "auth-review-idor-md5",
+      "prompt": "/auth-review",
+      "mode": "review",
+      "fixture": {
+        "description": "Express API: invoices route loads any invoice by id after requireAuth without an ownership check (IDOR); login hashes passwords with md5; JWTs are verified with the hardcoded secret 'secret'.",
+        "files": {
+          "src/auth.js": "const crypto = require('crypto')\nconst jwt = require('jsonwebtoken')\n\nfunction hashPassword(pw) {\n  return crypto.createHash('md5').update(pw).digest('hex')\n}\n\nfunction requireAuth(req, res, next) {\n  try {\n    req.user = jwt.verify(req.headers.authorization.split(' ')[1], 'secret')\n    next()\n  } catch {\n    res.status(401).end()\n  }\n}\n\nmodule.exports = { hashPassword, requireAuth }\n",
+          "src/routes/invoices.js": "const router = require('express').Router()\nconst { requireAuth } = require('../auth')\nconst db = require('../db')\n\nrouter.get('/invoices/:id', requireAuth, async (req, res) => {\n  const invoice = await db.invoice.findUnique({ where: { id: Number(req.params.id) } })\n  res.json(invoice)\n})\n\nrouter.get('/invoices', requireAuth, async (req, res) => {\n  res.json(await db.invoice.findMany({ where: { ownerId: req.user.id } }))\n})\n\nmodule.exports = router\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "IDOR|object[- ]level|ownership|another user|other users", "flags": "i", "description": "Finds the missing ownership check on GET /invoices/:id" },
+        { "check": "answer_matches", "pattern": "md5[\\s\\S]{0,300}(bcrypt|argon|scrypt)|(bcrypt|argon|scrypt)[\\s\\S]{0,300}md5", "flags": "i", "description": "Flags md5 hashing and names a proper algorithm" },
+        { "check": "answer_matches", "pattern": "secret[\\s\\S]{0,200}(hardcoded|hard-coded|weak|environment|env)", "flags": "i", "description": "Flags the hardcoded JWT secret" },
+        { "check": "answer_matches", "pattern": "\\|[^\\n]*/invoices[^\\n]*\\|", "description": "Includes a route table row for the invoices routes" },
+        { "check": "file_unchanged", "path": "src/routes/invoices.js", "description": "Read-only review" }
+      ]
+    },
+    {
+      "id": "auth-review-natural-admin-routes",
+      "prompt": "Can regular users reach our admin endpoints? Please check our permissions.",
+      "mode": "review",
+      "fixture": {
+        "description": "Express server registers /admin/users before app.use(requireAuth), so it is public, and the admin check trusts an x-role request header the client controls.",
+        "files": {
+          "server.js": "const express = require('express')\nconst { requireAuth } = require('./auth')\nconst app = express()\napp.use(express.json())\n\nfunction requireAdmin(req, res, next) {\n  if (req.headers['x-role'] === 'admin') return next()\n  res.status(403).end()\n}\n\napp.get('/admin/users', requireAdmin, (req, res) => res.json([{ id: 1, email: 'a@example.com' }]))\n\napp.use(requireAuth)\n\napp.delete('/admin/users/:id', requireAdmin, (req, res) => res.status(204).end())\napp.get('/me', (req, res) => res.json(req.user))\n\napp.listen(3000)\n",
+          "auth.js": "const jwt = require('jsonwebtoken')\nexports.requireAuth = (req, res, next) => {\n  try {\n    req.user = jwt.verify(req.cookies?.token, process.env.JWT_SECRET, { algorithms: ['HS256'] })\n    next()\n  } catch {\n    res.status(401).end()\n  }\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "auth-review", "description": "Loaded the auth-review skill" },
+        { "check": "answer_matches", "pattern": "before[\\s\\S]{0,80}(requireAuth|auth middleware|app\\.use)|order|unauthenticated|no auth", "flags": "i", "description": "Notices /admin/users is registered before the auth middleware" },
+        { "check": "answer_matches", "pattern": "x-role|header", "flags": "i", "description": "Flags the client-controlled role header" },
+        { "check": "file_unchanged", "path": "server.js", "description": "Read-only review" }
+      ]
+    },
+    {
+      "id": "auth-review-fastapi-jwt",
+      "prompt": "/auth-review the FastAPI login and token handling",
+      "mode": "review",
+      "fixture": {
+        "description": "FastAPI app decodes JWTs with verify_signature False, sets the session cookie without httponly or secure, and has no rate limiting on /login.",
+        "files": {
+          "app/main.py": "import jwt\nfrom fastapi import FastAPI, Request, Response, HTTPException\n\napp = FastAPI()\nSECRET = 'dev'\n\n\n@app.post('/login')\nasync def login(body: dict, response: Response):\n    user = await check_password(body['email'], body['password'])\n    if not user:\n        raise HTTPException(401, 'Invalid email or password')\n    token = jwt.encode({'sub': user['id']}, SECRET, algorithm='HS256')\n    response.set_cookie('token', token)\n    return {'ok': True}\n\n\ndef current_user(request: Request):\n    token = request.cookies.get('token')\n    return jwt.decode(token, options={'verify_signature': False})\n\n\nasync def check_password(email, password):\n    return None\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "verify_signature|signature (is )?not verified|not verif", "flags": "i", "description": "Flags the unverified JWT signature" },
+        { "check": "answer_matches", "pattern": "httponly", "flags": "i", "description": "Flags the missing HttpOnly cookie flag" },
+        { "check": "answer_matches", "pattern": "rate[- ]limit|brute[- ]force|lockout", "flags": "i", "description": "Flags missing rate limiting on login" },
+        { "check": "answer_matches", "pattern": "exp(iry|iration)?\\b|\\bexp\\b", "flags": "i", "description": "Notes the token has no expiry" },
+        { "check": "file_unchanged", "path": "app/main.py", "description": "Read-only review" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "skill": "ui",
+  "evals": [
+    {
+      "id": "ui-login-card-tokens",
+      "prompt": "/ui a login card in src/components/LoginCard.tsx: centered white card, 8px radius, heading 'Sign in', email and password fields, and a full-width blue (#2563eb) 'Continue' button",
+      "mode": "build",
+      "fixture": {
+        "description": "Vite + React + TypeScript project with design tokens in src/styles/tokens.css (--color-primary is #2563eb) and an existing Button component. The card should reuse the Button and the token instead of hardcoding the hex value.",
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\", \"build\": \"tsc -b && vite build\", \"typecheck\": \"tsc --noEmit\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\" },\n  \"devDependencies\": { \"typescript\": \"^5.6.0\", \"vite\": \"^6.0.0\", \"@vitejs/plugin-react\": \"^4.3.0\" }\n}\n",
+          "src/styles/tokens.css": ":root {\n  --color-primary: #2563eb;\n  --color-surface: #ffffff;\n  --color-text: #0f172a;\n  --radius-md: 8px;\n  --space-4: 16px;\n  --space-6: 24px;\n}\n",
+          "src/components/Button.tsx": "import type { ButtonHTMLAttributes } from 'react'\n\ntype Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost'; full?: boolean }\n\nexport function Button({ variant = 'primary', full, className = '', ...rest }: Props) {\n  return <button className={`btn btn-${variant} ${full ? 'btn-full' : ''} ${className}`} {...rest} />\n}\n",
+          "src/App.tsx": "export default function App() {\n  return <main />\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "tokens|Button", "description": "Read the existing tokens or Button component before building" },
+        { "check": "file_matches", "path": "src/components/LoginCard.tsx", "pattern": "Sign in", "description": "The card has the exact heading copy" },
+        { "check": "file_matches", "path": "src/components/LoginCard.tsx", "pattern": "<label|htmlFor|aria-label", "description": "Inputs have labels" },
+        { "check": "file_matches", "path": "src/components/LoginCard.tsx", "pattern": "import\\s*\\{[^}]*Button[^}]*\\}\\s*from", "description": "Reuses the existing Button component" },
+        { "check": "file_not_matches", "path": "src/components/LoginCard.tsx", "pattern": "#2563eb", "flags": "i", "description": "Uses the token instead of hardcoding the hex colour" }
+      ]
+    },
+    {
+      "id": "ui-settings-layout-natural",
+      "prompt": "Can you make src/pages/Settings.tsx look like this: two columns on desktop, a left nav with Profile, Billing and Team, and a form card on the right with a Save button. Stack them on mobile.",
+      "mode": "build",
+      "fixture": {
+        "description": "React project with plain CSS. Settings.tsx is an empty stub. The page should get a semantic nav, a responsive two-column layout and the given copy.",
+        "files": {
+          "package.json": "{\n  \"name\": \"dash\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\" }\n}\n",
+          "src/pages/Settings.tsx": "export default function Settings() {\n  return <div>Settings</div>\n}\n",
+          "src/index.css": ":root { --gap: 24px; --card-bg: #fff; --border: #e2e8f0; }\nbody { margin: 0; font-family: system-ui, sans-serif; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "ui", "description": "The model loaded the ui skill" },
+        { "check": "file_matches", "path": "src/pages/Settings.tsx", "pattern": "Profile[\\s\\S]*Billing[\\s\\S]*Team", "description": "The nav has the three items in order" },
+        { "check": "file_matches", "path": "src/pages/Settings.tsx", "pattern": "<nav", "description": "Uses a semantic nav element" },
+        { "check": "file_matches", "path": "src/pages/Settings.tsx", "pattern": "<button", "description": "Save is a real button" },
+        { "check": "answer_matches", "pattern": "unverified|screenshot|Preview", "flags": "i", "description": "Reports how the visual result was checked or that it is unverified" }
+      ]
+    },
+    {
+      "id": "ui-plan-mode-analysis",
+      "prompt": "/ui recreate the design in design/card.svg as a ProductCard component",
+      "mode": "plan",
+      "fixture": {
+        "description": "A small SVG mockup of a product card (teal button 'Add to cart', price 24.00). The run is in Plan mode, so the model must analyse the design and report a plan without creating files.",
+        "files": {
+          "design/card.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"400\" viewBox=\"0 0 320 400\">\n  <rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#ffffff\" stroke=\"#e5e7eb\"/>\n  <rect x=\"16\" y=\"16\" width=\"288\" height=\"200\" rx=\"8\" fill=\"#f3f4f6\"/>\n  <text x=\"16\" y=\"250\" font-family=\"Inter\" font-size=\"18\" font-weight=\"600\" fill=\"#111827\">Linen Tote Bag</text>\n  <text x=\"16\" y=\"280\" font-family=\"Inter\" font-size=\"16\" fill=\"#6b7280\">24.00 EUR</text>\n  <rect x=\"16\" y=\"320\" width=\"288\" height=\"48\" rx=\"8\" fill=\"#0f766e\"/>\n  <text x=\"160\" y=\"350\" text-anchor=\"middle\" font-family=\"Inter\" font-size=\"16\" fill=\"#ffffff\">Add to cart</text>\n</svg>\n",
+          "src/components/Button.tsx": "export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {\n  return <button className=\"btn\" {...props} />\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_absent", "path": "src/components/ProductCard.tsx", "description": "No files created in Plan mode" },
+        { "check": "file_unchanged", "path": "src/components/Button.tsx", "description": "Existing component untouched" },
+        { "check": "answer_matches", "pattern": "Add to cart|0f766e|Linen Tote", "flags": "i", "description": "The answer reflects details analysed from the design" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "skill": "commit",
+  "evals": [
+    {
+      "id": "commit-clean-tree",
+      "prompt": "/commit",
+      "mode": "build",
+      "fixture": {
+        "description": "Small Node project in a git repository where everything is already committed, so the working tree is clean. The skill must notice there is nothing to commit and must not create an empty commit.",
+        "files": {
+          "package.json": "{\n  \"name\": \"greeter\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/greet.js": "export const greet = (name) => `Hello, ${name}`\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"status\"", "description": "Checked the working tree with git status" },
+        { "check": "tool_not_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"commit\"", "description": "Did not create an empty commit" },
+        { "check": "answer_matches", "pattern": "nothing to commit|working tree (is )?clean|no (changes|uncommitted|pending)", "flags": "i", "description": "Tells the user there is nothing to commit" }
+      ]
+    },
+    {
+      "id": "commit-split-logical-groups",
+      "prompt": "Fix the typo 'recieve' in README.md and add a multiply(a, b) function to src/math.js with a test in test/math.test.js. Then commit the work properly.",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project with a README typo and a math module that only has add(). The run makes two unrelated changes (a docs fix and a new function with its test), which should become two commits with Conventional Commit messages and explicit file lists.",
+        "files": {
+          "package.json": "{\n  \"name\": \"mathlib\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "README.md": "# mathlib\n\nSmall math helpers. You will recieve a number back from every function.\n",
+          "src/math.js": "export function add(a, b) {\n  return a + b\n}\n",
+          "test/math.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { add } from '../src/math.js'\n\ntest('add', () => {\n  assert.equal(add(2, 3), 5)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "commit", "description": "Loaded the commit skill" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"message\"\\s*:\\s*\"docs(\\([^)]*\\))?:", "description": "A docs commit for the README typo" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"message\"\\s*:\\s*\"feat(\\([^)]*\\))?:", "description": "A separate feat commit for multiply" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"files\"\\s*:\\s*\\[", "description": "Commits name their files explicitly" },
+        { "check": "file_matches", "path": "README.md", "pattern": "receive", "description": "The typo was fixed" }
+      ]
+    },
+    {
+      "id": "commit-keeps-env-out",
+      "prompt": "Create src/config.js that exports apiKey read from process.env.API_KEY, put API_KEY=sk_test_51Habc123 in a .env file so it works locally, then commit it.",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project whose .gitignore only ignores node_modules. The run creates a .env file with a key; the commit must leave .env out and add it to .gitignore.",
+        "files": {
+          "package.json": "{\n  \"name\": \"configured\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          ".gitignore": "node_modules/\n",
+          "src/index.js": "console.log('ready')\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"commit\"", "description": "Made a commit" },
+        { "check": "tool_not_called", "tool": "git", "args_pattern": "\"files\"\\s*:\\s*\\[[^\\]]*\"\\.env\"", "description": ".env is never passed to git commit" },
+        { "check": "file_matches", "path": ".gitignore", "pattern": "^\\.env", "flags": "m", "description": ".env was added to .gitignore" },
+        { "check": "file_exists", "path": "src/config.js", "description": "The config module exists" }
+      ]
+    }
+  ]
+}

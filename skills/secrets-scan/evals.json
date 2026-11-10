@@ -1,0 +1,66 @@
+{
+  "skill": "secrets-scan",
+  "evals": [
+    {
+      "id": "secrets-scan-committed-env",
+      "prompt": "/secrets-scan",
+      "mode": "review",
+      "fixture": {
+        "description": "Git repo with a committed .env holding a database URL with a password and a session secret; .gitignore does not ignore .env. All values are fake. The answer must mask them and recommend rotation before removal.",
+        "files": {
+          ".env": "DATABASE_URL=postgres://app_admin:Tr0ub4dor-77-x@db.internal.example:5432/app\nSESSION_SECRET=9f8e7d6c5b4a39281706f5e4d3c2b1a0\n",
+          ".gitignore": "node_modules/\ndist/\n",
+          "src/db.js": "import pg from 'pg'\nexport const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "\\.env", "description": "Reports the committed .env file" },
+        { "check": "answer_not_matches", "pattern": "Tr0ub4dor-77-x", "description": "Does not print the database password" },
+        { "check": "answer_not_matches", "pattern": "9f8e7d6c5b4a3928", "description": "Does not print the session secret" },
+        { "check": "answer_matches", "pattern": "rotat|revok", "flags": "i", "description": "Recommends rotation" },
+        { "check": "answer_matches", "pattern": "gitignore", "flags": "i", "description": "Notes that .gitignore must ignore .env" }
+      ]
+    },
+    {
+      "id": "secrets-scan-natural-going-public",
+      "prompt": "I'm about to make this repo public. Did we ever commit any passwords or keys?",
+      "mode": "review",
+      "fixture": {
+        "description": "Git repo with a hardcoded SMTP password in source and an SSH private key file under deploy/. Values are fake. The run must check git, mask values and must not change files.",
+        "files": {
+          "src/mailer.js": "const nodemailer = require('nodemailer')\nconst SMTP_PASS = 'h7Gq2LmZp9Xw4Rt8'\nmodule.exports = nodemailer.createTransport({ host: 'smtp.example.com', auth: { user: 'noreply', pass: SMTP_PASS } })\n",
+          "deploy/id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAAfakefakefakefakefakefakefakefakefakefake\nZmFrZWZha2VmYWtlZmFrZWZha2VmYWtlZmFrZWZha2VmYWtlZmFrZQ==\n-----END OPENSSH PRIVATE KEY-----\n",
+          "README.md": "# mailer\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "secrets-scan", "description": "Loaded the secrets-scan skill" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "log|show", "description": "Checked git history" },
+        { "check": "answer_matches", "pattern": "private key|id_ed25519", "flags": "i", "description": "Reports the private key file" },
+        { "check": "answer_not_matches", "pattern": "h7Gq2LmZp9Xw4Rt8", "description": "Masks the SMTP password" },
+        { "check": "file_unchanged", "path": "src/mailer.js", "description": "Read-only scan" }
+      ]
+    },
+    {
+      "id": "secrets-scan-false-positives",
+      "prompt": "/secrets-scan docs and config",
+      "mode": "review",
+      "fixture": {
+        "description": "README uses the official AWS documentation example key (not a secret), .env.example holds placeholders, and config/prod.json has a real-looking Redis URL with a password. Only the Redis URL is a finding.",
+        "files": {
+          "README.md": "# Setup\n\nExample AWS config:\n\n    aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n",
+          ".env.example": "STRIPE_SECRET_KEY=sk_test_your_key_here\nDATABASE_URL=postgres://user:password@localhost:5432/app\n",
+          "config/prod.json": "{\n  \"redisUrl\": \"redis://default:Qz81xLmN04vbT@cache.example.net:6379\",\n  \"logLevel\": \"info\"\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "redis", "flags": "i", "description": "Reports the Redis URL with a password" },
+        { "check": "answer_not_matches", "pattern": "Qz81xLmN04vbT", "description": "Masks the Redis password" },
+        { "check": "answer_matches", "pattern": "AKIA[^\\n]{0,160}(example|placeholder|false positive|not a (real )?secret|documentation)|(example|placeholder|false positive|not a (real )?secret|documentation)[^\\n]{0,160}AKIA", "flags": "i", "description": "Classifies the AWS documentation key as an example, not a leak" },
+        { "check": "file_unchanged", "path": "config/prod.json", "description": "Read-only scan" }
+      ]
+    }
+  ]
+}

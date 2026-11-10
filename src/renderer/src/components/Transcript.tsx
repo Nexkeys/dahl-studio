@@ -5,6 +5,7 @@ import { api, useStore } from '../store'
 import { Markdown } from './Markdown'
 import { ApprovalCard } from './ApprovalCard'
 import { AgentChips } from './AgentsView'
+import { InstructionsChip } from './InstructionsChip'
 import iconUrl from '../assets/icon.png'
 
 /** How fast the model answered, so a slow provider is visible instead of looking like the app is slow. */
@@ -115,6 +116,11 @@ export const Transcript = memo(function Transcript({ root, items, running }: { r
     group = []
   }
   for (const it of items) {
+    // the turn's instruction files; later "more instructions" notes stay inside the activity group
+    if (it.instructions?.length && !group.length) {
+      out.push(<InstructionsChip key={it.id} root={root} files={it.instructions} />)
+      continue
+    }
     if (it.kind === 'tool' || it.kind === 'reasoning' || it.kind === 'status' || it.kind === 'approval') {
       if (it.kind === 'approval') {
         // an answered approval shows nothing; skipping it keeps the surrounding tool steps in one group

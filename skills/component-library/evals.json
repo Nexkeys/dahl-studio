@@ -1,0 +1,67 @@
+{
+  "skill": "component-library",
+  "evals": [
+    {
+      "id": "component-library-button-input",
+      "prompt": "/component-library add Button and Input components with primary and secondary variants and sm and md sizes",
+      "mode": "build",
+      "fixture": {
+        "description": "React + TypeScript project using clsx and CSS variables in src/styles/tokens.css, with an existing Card component and a barrel file src/components/index.ts. New components must follow the Card conventions and be exported from the barrel.",
+        "files": {
+          "package.json": "{\n  \"name\": \"ui\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\", \"test\": \"vitest run\", \"typecheck\": \"tsc --noEmit\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\", \"clsx\": \"^2.1.1\" },\n  \"devDependencies\": { \"typescript\": \"^5.6.0\", \"vitest\": \"^2.1.0\", \"@testing-library/react\": \"^16.0.0\", \"jsdom\": \"^25.0.0\" }\n}\n",
+          "src/styles/tokens.css": ":root {\n  --color-primary: #4f46e5;\n  --color-secondary: #e0e7ff;\n  --color-text: #111827;\n  --radius: 6px;\n  --space-2: 8px;\n  --space-3: 12px;\n}\n",
+          "src/components/Card.tsx": "import clsx from 'clsx'\nimport type { ComponentPropsWithoutRef } from 'react'\n\nexport type CardProps = ComponentPropsWithoutRef<'div'> & { padded?: boolean }\n\nexport function Card({ padded = true, className, ...rest }: CardProps) {\n  return <div className={clsx('card', padded && 'card--padded', className)} {...rest} />\n}\n",
+          "src/components/index.ts": "export { Card } from './Card'\nexport type { CardProps } from './Card'\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "Card|tokens|index\\.ts", "description": "Inventoried existing components or tokens first" },
+        { "check": "file_matches", "path": "src/components/index.ts", "pattern": "Button", "description": "Button is exported from the barrel" },
+        { "check": "file_matches", "path": "src/components/index.ts", "pattern": "Input", "description": "Input is exported from the barrel" },
+        { "check": "file_matches", "path": "src/components/index.ts", "pattern": "Card", "description": "Existing exports kept" },
+        { "check": "command_ran", "pattern": "vitest|tsc|npm (run )?(test|typecheck)", "description": "Ran tests or the type check" }
+      ]
+    },
+    {
+      "id": "component-library-modal-natural",
+      "prompt": "We keep copy-pasting the same modal markup on the orders and users pages. Can you turn it into a reusable Modal component in src/components/Modal.tsx?",
+      "mode": "build",
+      "fixture": {
+        "description": "Two pages with duplicated overlay/modal markup and no keyboard handling. The new Modal must be accessible by default (dialog semantics, Escape to close) and exported from the barrel.",
+        "files": {
+          "package.json": "{\n  \"name\": \"admin\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"vite\", \"test\": \"vitest run\" },\n  \"dependencies\": { \"react\": \"^19.0.0\", \"react-dom\": \"^19.0.0\" }\n}\n",
+          "src/pages/Orders.tsx": "import { useState } from 'react'\n\nexport default function Orders() {\n  const [open, setOpen] = useState(false)\n  return (\n    <div>\n      <button onClick={() => setOpen(true)}>Refund</button>\n      {open && (\n        <div className=\"overlay\" onClick={() => setOpen(false)}>\n          <div className=\"modal\" onClick={(e) => e.stopPropagation()}>\n            <h2>Refund order</h2>\n            <button onClick={() => setOpen(false)}>Close</button>\n          </div>\n        </div>\n      )}\n    </div>\n  )\n}\n",
+          "src/pages/Users.tsx": "import { useState } from 'react'\n\nexport default function Users() {\n  const [open, setOpen] = useState(false)\n  return (\n    <div>\n      <button onClick={() => setOpen(true)}>Invite</button>\n      {open && (\n        <div className=\"overlay\" onClick={() => setOpen(false)}>\n          <div className=\"modal\" onClick={(e) => e.stopPropagation()}>\n            <h2>Invite user</h2>\n            <button onClick={() => setOpen(false)}>Close</button>\n          </div>\n        </div>\n      )}\n    </div>\n  )\n}\n",
+          "src/components/index.ts": "export {}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "component-library", "description": "The model loaded the component-library skill" },
+        { "check": "file_exists", "path": "src/components/Modal.tsx", "description": "Creates the Modal component" },
+        { "check": "file_matches", "path": "src/components/Modal.tsx", "pattern": "role=[\"']dialog|<dialog", "description": "Uses dialog semantics" },
+        { "check": "file_matches", "path": "src/components/Modal.tsx", "pattern": "Escape|showModal", "description": "Closes on Escape (native dialog or a key handler)" },
+        { "check": "file_matches", "path": "src/components/index.ts", "pattern": "Modal", "description": "Modal is exported from the barrel" }
+      ]
+    },
+    {
+      "id": "component-library-plan-tabs",
+      "prompt": "/component-library plan a Tabs component for our set",
+      "mode": "plan",
+      "fixture": {
+        "description": "React component set with a barrel file. In Plan mode the model proposes the Tabs API with keyboard and ARIA behaviour and asks for Build mode, without writing files.",
+        "files": {
+          "package.json": "{\n  \"name\": \"ui\",\n  \"private\": true,\n  \"dependencies\": { \"react\": \"^19.0.0\" }\n}\n",
+          "src/components/index.ts": "export { Button } from './Button'\n",
+          "src/components/Button.tsx": "export function Button(props: React.ComponentPropsWithoutRef<'button'>) {\n  return <button type=\"button\" {...props} />\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_unchanged", "path": "src/components/index.ts", "description": "No edits in Plan mode" },
+        { "check": "file_absent", "path": "src/components/Tabs.tsx", "description": "No component file created in Plan mode" },
+        { "check": "answer_matches", "pattern": "arrow", "flags": "i", "description": "Specifies arrow-key navigation" },
+        { "check": "answer_matches", "pattern": "tablist|aria-selected|roving", "flags": "i", "description": "Specifies the ARIA tabs pattern" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "skill": "review-pr",
+  "evals": [
+    {
+      "id": "reviewpr-github-unreachable",
+      "prompt": "/review-pr 42",
+      "mode": "review",
+      "fixture": {
+        "description": "Committed Node project with no GitHub remote, so view_pr cannot reach the pull request. The skill must try view_pr for #42, then say plainly it could not read the PR and what it needs, instead of inventing a review.",
+        "files": {
+          "package.json": "{\n  \"name\": \"api\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/index.js": "export const health = () => ({ ok: true })\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "github", "args_pattern": "view_pr[\\s\\S]*\\b42\\b|\\b42\\b[\\s\\S]*view_pr", "description": "Tried to read PR #42 with view_pr" },
+        { "check": "answer_matches", "pattern": "origin|remote|token|could not|couldn't|cannot|can't|unable|not (reachable|available)", "flags": "i", "description": "States that the PR could not be read and why" },
+        { "check": "tool_not_called", "tool": "github", "args_pattern": "\"action\"\\s*:\\s*\"comment\"", "description": "Did not post anything" },
+        { "check": "file_unchanged", "path": "src/index.js", "description": "Read-only: no files changed" }
+      ]
+    },
+    {
+      "id": "reviewpr-sql-injection",
+      "prompt": "Please review pull request #5. Its branch is already checked out here: it adds src/users.js with a user search endpoint and a delete endpoint.",
+      "mode": "review",
+      "fixture": {
+        "description": "Express app where the PR's src/users.js builds a SQL query by string concatenation from req.query.name and mounts a delete endpoint without the requireAuth middleware that other routes use. The review should flag the injection (and ideally the missing auth) with file:line, without editing files.",
+        "files": {
+          "package.json": "{\n  \"name\": \"people-api\",\n  \"type\": \"module\",\n  \"dependencies\": { \"express\": \"^4.19.2\", \"pg\": \"^8.12.0\" }\n}\n",
+          "src/db.js": "import pg from 'pg'\n\nexport const db = new pg.Pool({ connectionString: process.env.DATABASE_URL })\n",
+          "src/auth.js": "export function requireAuth(req, res, next) {\n  if (!req.headers.authorization) return res.status(401).end()\n  next()\n}\n",
+          "src/users.js": "import express from 'express'\nimport { db } from './db.js'\n\nexport const router = express.Router()\n\nrouter.get('/users/search', async (req, res) => {\n  const rows = await db.query(\"SELECT id, name FROM users WHERE name = '\" + req.query.name + \"'\")\n  res.json(rows.rows)\n})\n\nrouter.delete('/users/:id', async (req, res) => {\n  await db.query('DELETE FROM users WHERE id = $1', [req.params.id])\n  res.status(204).end()\n})\n",
+          "src/app.js": "import express from 'express'\nimport { requireAuth } from './auth.js'\nimport { router as users } from './users.js'\n\nconst app = express()\napp.get('/me', requireAuth, (req, res) => res.json({ ok: true }))\napp.use(users)\n\nexport default app\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "review-pr", "description": "Loaded the review-pr skill" },
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "users", "description": "Read the changed file" },
+        { "check": "answer_matches", "pattern": "inject|parameteri[sz]", "flags": "i", "description": "Flags the SQL injection" },
+        { "check": "answer_matches", "pattern": "users\\.js:\\d+", "description": "Cites file:line" },
+        { "check": "file_unchanged", "path": "src/users.js", "description": "Read-only: no edits" }
+      ]
+    },
+    {
+      "id": "reviewpr-breaking-signature",
+      "prompt": "/review-pr 9 (the branch is checked out locally; it changes formatDate in src/dates.js to take an options object)",
+      "mode": "review",
+      "fixture": {
+        "description": "formatDate in src/dates.js now takes one options object, but src/invoice.js still calls formatDate(date, 'en-GB'). Only the new signature is tested. The review should search the callers and flag the breaking change in invoice.js.",
+        "files": {
+          "package.json": "{\n  \"name\": \"billing\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/dates.js": "export function formatDate({ date, locale = 'en-US' }) {\n  return new Intl.DateTimeFormat(locale).format(date)\n}\n",
+          "src/invoice.js": "import { formatDate } from './dates.js'\n\nexport function invoiceHeader(inv) {\n  return `Invoice ${inv.id} (${formatDate(inv.date, 'en-GB')})`\n}\n",
+          "test/dates.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { formatDate } from '../src/dates.js'\n\ntest('formats in en-US by default', () => {\n  assert.equal(formatDate({ date: new Date(Date.UTC(2026, 0, 2, 12)) }), '1/2/2026')\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "search", "args_pattern": "formatDate", "description": "Searched for callers of the changed function" },
+        { "check": "answer_matches", "pattern": "invoice", "flags": "i", "description": "Points at the broken caller in invoice.js" },
+        { "check": "answer_matches", "pattern": "break|caller|signature", "flags": "i", "description": "Names it a breaking signature change" },
+        { "check": "file_unchanged", "path": "src/dates.js", "description": "Read-only: no edits" },
+        { "check": "tool_not_called", "tool": "github", "args_pattern": "\"action\"\\s*:\\s*\"comment\"", "description": "Did not post a comment unasked" }
+      ]
+    }
+  ]
+}

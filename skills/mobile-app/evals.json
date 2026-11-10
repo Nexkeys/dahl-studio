@@ -1,0 +1,59 @@
+{
+  "skill": "mobile-app",
+  "evals": [
+    {
+      "id": "mobile-ios-on-windows",
+      "prompt": "I want an iPhone app for tracking my daily habits. I'm on Windows. Can you build it and run it on the iOS simulator?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Empty folder. The plan must say plainly that iOS cannot be built or simulated on Windows and offer Expo Go on a physical iPhone and EAS cloud builds, plus local testing through the web preview or Android emulator.",
+        "files": {}
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "mobile-app", "description": "Loaded the mobile-app skill" },
+        { "check": "answer_matches", "pattern": "EAS", "description": "Mentions EAS cloud builds for iOS" },
+        { "check": "answer_matches", "pattern": "Expo Go", "description": "Mentions Expo Go on a physical iPhone" },
+        { "check": "answer_matches", "pattern": "(cannot|can't|can not|not possible|impossible|no)[^.]{0,80}(Windows|simulator)|(Windows|simulator)[^.]{0,80}(cannot|can't|can not|not possible|impossible|not available|isn't available)", "flags": "i", "description": "States plainly that the iOS simulator is not available on Windows" }
+      ]
+    },
+    {
+      "id": "mobile-add-counter",
+      "prompt": "/mobile-app add a counter with + and - buttons to the home screen",
+      "mode": "build",
+      "fixture": {
+        "description": "Expo SDK 52 TypeScript app with a single App.tsx screen (node_modules not installed). The change must use React Native components and state, not HTML elements, and the run should attempt verification (tsc, expo-doctor, export or tests) and report what was and was not verified.",
+        "files": {
+          "package.json": "{\n  \"name\": \"habits\",\n  \"version\": \"1.0.0\",\n  \"main\": \"expo/AppEntry.js\",\n  \"scripts\": { \"start\": \"expo start\", \"android\": \"expo start --android\", \"web\": \"expo start --web\" },\n  \"dependencies\": { \"expo\": \"~52.0.0\", \"expo-status-bar\": \"~2.0.0\", \"react\": \"18.3.1\", \"react-native\": \"0.76.3\" },\n  \"devDependencies\": { \"typescript\": \"~5.3.3\", \"@types/react\": \"~18.3.12\" }\n}\n",
+          "app.json": "{\n  \"expo\": { \"name\": \"habits\", \"slug\": \"habits\", \"version\": \"1.0.0\" }\n}\n",
+          "tsconfig.json": "{\n  \"extends\": \"expo/tsconfig.base\",\n  \"compilerOptions\": { \"strict\": true }\n}\n",
+          "App.tsx": "import { StatusBar } from 'expo-status-bar'\nimport { StyleSheet, Text, View } from 'react-native'\n\nexport default function App() {\n  return (\n    <View style={styles.container}>\n      <Text>Habits</Text>\n      <StatusBar style=\"auto\" />\n    </View>\n  )\n}\n\nconst styles = StyleSheet.create({\n  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "App\\.tsx", "description": "Read the screen before editing" },
+        { "check": "file_matches", "path": "App.tsx", "pattern": "useState", "description": "Keeps the count in state" },
+        { "check": "file_matches", "path": "App.tsx", "pattern": "Pressable|TouchableOpacity|<Button", "description": "Uses React Native touchables for the buttons" },
+        { "check": "file_not_matches", "path": "App.tsx", "pattern": "<(div|button|span)\\b|onClick", "description": "No HTML elements or onClick in React Native code" },
+        { "check": "command_ran", "pattern": "tsc|expo-doctor|expo export|jest|npm (run )?test|npm (ci|install)", "description": "Attempted to install or verify" }
+      ]
+    },
+    {
+      "id": "mobile-android-emulator",
+      "prompt": "/mobile-app run it on the Android emulator",
+      "mode": "build",
+      "fixture": {
+        "description": "Same Expo app. The skill should check for the Android SDK and an AVD, start the emulator and Expo in the background (not a foreground expo start that never exits), or explain what to install, and never reach for iOS tooling.",
+        "files": {
+          "package.json": "{\n  \"name\": \"habits\",\n  \"version\": \"1.0.0\",\n  \"main\": \"expo/AppEntry.js\",\n  \"scripts\": { \"start\": \"expo start\", \"android\": \"expo start --android\" },\n  \"dependencies\": { \"expo\": \"~52.0.0\", \"react\": \"18.3.1\", \"react-native\": \"0.76.3\" }\n}\n",
+          "app.json": "{\n  \"expo\": { \"name\": \"habits\", \"slug\": \"habits\", \"version\": \"1.0.0\" }\n}\n",
+          "App.tsx": "import { Text, View } from 'react-native'\n\nexport default function App() {\n  return (\n    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>\n      <Text>Habits</Text>\n    </View>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "emulator|AVD|Android SDK|Android Studio", "flags": "i", "description": "Reports on the emulator, AVD or SDK" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "run-ios|run:ios|xcodebuild|simctl", "description": "No iOS tooling on Windows" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "\"command\"\\s*:\\s*\"npx (--yes )?expo start", "description": "Did not run the never-ending expo start in the foreground" }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import type { Attachment, KeySlot, MemoryEntry, ReasoningProfile, Settings, StartRunRequest, StorageReport } from '@shared/types'
-import { APP_DIR, LOG_FILE, health, keyInfos, log, mcp, models, procs, reasoning, runner, send, settings, usage, vault, win } from './services'
+import { APP_DIR, LOG_FILE, health, keyInfos, log, mcp, models, procs, reasoning, runner, send, settings, skills, usage, vault, win } from './services'
+import { loadInstructions } from './instructions'
 import { createEntry, IGNORED_DIRS, listTree, readText, resolveInside, searchText, toRel, writeText } from './fs/workspace'
 import { ProjectStore } from './store/projectStore'
 import { gitBranch, gitCheckRemote, gitCommit, gitInitOrRemote, gitPush, gitShowHead, gitStatus, pushPlan, setGitTokenSource, testGithubToken } from './git'
@@ -230,6 +231,10 @@ export function registerIpc(): void {
     if (runner.activeRunId(project) === id) throw new Error('Task is running.')
     return new ProjectStore(await assertProject(project)).deleteRun(id)
   })
+
+  // ---- skills and instruction files ----
+  handle('skills:list', async (project: string | null) => skills.list(project ? await assertProject(project) : null))
+  handle('instructions:list', async (project: string) => (await loadInstructions(await assertProject(project))).files)
 
   // ---- memory ----
   handle('memory:list', async (project: string) => new ProjectStore(await assertProject(project)).listMemory())

@@ -1,0 +1,64 @@
+{
+  "skill": "tests",
+  "evals": [
+    {
+      "id": "tests-node-money",
+      "prompt": "/tests src/money.js",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project using node:test with no tests yet. src/money.js has formatCents and parseAmount (correct code, with an error path for invalid input). The model should use node:test, not install jest or vitest, and cover boundaries and the error path.",
+        "files": {
+          "package.json": "{\n  \"name\": \"money\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/money.js": "export function formatCents(cents) {\n  const sign = cents < 0 ? '-' : ''\n  const abs = Math.abs(cents)\n  return `${sign}$${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`\n}\n\nexport function parseAmount(text) {\n  const m = /^\\s*\\$?(\\d+)(?:\\.(\\d{1,2}))?\\s*$/.exec(text)\n  if (!m) throw new Error(`Invalid amount: ${text}`)\n  return Number(m[1]) * 100 + Number((m[2] || '0').padEnd(2, '0'))\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Ran the tests and they passed" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "parseAmount", "description": "Wrote tests for parseAmount" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "throws|rejects|Invalid", "description": "Covers the invalid input error path" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "(npm|pnpm|yarn) (i|install|add)[^\"]*(jest|vitest|mocha)", "description": "Did not add a second test framework" },
+        { "check": "file_unchanged", "path": "src/money.js", "description": "Source code was not changed" }
+      ]
+    },
+    {
+      "id": "tests-python-terms",
+      "prompt": "Please add some unit tests for the invoice due date logic in billing/terms.py.",
+      "mode": "build",
+      "fixture": {
+        "description": "Python package with pytest. billing/terms.py computes due dates for NET30, NET60 and EOM terms and raises ValueError for unknown terms. tests/test_tax.py shows the existing style. The code is correct.",
+        "files": {
+          "billing/__init__.py": "",
+          "billing/terms.py": "import calendar\nfrom datetime import date, timedelta\n\n\ndef due_date(issued: date, terms: str) -> date:\n    if terms == \"NET30\":\n        return issued + timedelta(days=30)\n    if terms == \"NET60\":\n        return issued + timedelta(days=60)\n    if terms == \"EOM\":\n        last = calendar.monthrange(issued.year, issued.month)[1]\n        return issued.replace(day=last)\n    raise ValueError(f\"unknown terms: {terms}\")\n",
+          "billing/tax.py": "def with_vat(amount, rate=0.2):\n    return round(amount * (1 + rate), 2)\n",
+          "tests/test_tax.py": "from billing.tax import with_vat\n\n\ndef test_default_rate():\n    assert with_vat(100) == 120\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "tests", "description": "The model loaded the tests skill" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Ran pytest and it passed" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "pytest\\.raises", "description": "Covers the unknown terms error path" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "EOM", "description": "Covers the end of month rule" },
+        { "check": "file_unchanged", "path": "billing/terms.py", "description": "Source code was not changed" }
+      ]
+    },
+    {
+      "id": "tests-plan-mode-case-list",
+      "prompt": "/tests src/validators.js",
+      "mode": "plan",
+      "fixture": {
+        "description": "Node project with an isEmail and isStrongPassword validator and no tests. In Plan mode the model must not write files; it should list the cases it would write and ask for Build mode.",
+        "files": {
+          "package.json": "{\n  \"name\": \"forms\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/validators.js": "export const isEmail = (s) => typeof s === 'string' && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s)\n\nexport function isStrongPassword(p) {\n  if (typeof p !== 'string' || p.length < 12) return false\n  return /[A-Z]/.test(p) && /[a-z]/.test(p) && /\\d/.test(p)\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "validators", "description": "Read the target file" },
+        { "check": "tool_not_called", "tool": "write_file", "description": "No files written in Plan mode" },
+        { "check": "answer_matches", "pattern": "12|length|empty|non-string|not a string", "flags": "i", "description": "Lists boundary cases such as the 12 character minimum" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

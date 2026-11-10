@@ -1,0 +1,17 @@
+/* Skills in the / menu and the "Instructions loaded" chip (components/InstructionsChip.tsx, Composer.tsx) */
+.popover.wide:has(.skill-item) { width: min(520px, calc(100vw - 40px)); max-height: 360px; }
+.popover-item.skill-item { min-width: 0; }
+.skill-row { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.popover-item.skill-item .pill { flex: none; font-size: 10px; }
+
+.ins-chip-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 2px 0 6px; }
+.ins-chip { cursor: pointer; max-width: 100%; color: var(--muted); }
+.ins-chip:hover { color: var(--text); border-color: var(--accent); }
+.ins-chip .chev { transition: transform .15s; }
+.ins-chip .chev.open { transform: rotate(90deg); }
+.ins-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
+.ins-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; text-align: left; font-size: 11.5px; color: var(--text); cursor: pointer; }
+.ins-row:hover { background: var(--accent-soft); }
+.ins-row.listed { opacity: .75; }
+.ins-row .mono { font-size: 11.5px; }
+.ins-project { padding: 0 12px; }

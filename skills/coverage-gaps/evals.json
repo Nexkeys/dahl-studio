@@ -1,0 +1,69 @@
+{
+  "skill": "coverage-gaps",
+  "evals": [
+    {
+      "id": "coverage-gaps-node-auth",
+      "prompt": "/coverage-gaps",
+      "mode": "build",
+      "fixture": {
+        "description": "Node project with node:test. src/auth.js has missing, malformed and expired token branches but the only test covers a valid token; src/strings.js is trivial and fully tested. The model should measure coverage (node --test --experimental-test-coverage or c8), add tests for the auth error branches and report before and after numbers.",
+        "files": {
+          "package.json": "{\n  \"name\": \"svc\",\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=20\" },\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/auth.js": "export function checkToken(token, now = Date.now()) {\n  if (!token) return { ok: false, reason: 'missing' }\n  const [user, exp] = token.split('.')\n  if (!user || !exp) return { ok: false, reason: 'malformed' }\n  if (Number(exp) < now) return { ok: false, reason: 'expired' }\n  return { ok: true, user }\n}\n",
+          "src/strings.js": "export const shout = (s) => s.toUpperCase() + '!'\n",
+          "test/auth.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { checkToken } from '../src/auth.js'\n\ntest('accepts a valid token', () => {\n  assert.deepEqual(checkToken('ann.2000', 1000), { ok: true, user: 'ann' })\n})\n",
+          "test/strings.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { shout } from '../src/strings.js'\n\ntest('shouts', () => assert.equal(shout('hi'), 'HI!'))\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "experimental-test-coverage|c8|--coverage", "description": "Measured coverage" },
+        { "check": "file_matches", "path": "test/auth.test.js", "pattern": "expired|malformed|missing", "description": "Added tests for the auth error branches" },
+        { "check": "file_unchanged", "path": "src/auth.js", "description": "Source was not changed" },
+        { "check": "answer_matches", "pattern": "\\d+(\\.\\d+)?\\s*%", "description": "Reports coverage numbers" },
+        { "check": "answer_matches", "pattern": "before[\\s\\S]*after", "flags": "i", "description": "Shows the before and after change" }
+      ]
+    },
+    {
+      "id": "coverage-gaps-python-refunds",
+      "prompt": "Which parts of our billing code aren't covered by tests? Please add tests for the riskiest gaps.",
+      "mode": "build",
+      "fixture": {
+        "description": "Python package where billing/refunds.py has several branches (nothing to refund, refund window closed, half refund after 14 days) and the tests only cover the defective case. billing/format.py is trivial and tested. The refund branches are the risky gap.",
+        "files": {
+          "billing/__init__.py": "",
+          "billing/refunds.py": "class RefundError(Exception):\n    pass\n\n\ndef refund_amount(paid_cents, days_since_purchase, reason):\n    if paid_cents <= 0:\n        raise RefundError(\"nothing to refund\")\n    if reason == \"defective\":\n        return paid_cents\n    if days_since_purchase > 30:\n        raise RefundError(\"refund window closed\")\n    if days_since_purchase > 14:\n        return paid_cents // 2\n    return paid_cents\n",
+          "billing/format.py": "def cents_to_str(cents):\n    return f\"{cents / 100:.2f}\"\n",
+          "tests/test_refunds.py": "from billing.refunds import refund_amount\n\n\ndef test_defective_full_refund():\n    assert refund_amount(1000, 60, \"defective\") == 1000\n",
+          "tests/test_format.py": "from billing.format import cents_to_str\n\n\ndef test_format():\n    assert cents_to_str(1234) == \"12.34\"\n",
+          "pyproject.toml": "[tool.pytest.ini_options]\npythonpath = [\".\"]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "coverage-gaps", "description": "The model loaded the coverage-gaps skill" },
+        { "check": "command_ran", "pattern": "--cov|coverage (run|report)", "description": "Tried to measure coverage" },
+        { "check": "command_ran", "pattern": "pytest", "exit_code": 0, "description": "Tests pass" },
+        { "check": "file_matches", "path": "tests/test_refunds.py", "pattern": "RefundError|pytest\\.raises|// 2|500", "description": "Added tests for the refund branches" },
+        { "check": "file_unchanged", "path": "billing/refunds.py", "description": "Source was not changed" }
+      ]
+    },
+    {
+      "id": "coverage-gaps-plan-payments",
+      "prompt": "/coverage-gaps src/",
+      "mode": "plan",
+      "fixture": {
+        "description": "src/payments.js has a declined-card branch and a catch block for network errors that no test reaches; the existing test only covers a successful charge. In Plan mode nothing may change; the model should list these gaps by risk and ask for Build mode.",
+        "files": {
+          "package.json": "{\n  \"name\": \"pay\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/payments.js": "export async function charge(client, cents) {\n  try {\n    const res = await client.charge({ amount: cents })\n    if (res.status === 'declined') return { ok: false, error: 'card_declined' }\n    return { ok: true, id: res.id }\n  } catch (err) {\n    return { ok: false, error: 'network', detail: String(err) }\n  }\n}\n",
+          "test/payments.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { charge } from '../src/payments.js'\n\ntest('charges a card', async () => {\n  const client = { charge: async () => ({ status: 'ok', id: 'ch_1' }) }\n  assert.deepEqual(await charge(client, 500), { ok: true, id: 'ch_1' })\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "payments", "description": "Read the source and tests" },
+        { "check": "file_unchanged", "path": "test/payments.test.js", "description": "No edits in Plan mode" },
+        { "check": "answer_matches", "pattern": "declin|catch|network", "flags": "i", "description": "Names the untested error paths" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}

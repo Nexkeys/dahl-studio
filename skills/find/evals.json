@@ -1,0 +1,63 @@
+{
+  "skill": "find",
+  "evals": [
+    {
+      "id": "find-export-button",
+      "prompt": "/find where the 'Export to CSV' button is handled",
+      "mode": "plan",
+      "fixture": {
+        "description": "React app: Toolbar.tsx renders the button and calls an onExport prop, Report.tsx passes a handler that calls toCsv from lib/export.ts and triggers a download.",
+        "files": {
+          "src/components/Toolbar.tsx": "type Props = { onExport: () => void }\n\nexport function Toolbar({ onExport }: Props) {\n  return (\n    <div className=\"toolbar\">\n      <button onClick={onExport}>Export to CSV</button>\n    </div>\n  )\n}\n",
+          "src/pages/Report.tsx": "import { Toolbar } from '../components/Toolbar'\nimport { toCsv } from '../lib/export'\n\nexport function Report({ rows }: { rows: Record<string, string>[] }) {\n  const handleExport = () => {\n    const blob = new Blob([toCsv(rows)], { type: 'text/csv' })\n    window.open(URL.createObjectURL(blob))\n  }\n  return <Toolbar onExport={handleExport} />\n}\n",
+          "src/lib/export.ts": "export function toCsv(rows: Record<string, string>[]): string {\n  const cols = Object.keys(rows[0] ?? {})\n  return [cols.join(','), ...rows.map((r) => cols.map((c) => r[c]).join(','))].join('\\n')\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "search", "description": "Searched instead of guessing" },
+        { "check": "answer_matches", "pattern": "Toolbar\\.tsx", "description": "Names the component with the button" },
+        { "check": "answer_matches", "pattern": "Report\\.tsx", "description": "Names where the handler is wired" },
+        { "check": "answer_matches", "pattern": "export\\.ts|toCsv", "description": "Names the CSV builder" },
+        { "check": "file_unchanged", "path": "src/pages/Report.tsx", "description": "Read-only" }
+      ]
+    },
+    {
+      "id": "find-natural-reset-email",
+      "prompt": "Where do we send the password reset email?",
+      "mode": "plan",
+      "fixture": {
+        "description": "Express app: routes/auth.js has POST /forgot-password which calls sendResetEmail in services/mailer.js, which uses nodemailer.",
+        "files": {
+          "routes/auth.js": "const express = require('express')\nconst crypto = require('crypto')\nconst { sendResetEmail } = require('../services/mailer')\nconst router = express.Router()\n\nrouter.post('/forgot-password', async (req, res) => {\n  const token = crypto.randomBytes(32).toString('hex')\n  await sendResetEmail(req.body.email, token)\n  res.json({ ok: true })\n})\n\nmodule.exports = router\n",
+          "services/mailer.js": "const nodemailer = require('nodemailer')\nconst transport = nodemailer.createTransport({ host: process.env.SMTP_HOST })\n\nasync function sendResetEmail(to, token) {\n  await transport.sendMail({ to, subject: 'Reset your password', text: `https://app.local/reset?token=${token}` })\n}\n\nmodule.exports = { sendResetEmail }\n",
+          "app.js": "const express = require('express')\nconst app = express()\napp.use(express.json())\napp.use('/auth', require('./routes/auth'))\napp.listen(3000)\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "find", "description": "Loaded the find skill" },
+        { "check": "answer_matches", "pattern": "mailer\\.js", "description": "Names the mailer service" },
+        { "check": "answer_matches", "pattern": "auth\\.js", "description": "Names the route that triggers it" },
+        { "check": "answer_matches", "pattern": "\\.js:\\d+", "description": "Gives file:line locations" }
+      ]
+    },
+    {
+      "id": "find-i18n-indirection",
+      "prompt": "/find where the 'Your trial has ended' message is shown",
+      "mode": "plan",
+      "fixture": {
+        "description": "The visible text lives only in locales/en.json under the key trial.ended; Banner.jsx renders t('trial.ended') when the plan is expired. The skill must follow the key from the locale file to the component.",
+        "files": {
+          "locales/en.json": "{\n  \"trial.ended\": \"Your trial has ended\",\n  \"trial.daysLeft\": \"{{count}} days left in your trial\"\n}\n",
+          "src/Banner.jsx": "import { useTranslation } from 'react-i18next'\n\nexport function Banner({ plan }) {\n  const { t } = useTranslation()\n  if (plan.status === 'expired') return <div className=\"banner\">{t('trial.ended')}</div>\n  return null\n}\n",
+          "src/App.jsx": "import { Banner } from './Banner'\n\nexport function App({ user }) {\n  return <Banner plan={user.plan} />\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "Banner\\.jsx", "description": "Finds the component behind the translation key" },
+        { "check": "answer_matches", "pattern": "trial\\.ended", "description": "Mentions the locale key it followed" },
+        { "check": "answer_matches", "pattern": "expired", "flags": "i", "description": "Mentions the condition that shows it" },
+        { "check": "tool_not_called", "tool": "write_file", "description": "No files written" }
+      ]
+    }
+  ]
+}

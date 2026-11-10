@@ -1,0 +1,58 @@
+{
+  "skill": "data-analysis",
+  "evals": [
+    {
+      "id": "data-analysis-top-category-2024",
+      "prompt": "/data-analysis which product category had the highest revenue in 2024, and how did monthly revenue trend? Use data/sales.csv",
+      "mode": "build",
+      "fixture": {
+        "description": "Small sales CSV with one 2023 row that must be filtered out, one exact duplicate row and one missing unit price. Revenue = units * unit_price. 2024 revenue by category: Games 330 after removing the duplicate (402 if kept), Books 312, Garden 115 (one row without price). Games is the top category either way.",
+        "files": {
+          "data/sales.csv": "date,category,product,units,unit_price\n2023-12-28,Games,Chess,10,35.00\n2024-01-05,Books,Atlas,3,20.00\n2024-01-12,Games,Chess,1,35.00\n2024-01-20,Garden,Hose,2,15.00\n2024-02-03,Books,Novel,5,12.00\n2024-02-14,Games,Puzzle,4,18.00\n2024-02-14,Games,Puzzle,4,18.00\n2024-03-01,Garden,Shovel,1,40.00\n2024-03-09,Books,Atlas,2,20.00\n2024-03-22,Games,Chess,3,35.00\n2024-04-02,Garden,Seeds,10,\n2024-04-18,Books,Novel,6,12.00\n2024-05-07,Games,Cards,8,6.00\n2024-05-30,Garden,Hose,3,15.00\n2024-06-11,Books,Atlas,4,20.00\n2024-06-25,Games,Chess,2,35.00\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "python|py -3|node", "exit_code": 0, "description": "Ran an analysis script successfully" },
+        { "check": "answer_matches", "pattern": "Games[\\s\\S]{0,200}\\b(330|402)\\b|\\b(330|402)\\b[\\s\\S]{0,200}Games", "description": "Reports Games as top category with the correct 2024 revenue (2023 row excluded)" },
+        { "check": "answer_matches", "pattern": "duplicate|missing|null|NaN|no price", "flags": "i", "description": "Mentions the data quality problems" },
+        { "check": "file_unchanged", "path": "data/sales.csv", "description": "Source data not modified" }
+      ]
+    },
+    {
+      "id": "data-analysis-signups-natural",
+      "prompt": "Can you look at data/signups.json and tell me which acquisition channel converts best? A chart would be nice.",
+      "mode": "build",
+      "fixture": {
+        "description": "12 signups: ads 1 of 4 converted (25 percent), organic 2 of 5 (40 percent), referral 2 of 3 (about 66.7 percent). Referral is best, but the groups are tiny, which must be stated as a caveat.",
+        "files": {
+          "data/signups.json": "[\n  {\"id\": 1, \"channel\": \"ads\", \"converted\": false},\n  {\"id\": 2, \"channel\": \"ads\", \"converted\": true},\n  {\"id\": 3, \"channel\": \"organic\", \"converted\": true},\n  {\"id\": 4, \"channel\": \"referral\", \"converted\": true},\n  {\"id\": 5, \"channel\": \"organic\", \"converted\": false},\n  {\"id\": 6, \"channel\": \"ads\", \"converted\": false},\n  {\"id\": 7, \"channel\": \"referral\", \"converted\": true},\n  {\"id\": 8, \"channel\": \"organic\", \"converted\": false},\n  {\"id\": 9, \"channel\": \"organic\", \"converted\": true},\n  {\"id\": 10, \"channel\": \"ads\", \"converted\": false},\n  {\"id\": 11, \"channel\": \"referral\", \"converted\": false},\n  {\"id\": 12, \"channel\": \"organic\", \"converted\": false}\n]\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "data-analysis", "description": "The model loaded the data-analysis skill" },
+        { "check": "command_ran", "pattern": "python|py -3|node", "description": "Computed the result with a script" },
+        { "check": "answer_matches", "pattern": "referral", "flags": "i", "description": "Identifies referral as the best channel" },
+        { "check": "answer_matches", "pattern": "66\\.?[67]|67 ?%|2 of 3|2/3", "description": "Reports the referral rate from the data" },
+        { "check": "answer_matches", "pattern": "sample|small|only \\d+|few", "flags": "i", "description": "States the small sample caveat" }
+      ]
+    },
+    {
+      "id": "data-analysis-delivery-quality",
+      "prompt": "/data-analysis what is the average delivery time in days? data/deliveries.csv",
+      "mode": "build",
+      "fixture": {
+        "description": "Delivery CSV with valid values 2, 3, 4, 5, 3, plus an 'N/A', an empty cell and an impossible negative value (-1). Excluding invalid rows the mean is 3.4 days over 5 deliveries; the answer must say what was excluded.",
+        "files": {
+          "data/deliveries.csv": "order_id,carrier,days\n1001,PostNord,2\n1002,DHL,3\n1003,DHL,N/A\n1004,PostNord,4\n1005,UPS,\n1006,UPS,5\n1007,DHL,-1\n1008,PostNord,3\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "python|py -3|node", "exit_code": 0, "description": "Ran an analysis script successfully" },
+        { "check": "answer_matches", "pattern": "\\b3\\.40?\\b", "description": "Reports the mean of the valid values (3.4)" },
+        { "check": "answer_matches", "pattern": "-1|negative", "flags": "i", "description": "Flags the impossible negative value" },
+        { "check": "answer_matches", "pattern": "N/A|missing|empty|blank", "flags": "i", "description": "Flags the missing values" },
+        { "check": "file_unchanged", "path": "data/deliveries.csv", "description": "Source data not modified" }
+      ]
+    }
+  ]
+}

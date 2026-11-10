@@ -1,0 +1,67 @@
+{
+  "skill": "release",
+  "evals": [
+    {
+      "id": "release-patch-local",
+      "prompt": "/release patch",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node library at version 1.2.0 with a CHANGELOG and passing node:test tests, in a git repository without a GitHub remote. The skill should run the tests, bump to 1.2.1 in package.json and CHANGELOG.md, commit, tag v1.2.1, and report push and GitHub release as not done.",
+        "files": {
+          "package.json": "{\n  \"name\": \"tiny-units\",\n  \"version\": \"1.2.0\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "CHANGELOG.md": "# Changelog\n\n## [1.2.0] - 2026-10-01\n### Added\n- Kilometres to miles conversion\n",
+          "src/units.js": "export const kmToMiles = (km) => km * 0.621371\n",
+          "test/units.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { kmToMiles } from '../src/units.js'\n\ntest('10 km', () => {\n  assert.ok(Math.abs(kmToMiles(10) - 6.21371) < 1e-9)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Ran the tests before releasing" },
+        { "check": "file_matches", "path": "package.json", "pattern": "\"version\"\\s*:\\s*\"1\\.2\\.1\"", "description": "Version bumped to 1.2.1" },
+        { "check": "file_matches", "path": "CHANGELOG.md", "pattern": "1\\.2\\.1", "description": "CHANGELOG has a 1.2.1 section" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"commit\"", "description": "Committed the release changes" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"tag\"[\\s\\S]*1\\.2\\.1|1\\.2\\.1[\\s\\S]*\"action\"\\s*:\\s*\"tag\"", "description": "Tagged v1.2.1" }
+      ]
+    },
+    {
+      "id": "release-blocked-by-failing-test",
+      "prompt": "/release minor",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project at 0.9.0 whose test fails (slugify does not lower-case). The release must stop: no version bump, no tag, no GitHub release, and the answer reports the failure.",
+        "files": {
+          "package.json": "{\n  \"name\": \"slugs\",\n  \"version\": \"0.9.0\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/slug.js": "export const slugify = (s) => s.trim().replace(/\\s+/g, '-')\n",
+          "test/slug.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { slugify } from '../src/slug.js'\n\ntest('lower-cases', () => {\n  assert.equal(slugify('Hello World'), 'hello-world')\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests" },
+        { "check": "file_unchanged", "path": "package.json", "description": "Version was not bumped" },
+        { "check": "tool_not_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"tag\"", "description": "No tag was created" },
+        { "check": "tool_not_called", "tool": "github", "args_pattern": "create_release", "description": "No GitHub release was attempted" },
+        { "check": "answer_matches", "pattern": "fail", "flags": "i", "description": "Reports the failing test as the blocker" }
+      ]
+    },
+    {
+      "id": "release-asks-for-bump",
+      "prompt": "/release",
+      "mode": "build",
+      "fixture": {
+        "description": "Committed Node project at 0.4.0 with passing tests. No version argument was given, so the skill must propose a bump and confirm it with ask_user before changing the version.",
+        "files": {
+          "package.json": "{\n  \"name\": \"queue-lite\",\n  \"version\": \"0.4.0\",\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/queue.js": "export class Queue {\n  #items = []\n  push(x) { this.#items.push(x) }\n  shift() { return this.#items.shift() }\n  get size() { return this.#items.length }\n}\n",
+          "test/queue.test.js": "import { test } from 'node:test'\nimport assert from 'node:assert'\nimport { Queue } from '../src/queue.js'\n\ntest('fifo', () => {\n  const q = new Queue()\n  q.push(1)\n  q.push(2)\n  assert.equal(q.shift(), 1)\n})\n"
+        },
+        "git": true
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "ask_user", "args_pattern": "patch|minor|major|0\\.4\\.1|0\\.5\\.0|1\\.0\\.0", "description": "Asked the user to confirm the version bump" },
+        { "check": "tool_called", "tool": "git", "args_pattern": "\"action\"\\s*:\\s*\"status\"", "description": "Checked the working tree is clean" },
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "description": "Ran the tests" }
+      ]
+    }
+  ]
+}

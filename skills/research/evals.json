@@ -1,0 +1,60 @@
+{
+  "skill": "research",
+  "evals": [
+    {
+      "id": "research-validation-library",
+      "prompt": "/research zod or valibot for form validation in this app?",
+      "mode": "plan",
+      "web": true,
+      "fixture": {
+        "description": "React 19 + Vite app with react-hook-form already installed. The model must read the project constraints, search, read primary sources and recommend one option with URLs.",
+        "files": {
+          "package.json": "{\n  \"name\": \"shop-web\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"dependencies\": {\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"react-hook-form\": \"^7.53.0\"\n  },\n  \"devDependencies\": { \"vite\": \"^6.0.0\", \"typescript\": \"^5.6.0\" }\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "read_file", "args_pattern": "package\\.json", "description": "Read the project's constraints" },
+        { "check": "tool_called", "tool": "web_search", "description": "Searched the web" },
+        { "check": "tool_called", "tool": "web_fetch", "description": "Opened at least one primary source" },
+        { "check": "answer_matches", "pattern": "https?://", "description": "Cites source URLs" },
+        { "check": "file_unchanged", "path": "package.json", "description": "Read-only: no files changed" }
+      ]
+    },
+    {
+      "id": "research-background-jobs-natural",
+      "prompt": "What's the best way to run background jobs for our Next.js app on Vercel? Compare the current options and recommend one.",
+      "mode": "plan",
+      "web": true,
+      "fixture": {
+        "description": "Next.js 15 app deployed on Vercel with Postgres via Prisma. The answer should compare options in a table against these constraints and cite sources.",
+        "files": {
+          "package.json": "{\n  \"name\": \"saas\",\n  \"private\": true,\n  \"scripts\": { \"dev\": \"next dev\", \"build\": \"next build\" },\n  \"dependencies\": { \"next\": \"15.1.0\", \"react\": \"19.0.0\", \"@prisma/client\": \"^6.0.0\" },\n  \"devDependencies\": { \"prisma\": \"^6.0.0\" }\n}\n",
+          "vercel.json": "{\n  \"framework\": \"nextjs\"\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "research", "description": "The model loaded the research skill" },
+        { "check": "tool_called", "tool": "web_search", "description": "Searched the web" },
+        { "check": "answer_matches", "pattern": "\\|[^\\n]*\\|[^\\n]*\\|", "description": "Includes a comparison table" },
+        { "check": "answer_matches", "pattern": "https?://", "description": "Cites source URLs" }
+      ]
+    },
+    {
+      "id": "research-no-web-toggle",
+      "prompt": "/research what is the currently recommended way to handle authentication in Next.js",
+      "mode": "plan",
+      "fixture": {
+        "description": "Small Next.js project. The Web toggle is off, so web_search is not available: the model must say research needs Web and ask the user to turn it on, without inventing URLs.",
+        "files": {
+          "package.json": "{\n  \"name\": \"site\",\n  \"private\": true,\n  \"dependencies\": { \"next\": \"15.1.0\", \"react\": \"19.0.0\" }\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "Web", "description": "Mentions the Web toggle" },
+        { "check": "answer_matches", "pattern": "turn on|enable|switch on|toggle", "flags": "i", "description": "Asks the user to turn Web on" },
+        { "check": "answer_not_matches", "pattern": "https?://", "description": "Does not cite URLs it could not open" },
+        { "check": "file_unchanged", "path": "package.json", "description": "No files changed" }
+      ]
+    }
+  ]
+}

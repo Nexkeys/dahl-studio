@@ -1,0 +1,67 @@
+{
+  "skill": "web-vitals",
+  "evals": [
+    {
+      "id": "web-vitals-plan-static-pass",
+      "prompt": "/web-vitals",
+      "mode": "plan",
+      "fixture": {
+        "description": "Vite static site whose hero image (the LCP element) is lazy-loaded and has no width or height, plus a render-blocking third-party script in head. Plan mode: static findings and a measurement plan against a production build, no edits.",
+        "files": {
+          "package.json": "{\n  \"name\": \"landing\",\n  \"private\": true,\n  \"scripts\": { \"dev\": \"vite\", \"build\": \"vite build\", \"preview\": \"vite preview\" },\n  \"devDependencies\": { \"vite\": \"^5.4.0\" }\n}\n",
+          "index.html": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <title>Acme</title>\n    <script src=\"https://cdn.example.com/analytics.js\"></script>\n    <link rel=\"stylesheet\" href=\"/src/style.css\" />\n  </head>\n  <body>\n    <header class=\"hero\">\n      <img src=\"/hero.jpg\" loading=\"lazy\" alt=\"Product photo\" />\n      <h1>Ship faster</h1>\n    </header>\n    <script type=\"module\" src=\"/src/main.js\"></script>\n  </body>\n</html>\n",
+          "src/main.js": "document.querySelector('h1').classList.add('ready')\n",
+          "src/style.css": ".hero img { width: 100%; }\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "lazy", "flags": "i", "description": "Flags the lazy-loaded LCP image" },
+        { "check": "answer_matches", "pattern": "width|height|aspect-ratio", "flags": "i", "description": "Flags the unsized image as a CLS cause" },
+        { "check": "answer_matches", "pattern": "vite preview|production build|npm run build", "flags": "i", "description": "Plans to measure a production build, not the dev server" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks for Build mode to measure and fix" },
+        { "check": "file_unchanged", "path": "index.html", "description": "No edits in Plan mode" }
+      ]
+    },
+    {
+      "id": "web-vitals-natural-measure-and-fix",
+      "prompt": "Our landing page feels slow. Can you check the Core Web Vitals and fix what you can?",
+      "mode": "build",
+      "web": true,
+      "fixture": {
+        "description": "Same Vite landing page with a lazy, unsized hero image and a render-blocking head script. Needs network for npm install and npx lighthouse, and a local Chrome or Edge. The run must build, serve the production build, run Lighthouse, fix the hero image and re-measure.",
+        "files": {
+          "package.json": "{\n  \"name\": \"landing\",\n  \"private\": true,\n  \"scripts\": { \"dev\": \"vite\", \"build\": \"vite build\", \"preview\": \"vite preview\" },\n  \"devDependencies\": { \"vite\": \"^5.4.0\" }\n}\n",
+          "index.html": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <title>Acme</title>\n    <script src=\"/vendor/widget.js\"></script>\n  </head>\n  <body>\n    <header class=\"hero\">\n      <img src=\"/hero.svg\" loading=\"lazy\" alt=\"Product\" />\n      <h1>Ship faster</h1>\n    </header>\n    <script type=\"module\" src=\"/src/main.js\"></script>\n  </body>\n</html>\n",
+          "public/vendor/widget.js": "var start = Date.now(); while (Date.now() - start < 400) {}\n",
+          "public/hero.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"600\"><rect width=\"1200\" height=\"600\" fill=\"#4a6\"/></svg>\n",
+          "src/main.js": "document.querySelector('h1').classList.add('ready')\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "npm run build|vite build", "description": "Built the production bundle" },
+        { "check": "command_ran", "pattern": "lighthouse", "description": "Measured with Lighthouse" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "npm run dev", "description": "Did not measure the dev server" },
+        { "check": "file_matches", "path": "index.html", "pattern": "fetchpriority|width=\"\\d+\"|defer|async", "flags": "i", "description": "Fixed the hero image or the blocking script" },
+        { "check": "answer_matches", "pattern": "LCP[\\s\\S]*(before|after)|(before|after)[\\s\\S]*LCP", "flags": "i", "description": "Reports LCP before and after" }
+      ]
+    },
+    {
+      "id": "web-vitals-inp-awareness",
+      "prompt": "/web-vitals what is our INP on the search page and why is typing laggy?",
+      "mode": "plan",
+      "fixture": {
+        "description": "React search page whose onChange handler filters and sorts 50k items synchronously on every keystroke. Plan mode: must explain that Lighthouse navigation cannot measure INP (use TBT or field data) and name the long task as the cause.",
+        "files": {
+          "src/Search.jsx": "import { useState } from 'react'\nimport { products } from './data'\n\nexport function Search() {\n  const [results, setResults] = useState(products)\n  function onChange(e) {\n    const q = e.target.value.toLowerCase()\n    const filtered = products.filter((p) => JSON.stringify(p).toLowerCase().includes(q))\n    filtered.sort((a, b) => a.name.localeCompare(b.name))\n    setResults(filtered)\n  }\n  return (\n    <div>\n      <input onChange={onChange} placeholder=\"Search\" />\n      <ul>{results.map((p) => <li key={p.id}>{p.name}</li>)}</ul>\n    </div>\n  )\n}\n",
+          "src/data.js": "export const products = Array.from({ length: 50000 }, (_, i) => ({ id: i, name: `Item ${i}`, tags: ['a', 'b'] }))\n"
+        }
+      },
+      "criteria": [
+        { "check": "answer_matches", "pattern": "TBT|Total Blocking Time|field data|CrUX|onINP|web-vitals", "flags": "i", "description": "Explains how INP can actually be measured" },
+        { "check": "answer_matches", "pattern": "long task|main thread|every keystroke|debounce|useDeferredValue|useTransition|worker|virtuali", "flags": "i", "description": "Names the blocking handler work and a fix" },
+        { "check": "answer_matches", "pattern": "Search\\.jsx", "description": "Points at the file" },
+        { "check": "file_unchanged", "path": "src/Search.jsx", "description": "No edits in Plan mode" }
+      ]
+    }
+  ]
+}

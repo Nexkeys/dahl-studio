@@ -1,0 +1,63 @@
+{
+  "skill": "api-tests",
+  "evals": [
+    {
+      "id": "api-tests-notes-auth-validation",
+      "prompt": "/api-tests the /notes endpoints",
+      "mode": "build",
+      "fixture": {
+        "description": "Dependency-free Node API: src/app.js exports createApp({ token }) returning an http.Server with bearer auth (401), GET /notes and POST /notes with title validation (400) and 201 on success. src/server.js listens on a fixed port. The model should test through createApp on port 0 (or similar), not start src/server.js, and cover 401, 400 and 201.",
+        "files": {
+          "package.json": "{\n  \"name\": \"notes-api\",\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=18\" },\n  \"scripts\": { \"start\": \"node src/server.js\", \"test\": \"node --test\" }\n}\n",
+          "src/app.js": "import http from 'node:http'\n\nexport function createApp({ token = process.env.API_TOKEN } = {}) {\n  const notes = []\n  return http.createServer(async (req, res) => {\n    const send = (status, body) => {\n      res.writeHead(status, { 'Content-Type': 'application/json' })\n      res.end(JSON.stringify(body))\n    }\n    if (!token || req.headers.authorization !== `Bearer ${token}`) return send(401, { error: 'unauthorized' })\n    if (req.url === '/notes' && req.method === 'GET') return send(200, notes)\n    if (req.url === '/notes' && req.method === 'POST') {\n      let raw = ''\n      for await (const chunk of req) raw += chunk\n      let data\n      try { data = JSON.parse(raw) } catch { return send(400, { error: 'invalid json' }) }\n      if (typeof data.title !== 'string' || !data.title.trim()) return send(400, { error: 'title is required' })\n      const note = { id: notes.length + 1, title: data.title.trim() }\n      notes.push(note)\n      return send(201, note)\n    }\n    return send(404, { error: 'not found' })\n  })\n}\n",
+          "src/server.js": "import { createApp } from './app.js'\n\ncreateApp().listen(Number(process.env.PORT || 3000))\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests run and pass" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "401", "description": "Covers the missing or wrong token case" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "400", "description": "Covers validation errors" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "src[/\\\\]+server\\.js|npm (run )?start", "description": "Did not start the real server on a fixed port" },
+        { "check": "file_unchanged", "path": "src/app.js", "description": "The API code was not changed" }
+      ]
+    },
+    {
+      "id": "api-tests-fastapi-matrix",
+      "prompt": "What tests should we have for the /items endpoints in our FastAPI app? Draft them for me.",
+      "mode": "plan",
+      "fixture": {
+        "description": "FastAPI app with POST /items (bearer auth gives 401, pydantic validation gives 422, success gives 201) and GET /items/{id} (404 when missing). In Plan mode the model should return a test matrix and example TestClient tests without writing files.",
+        "files": {
+          "app/__init__.py": "",
+          "app/main.py": "from fastapi import Depends, FastAPI, Header, HTTPException\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\nITEMS = {}\n\n\nclass Item(BaseModel):\n    name: str = Field(min_length=1)\n    price: float = Field(gt=0)\n\n\ndef require_user(authorization: str | None = Header(default=None)):\n    if authorization != \"Bearer test-token\":\n        raise HTTPException(status_code=401, detail=\"unauthorized\")\n    return \"user\"\n\n\n@app.post(\"/items\", status_code=201)\ndef create_item(item: Item, user: str = Depends(require_user)):\n    item_id = len(ITEMS) + 1\n    ITEMS[item_id] = item\n    return {\"id\": item_id, **item.model_dump()}\n\n\n@app.get(\"/items/{item_id}\")\ndef get_item(item_id: int):\n    if item_id not in ITEMS:\n        raise HTTPException(status_code=404, detail=\"not found\")\n    return {\"id\": item_id, **ITEMS[item_id].model_dump()}\n",
+          "requirements.txt": "fastapi\nhttpx\npytest\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "api-tests", "description": "The model loaded the api-tests skill" },
+        { "check": "answer_matches", "pattern": "TestClient|AsyncClient", "description": "Uses the FastAPI test client" },
+        { "check": "answer_matches", "pattern": "401", "description": "Includes the unauthenticated case" },
+        { "check": "answer_matches", "pattern": "422", "description": "Includes the validation error case" },
+        { "check": "file_absent", "path": "tests/test_items.py", "description": "No files written in Plan mode" }
+      ]
+    },
+    {
+      "id": "api-tests-mock-upstream",
+      "prompt": "/api-tests GET /convert",
+      "mode": "build",
+      "fixture": {
+        "description": "Dependency-free Node API whose /convert endpoint calls an external rates API with fetch, returns 400 for bad input and 502 when the upstream fails. Tests must mock the external call (the real host does not exist) while still reaching the local server, and cover the 502 path.",
+        "files": {
+          "package.json": "{\n  \"name\": \"fx\",\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=18\" },\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+          "src/app.js": "import http from 'node:http'\n\nexport const RATES_URL = 'https://api.rates.example.com/latest?base=USD'\n\nexport function createApp() {\n  return http.createServer(async (req, res) => {\n    const url = new URL(req.url, 'http://localhost')\n    const send = (status, body) => {\n      res.writeHead(status, { 'Content-Type': 'application/json' })\n      res.end(JSON.stringify(body))\n    }\n    if (url.pathname !== '/convert') return send(404, { error: 'not found' })\n    const amount = Number(url.searchParams.get('amount'))\n    const to = url.searchParams.get('to')\n    if (!Number.isFinite(amount) || amount <= 0 || !to) return send(400, { error: 'amount and to are required' })\n    try {\n      const r = await fetch(RATES_URL)\n      if (!r.ok) return send(502, { error: 'rates unavailable' })\n      const { rates } = await r.json()\n      if (!(to in rates)) return send(400, { error: 'unknown currency' })\n      return send(200, { amount: Math.round(amount * rates[to] * 100) / 100, currency: to })\n    } catch {\n      return send(502, { error: 'rates unavailable' })\n    }\n  })\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "command_ran", "pattern": "node --test|npm (run )?test", "exit_code": 0, "description": "Tests run and pass" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "mock|stub|fake", "description": "The external rates call is mocked" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "502", "description": "Covers the upstream failure path" },
+        { "check": "answer_matches", "pattern": "mock", "flags": "i", "description": "Reports what was mocked" }
+      ]
+    }
+  ]
+}

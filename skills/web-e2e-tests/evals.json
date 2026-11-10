@@ -1,0 +1,64 @@
+{
+  "skill": "web-e2e-tests",
+  "evals": [
+    {
+      "id": "web-e2e-tests-login-setup",
+      "prompt": "/web-e2e-tests cover the login form: a successful sign in and a wrong password",
+      "mode": "build",
+      "fixture": {
+        "description": "Small static site served by a Node dev script on port 5173 with a login form (labelled Email and Password fields, a Sign in button) and client-side checking. No Playwright yet. The model should add a config with webServer, write a spec with role or label locators and no fixed waits, and run it.",
+        "files": {
+          "package.json": "{\n  \"name\": \"login-site\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"node server.js\" }\n}\n",
+          "server.js": "import http from 'node:http'\nimport { readFile } from 'node:fs/promises'\n\nhttp.createServer(async (req, res) => {\n  const file = req.url === '/app.js' ? 'app.js' : 'index.html'\n  const type = file.endsWith('.js') ? 'text/javascript' : 'text/html'\n  res.writeHead(200, { 'Content-Type': type }).end(await readFile(new URL(file, import.meta.url)))\n}).listen(5173, () => console.log('http://localhost:5173'))\n",
+          "index.html": "<!doctype html>\n<html><body>\n<main>\n  <h1>Sign in</h1>\n  <form id=\"f\">\n    <label>Email <input name=\"email\" type=\"email\" required></label>\n    <label>Password <input name=\"password\" type=\"password\" required></label>\n    <button type=\"submit\">Sign in</button>\n  </form>\n  <p role=\"alert\" id=\"msg\"></p>\n</main>\n<script type=\"module\" src=\"/app.js\"></script>\n</body></html>\n",
+          "app.js": "document.getElementById('f').addEventListener('submit', (e) => {\n  e.preventDefault()\n  const data = new FormData(e.target)\n  const ok = data.get('email') === 'demo@example.test' && data.get('password') === 'correct-horse'\n  if (ok) document.querySelector('main').innerHTML = '<h1>Dashboard</h1>'\n  else document.getElementById('msg').textContent = 'Wrong email or password'\n})\n"
+        }
+      },
+      "criteria": [
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "playwright\\.config\\.(ts|js|mjs)", "description": "Created a Playwright config" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "webServer", "description": "The config starts the app through webServer" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "getByRole|getByLabel", "description": "Uses role or label locators" },
+        { "check": "tool_not_called", "tool": "write_file", "args_pattern": "waitForTimeout", "description": "No fixed waits" },
+        { "check": "command_ran", "pattern": "playwright test", "description": "Ran the tests headless" }
+      ]
+    },
+    {
+      "id": "web-e2e-tests-existing-setup",
+      "prompt": "Add browser tests for the newsletter signup so we catch regressions before release.",
+      "mode": "build",
+      "fixture": {
+        "description": "Project that already has @playwright/test, a playwright.config.ts with webServer, and one spec in e2e/. The model should follow the existing setup, add a new spec in e2e/, and not reinstall or open interactive Playwright modes.",
+        "files": {
+          "package.json": "{\n  \"name\": \"news\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"dev\": \"node server.js\", \"test:e2e\": \"playwright test\" },\n  \"devDependencies\": { \"@playwright/test\": \"^1.45.0\" }\n}\n",
+          "playwright.config.ts": "import { defineConfig } from '@playwright/test'\n\nexport default defineConfig({\n  testDir: './e2e',\n  use: { baseURL: 'http://localhost:4000' },\n  webServer: { command: 'npm run dev', url: 'http://localhost:4000', reuseExistingServer: true },\n})\n",
+          "e2e/home.spec.ts": "import { test, expect } from '@playwright/test'\n\ntest('home shows the title', async ({ page }) => {\n  await page.goto('/')\n  await expect(page.getByRole('heading', { name: 'Weekly News' })).toBeVisible()\n})\n",
+          "server.js": "import http from 'node:http'\n\nconst page = `<!doctype html><html><body><h1>Weekly News</h1>\n<form id=\"s\"><label>Email <input name=\"email\" type=\"email\" required></label><button>Subscribe</button></form>\n<p role=\"status\" id=\"out\"></p>\n<script>document.getElementById('s').onsubmit = (e) => { e.preventDefault(); document.getElementById('out').textContent = 'Thanks for subscribing' }</script>\n</body></html>`\n\nhttp.createServer((req, res) => res.writeHead(200, { 'Content-Type': 'text/html' }).end(page)).listen(4000)\n"
+        }
+      },
+      "criteria": [
+        { "check": "skill_used", "name": "web-e2e-tests", "description": "The model loaded the web-e2e-tests skill" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "e2e[/\\\\]+[\\w-]+\\.spec\\.ts", "description": "Added a new spec in the existing e2e folder" },
+        { "check": "tool_called", "tool": "write_file", "args_pattern": "Subscribe|Thanks for subscribing", "description": "The spec exercises the signup flow" },
+        { "check": "tool_not_called", "tool": "run_command", "args_pattern": "--ui|codegen|show-report|npm init playwright", "description": "No interactive Playwright commands" }
+      ]
+    },
+    {
+      "id": "web-e2e-tests-plan-proposal",
+      "prompt": "/web-e2e-tests sign up flow",
+      "mode": "plan",
+      "fixture": {
+        "description": "Vite style app with a sign up page component. In Plan mode the model must not create files; it should propose a config with webServer and a spec using role or label locators, then ask for Build mode.",
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"scripts\": { \"dev\": \"vite\", \"build\": \"vite build\" },\n  \"devDependencies\": { \"vite\": \"^5.2.0\" }\n}\n",
+          "src/SignUp.jsx": "export function SignUp({ onDone }) {\n  return (\n    <form onSubmit={(e) => { e.preventDefault(); onDone() }}>\n      <h1>Create your account</h1>\n      <label>Email <input type=\"email\" required /></label>\n      <label>Password <input type=\"password\" minLength={8} required /></label>\n      <button type=\"submit\">Create account</button>\n    </form>\n  )\n}\n"
+        }
+      },
+      "criteria": [
+        { "check": "file_absent", "path": "playwright.config.ts", "description": "No files created in Plan mode" },
+        { "check": "answer_matches", "pattern": "getByRole|getByLabel", "description": "Proposes role or label locators" },
+        { "check": "answer_matches", "pattern": "webServer", "description": "Proposes starting the app through webServer" },
+        { "check": "answer_matches", "pattern": "Build", "description": "Asks the user to switch to Build mode" }
+      ]
+    }
+  ]
+}
