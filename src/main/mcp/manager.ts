@@ -3,6 +3,8 @@ import { execFile } from 'node:child_process'
 import type { McpCatalogEntry, McpConnectorInfo, McpServerConfig, McpStatus, McpTool, McpToolRef } from '@shared/types'
 import { McpClient, StdioTransport, HttpTransport } from './client'
 import { CATALOG, capabilityTestFor } from './catalog'
+import { defaultPolicy, FIXED_ENV } from './catalogExtra'
+import { cachedPrereq, checkCatalogPrereq, withPathFirst } from './prereqs'
 import { allowsWrites, effectiveArgs } from '@shared/mcpArgs'
 import { childEnv } from '../terminal'
 import { resolveInside } from '../fs/workspace'
@@ -91,7 +93,7 @@ export class McpManager {
     const d = await this.load()
     const existing = d.servers.find((s) => s.catalogId === catalogId)
     if (existing) return existing
-    const cfg: McpServerConfig = { ...entry.install, env: Object.fromEntries(Object.keys(entry.install.env ?? {}).map((k) => [k, ''])), id: catalogId, enabled: false, policy: 'ask', custom: false }
+    const cfg: McpServerConfig = { ...entry.install, env: Object.fromEntries(Object.keys(entry.install.env ?? {}).map((k) => [k, ''])), id: catalogId, enabled: false, policy: defaultPolicy(catalogId), custom: false }
     d.servers.push(cfg)
     await this.save()
     return cfg
@@ -210,9 +212,14 @@ export class McpManager {
           for (const [k, v] of Object.entries(cfg.headers ?? {})) headers[k] = v
           transport = new HttpTransport(sub(cfg.url!), headers)
         } else {
-          const pre = await this.checkPrereq(cfg.command)
+          // catalogue requirements beyond the command (REA's Node version, Maestro's CLI and Java): never start without them
+          const req = cfg.custom ? null : await checkCatalogPrereq(cfg.catalogId)
+          if (req && !req.ok) throw new Error(`${req.summary}. See the ${cfg.name} card in the Toolbox.`)
+          const pre = req?.pathDir ? null : await this.checkPrereq(cfg.command)
           if (pre) throw new Error(pre)
           const env = childEnv() // never contains Dahl or other AI provider keys
+          if (!cfg.custom) Object.assign(env, FIXED_ENV[cfg.catalogId ?? ''] ?? {})
+          if (req?.pathDir) withPathFirst(env, req.pathDir)
           const cat = CATALOG.find((x) => x.id === cfg.catalogId)
           for (const k of Object.keys(cfg.env ?? {})) {
             const v = await this.deps.getSecret(`mcp:${cfg.id}:${k}`)
@@ -297,7 +304,9 @@ export class McpManager {
     if (cfg.custom) return null
     const cat = CATALOG.find((x) => x.id === cfg.catalogId)
     const missing = Object.keys(cat?.install?.env ?? {}).filter((k) => !cfg.env?.[k])
-    return missing.length ? `${missing.join(', ')} not set. Enter it on the ${cfg.name} card in the Toolbox.` : null
+    if (missing.length) return `${missing.join(', ')} not set. Enter it on the ${cfg.name} card in the Toolbox.`
+    const req = cachedPrereq(cfg.catalogId)
+    return req && !req.ok ? `${req.summary}. See the ${cfg.name} card in the Toolbox.` : null
   }
 
   /** Start every enabled, set-up server for a project in the background, so a task never waits for cold starts. */

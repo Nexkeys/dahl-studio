@@ -1,0 +1,7 @@
+/* Tab completions: status bar indicator */
+.tabc.on svg, .tabc.thinking svg { color: var(--accent); }
+.tabc.thinking svg { animation: tabc-pulse 0.9s ease-in-out infinite; }
+.tabc.error { color: var(--danger); }
+@keyframes tabc-pulse { 50% { opacity: 0.3; } }
+.tabc-model { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tabc-model select { max-width: 420px; }

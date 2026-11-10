@@ -1,4 +1,5 @@
 import type { AgentMode, AgentRole, ThinkingLevel } from '@shared/types'
+import { CHIEF_DEFS, CHIEF_TOOLS } from '../chief/tools'
 
 const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function',
@@ -65,7 +66,9 @@ export const TOOL_DEFS = {
   analyze_image: fn('analyze_image', 'Get a detailed text breakdown of an image (project path or an attached image name): size, colour palette, 6x6 layout grid, all readable text with positions (Windows OCR), plus a description from a vision model if one is configured. Use this to "see" designs and screenshots.', { path: S }, ['path']),
   delegate_agents: fn('delegate_agents', 'Run specialised sub-agents in parallel and get their reports. Roles: architect, implementer, debugger, test_engineer, code_reviewer, security_reviewer, researcher. Give each a focused task and (for implementer/debugger/test_engineer) the files it owns; agents cannot edit files owned by another agent.', {
     agents: { type: 'array', items: { type: 'object', properties: { role: { type: 'string', enum: ['architect', 'implementer', 'debugger', 'test_engineer', 'code_reviewer', 'security_reviewer', 'researcher'] }, task: S, files: { type: 'array', items: S } }, required: ['role', 'task'] } }
-  }, ['agents'])
+  }, ['agents']),
+  // Chief of Staff (chief/tools.ts): briefing, follow-ups, goals, delegation to another project
+  ...CHIEF_DEFS
 } as const
 
 export type ToolName = keyof typeof TOOL_DEFS
@@ -77,7 +80,7 @@ export const WRITE_ROLES: AgentRole[] = ['implementer', 'debugger', 'test_engine
 
 export function toolsFor(role: AgentRole, mode: AgentMode, web: boolean): ToolName[] {
   const t: ToolName[] = [...READ]
-  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github')
+  if (role === 'lead') t.push('update_plan', 'delegate_agents', 'ask_user', 'github', ...CHIEF_TOOLS)
   if (mode === 'build' && (role === 'lead' || WRITE_ROLES.includes(role))) t.push(...WRITE)
   if (mode === 'build' && role === 'lead') t.push('git_push')
   // the user's Web toggle applies to every agent: a Researcher sub-agent must not browse when web research is off
