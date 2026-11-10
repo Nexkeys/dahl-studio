@@ -1,13 +1,14 @@
 import path from 'node:path'
 import { promises as fsp } from 'node:fs'
-import type { AgentEvent, AgentInfo, AgentRole, ChatMessage, ContentPart, InstructionFileInfo, McpConnectorInfo, McpToolRef, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
+import type { AgentEvent, AgentInfo, AgentRole, Attachment, ChatMessage, ContentPart, InstructionFileInfo, McpConnectorInfo, McpToolRef, PendingApproval, ReasoningProfile, RunState, RunSummary, Settings, StartRunRequest, TranscriptItem, TurnSummary } from '@shared/types'
 import { DahlError, type ChatRequest, type ChatResult, type StreamCallbacks } from '../dahl/client'
 import { projectOutline, resolveInside, writeText } from '../fs/workspace'
 import { ProjectStore } from '../store/projectStore'
 import { nowIso, redact, shortId } from '../util'
 import { stripDashes } from '@shared/dashes'
 import { ROLE_INFO, systemPrompt, THINKING_GUIDANCE, TOOL_DEFS, toolsFor, WRITE_ROLES } from './tools'
-import { buildUserContent, compact, repairHistory, summariseTool, summary } from './history'
+import { buildUserContent, capImages, compact, repairHistory, summariseTool, summary, type AttachmentReading } from './history'
+import { needsReading } from './attachments'
 import { execTool, leaseKey, type ExecCtx, type ToolResult } from './toolExec'
 import { parseToolArgs } from './args'
 import { compatFor, dropTuning, profileFor, samplingFor, tierGuidance, withReplay } from './modelProfile'
@@ -50,6 +51,12 @@ export interface RunnerDeps {
     fetch(url: string, signal: AbortSignal): Promise<{ url: string; status: number; title: string; text: string; truncated: boolean }>
   }
   analyzeImage?(name: string, mediaType: string, data: string, signal: AbortSignal): Promise<string>
+  /** read attached images and PDFs before the first model call (agent/attachments.ts) */
+  readAttachments?(atts: Attachment[], model: string, signal: AbortSignal, status: (text: string) => void): Promise<Map<string, AttachmentReading>>
+  /** images per request the model's provider accepts (0: the model cannot see images) */
+  imageLimit?(model: string): Promise<number>
+  /** the read_pdf tool: the PDF as Markdown (`pages` like "1-5") */
+  readPdf?(data: Buffer, name: string, pages: string | undefined, signal: AbortSignal): Promise<string>
   mcp?: McpBridge
   maxIterations?: number
   /** installed developer tools on this PC, one line (see envProbe.ts) */
@@ -88,6 +95,8 @@ interface RunCtl {
   instructionsShown?: Set<string>
   /** spend of this request, warnings shown, budget stop (costGate.ts) */
   costs: CostState
+  /** attachments still to be read (images, PDFs) and the index of their user message */
+  unread?: { atts: Attachment[]; index: number }
 }
 interface AgentCtx {
   info: AgentInfo
@@ -167,7 +176,8 @@ export class AgentRunner {
     run.messages.push({ role: 'user', content: buildUserContent(skillRun?.text ?? req.prompt, req.attachments ?? [], images) })
     const ctl: RunCtl = {
       run, store, abort: new AbortController(), pauseRequested: false, approvals: new Map(), leases: new Map(), seen: this.seenFor(run.id), web: !!req.web, images, mcpTools: [], mcpActive: new Set(), connectors: [], steers: [], prompt: req.prompt, answer: '', costs: newCostState(),
-      turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 }
+      turn: { start: Date.now(), toolCount: 0, changed: new Set(), commands: [], memories: 0 },
+      unread: needsReading(req.attachments) ? { atts: req.attachments!, index: run.messages.length - 1 } : undefined
     }
     this.active.set(k, ctl)
     this.addItem(ctl, { kind: 'user', text: req.prompt, attachments: (req.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name })) })
@@ -319,6 +329,7 @@ export class AgentRunner {
     try {
       // MCP tools are offered in every mode; outside Build, execMcp asks before any tool not marked read-only
       if (this.deps.mcp) await this.loadMcp(ctl, this.deps.mcp)
+      await this.readAttachments(ctl)
       ctl.answer = await this.agentLoop(ctl, lead)
       // the answer is on screen: mark the task done now and learn from it afterwards. The memory call is one more
       // model request (15 to 27 s on Dahl models), and the task used to keep spinning until it returned.
@@ -339,6 +350,21 @@ export class AgentRunner {
       this.log(ctl, 'error', `${err.name}: ${msg}${err instanceof DahlError ? ` (kind=${err.kind}, status=${err.status ?? 'n/a'})` : `\n${err.stack ?? ''}`}`)
       this.addItem(ctl, { kind: 'error', text: msg })
       await this.finish(ctl, 'failed')
+    }
+  }
+
+  /** Read attached images and PDFs, then rebuild the user message with what was found (before any model call). */
+  private async readAttachments(ctl: RunCtl): Promise<void> {
+    const u = ctl.unread
+    ctl.unread = undefined
+    if (!u || !this.deps.readAttachments) return
+    try {
+      const readings = await this.deps.readAttachments(u.atts, ctl.run.model, ctl.abort.signal, (text) => this.addItem(ctl, { kind: 'status', text }))
+      ctl.run.messages[u.index] = { role: 'user', content: buildUserContent(ctl.prompt, u.atts, ctl.images, readings) }
+      this.log(ctl, 'info', `Read ${readings.size} attachment(s) before the first model call`)
+    } catch (e) {
+      if (ctl.abort.signal.aborted) throw new DahlError('cancelled', 'cancelled')
+      this.log(ctl, 'error', `Reading attachments failed: ${(e as Error).message}`)
     }
   }
 
@@ -470,6 +496,7 @@ export class AgentRunner {
     const model = await this.modelFor(ctl, a, settings)
     const maxIter = this.deps.maxIterations ?? (run.thinking === 'high' ? 60 : 40)
     const vision = this.deps.modelVision ? await this.deps.modelVision(model) : false
+    const imageLimit = vision && this.deps.imageLimit ? await this.deps.imageLimit(model).catch(() => 0) : 0
     let iter = 0
     let nudges = 0
     let verified = false
@@ -492,7 +519,8 @@ export class AgentRunner {
       if (!a.isLead) this.emitAgent(ctl, a.info)
       // budgets, large-request notes and Economy's image limit are checked before every model call (costGate.ts)
       const tools = this.toolDefs(ctl, a)
-      const gate = await this.costGate(ctl, a, model, [{ role: 'system', content: await this.system(ctl, a) }, ...compact(a.messages)], tools)
+      const history = compact(a.messages)
+      const gate = await this.costGate(ctl, a, model, [{ role: 'system', content: await this.system(ctl, a) }, ...(imageLimit ? capImages(history, imageLimit) : history)], tools)
       if (gate.stop) {
         if (a.isLead) throw new PauseSignal(gate.stop, 'budget')
         return `${lastText}\n[Stopped: ${gate.stop}]`

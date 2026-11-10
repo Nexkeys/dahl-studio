@@ -3,6 +3,7 @@ import { Send, Paperclip, Globe, Sparkles, X, FileText, Folder, Image as ImageIc
 import type { AgentMode, Attachment, McpServerConfig, SkillList, SkillSummary, StartRunRequest, ThinkingLevel } from '@shared/types'
 import { mcpCommands, parseMcpCommand, type McpCommand } from '@shared/mcpCommands'
 import { sendHow, type SendHow } from '@shared/outbox'
+import { isPdfAttachment, limitMessage, MAX_IMAGES_PER_MESSAGE } from '@shared/imageLimits'
 import { addAttachments, api, updateSettings, useStore } from '../store'
 import { skillIcon, skillLabel } from './skills'
 import { ModelMenu } from './ModelMenu'
@@ -19,18 +20,26 @@ const THINK: { id: ThinkingLevel; label: string }[] = [
   { id: 'off', label: 'Fast' }, { id: 'low', label: 'Light' }, { id: 'medium', label: 'Balanced' }, { id: 'high', label: 'Deep' }
 ]
 
-function fileToAttachment(f: File): Promise<Attachment> {
+const MB = 1024 * 1024
+function fileToAttachment(f: File, i = 0): Promise<Attachment> {
+  const isImg = f.type.startsWith('image/')
+  const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+  const max = isImg ? 15 * MB : isPdf ? 40 * MB : MB
+  if (f.size > max) return Promise.reject(new Error(`${f.name || 'File'} is larger than ${max / MB} MB`))
   return new Promise((resolve, reject) => {
     const r = new FileReader()
     r.onload = () => {
       const s = String(r.result)
-      const isImg = f.type.startsWith('image/')
+      // several images pasted at once arrive with the same generic name; number them so each stays distinct
+      const name = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pasted-${Date.now()}-${i + 1}.${(f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg')}`
       resolve(isImg
-        ? { id: crypto.randomUUID(), kind: 'image', name: f.name || `pasted-${Date.now()}.png`, mediaType: f.type, data: s.split(',')[1], bytes: f.size }
-        : { id: crypto.randomUUID(), kind: 'file', name: f.name, text: s, bytes: f.size })
+        ? { id: crypto.randomUUID(), kind: 'image', name, mediaType: f.type, data: s.split(',')[1], bytes: f.size }
+        : isPdf
+          ? { id: crypto.randomUUID(), kind: 'file', name: f.name, mediaType: 'application/pdf', data: s.split(',')[1], bytes: f.size }
+          : { id: crypto.randomUUID(), kind: 'file', name: f.name, text: s, bytes: f.size })
     }
     r.onerror = () => reject(r.error)
-    if (f.type.startsWith('image/')) r.readAsDataURL(f)
+    if (isImg || isPdf) r.readAsDataURL(f)
     else r.readAsText(f)
   })
 }
@@ -85,24 +94,37 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
   const mcpHits = mcp.filter((c) => c.enabled && cmdMatch(c.cmd))
   const mentionHits = useMemo(() => (mq ? files.filter((f) => f.toLowerCase().includes(mq.toLowerCase())) : files).slice(0, 8), [files, mq])
 
+  /** add files, telling the user about any over the limits or unreadable */
+  const addFiles = async (files: File[]) => {
+    const read = await Promise.allSettled(files.map((f, i) => fileToAttachment(f, i)))
+    const ok = read.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    const failed = read.flatMap((r) => (r.status === 'rejected' ? [(r.reason as Error).message] : []))
+    const msg = [limitMessage(addAttachments(root, ok)), ...failed.slice(0, 2)].filter(Boolean).join(' ')
+    if (msg) notify(msg, 'error')
+  }
   const pick = async (kind: 'file' | 'folder' | 'image') => {
     setMenu(null)
     try {
-      addAttachments(root, await api.invoke<Attachment[]>('attach:pick', root, kind))
+      const msg = limitMessage(addAttachments(root, await api.invoke<Attachment[]>('attach:pick', root, kind)))
+      if (msg) notify(msg, 'error')
     } catch (e) {
       notify((e as Error).message, 'error')
     }
   }
   const onPaste = async (e: React.ClipboardEvent) => {
-    const imgs = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'))
-    if (!imgs.length) return
+    // several copied images or files arrive together; some apps only fill `items`
+    let files = [...e.clipboardData.files]
+    if (!files.length) files = [...e.clipboardData.items].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter((f): f is File => !!f)
+    const wanted = files.filter((f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+    if (!wanted.length) return
     e.preventDefault()
-    addAttachments(root, await Promise.all(imgs.map(fileToAttachment)))
+    await addFiles(wanted)
   }
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault()
-    if (e.dataTransfer.files.length) addAttachments(root, await Promise.all([...e.dataTransfer.files].map(fileToAttachment)))
+    if (e.dataTransfer.files.length) await addFiles([...e.dataTransfer.files])
   }
+  const imageCount = atts.filter((a) => a.kind === 'image').length
   const onChange = async (v: string) => {
     setInput(v)
     const caret = ta.current?.selectionStart ?? v.length
@@ -144,7 +166,12 @@ export function Composer({ root, running, onSend }: { root: string; running: boo
               <button className="icon-btn tiny" aria-label={`Remove ${a.name}`} onClick={() => patchProject(root, (c) => ({ attachments: c.attachments.filter((x) => x.id !== a.id) }))}><X size={11} /></button>
             </span>
           ))}
-          {atts.some((a) => a.kind === 'image') && model && !model.vision && <span className="muted small">This model cannot see images; Dahl will use image analysis (OCR + layout breakdown).</span>}
+          {imageCount > 0 && (
+            <span className={`att-count small${imageCount >= MAX_IMAGES_PER_MESSAGE ? ' full' : ''}`} title={`Up to ${MAX_IMAGES_PER_MESSAGE} images per message`}>
+              {imageCount}/{MAX_IMAGES_PER_MESSAGE} images{imageCount >= MAX_IMAGES_PER_MESSAGE ? ': limit reached' : ''}
+            </span>
+          )}
+          {(imageCount > 0 || atts.some(isPdfAttachment)) && model && !model.vision && <span className="muted small">This model cannot see images: Dahl reads each image and PDF before sending (text, layout, colours).</span>}
         </div>
       )}
       <div className="composer-box">

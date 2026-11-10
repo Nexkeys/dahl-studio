@@ -20,6 +20,7 @@ import { allPrereqs } from './mcp/prereqs'
 import { runMobileChecks } from './mobileCheck'
 import { costs } from './services'
 import { priceRows } from './pricing'
+import { accurateStatus } from './ocr/accurate'
 
 async function assertProject(project: string): Promise<string> {
   const s = await settings.get()
@@ -39,6 +40,8 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Pro
     }
   })
 }
+
+const MAX_PDF_ATTACHMENT = 40 * 1024 * 1024
 
 /** Read a file or folder (user-chosen via dialog, read-only) into a bounded attachment. */
 async function makeAttachment(abs: string, root?: string): Promise<Attachment> {
@@ -76,6 +79,11 @@ async function makeAttachment(abs: string, root?: string): Promise<Attachment> {
   if (mt) {
     if (st.size > 15 * 1024 * 1024) throw new Error('Image larger than 15 MB')
     return { id: shortId(), kind: 'image', name, mediaType: mt, data: (await fs.readFile(abs)).toString('base64'), bytes: st.size }
+  }
+  // PDFs are read (text, layout, OCR of scanned pages) when the message is sent
+  if (/\.pdf$/i.test(abs)) {
+    if (st.size > MAX_PDF_ATTACHMENT) throw new Error(`${name} is larger than 40 MB`)
+    return { id: shortId(), kind: 'file', name, mediaType: 'application/pdf', data: (await fs.readFile(abs)).toString('base64'), bytes: st.size }
   }
   if (st.size > 1024 * 1024) throw new Error(`${name} is larger than 1 MB`)
   const buf = await fs.readFile(abs)
@@ -186,6 +194,7 @@ export function registerIpc(): void {
     const root = await assertProject(project)
     return makeAttachment(await resolveInside(root, rel), root)
   })
+  handle('ocr:status', () => accurateStatus(APP_DIR))
 
   // ---- git ----
   handle('git:status', async (project: string) => gitStatus(await assertProject(project)))

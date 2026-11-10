@@ -687,3 +687,20 @@ export interface ChiefFollowup {
   createdAt: string
   doneAt: string | null
 }
+
+// ---- Image and PDF reading (0.4.0) ----
+
+/** Settings added for image and PDF reading (merged into Settings above; optional so older settings files load). */
+export interface Settings {
+  /** use the downloadable PaddleOCR PP-OCRv5 engine instead of Windows OCR when it is available */
+  accurateOcr?: boolean
+}
+
+/** Settings > Accurate OCR status (ocr:status). */
+export interface OcrEngineStatus {
+  /** ONNX runtime package found, or null when the build has none */
+  runtime: string | null
+  modelsReady: boolean
+  downloadMb: number
+  message: string
+}
