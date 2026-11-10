@@ -1,6 +1,12 @@
 # Progress / Handoff
 
-Last updated: 2026-10-31 (v0.3.6 released). Read README.md, then CHANGELOG.md, then this file.
+Last updated: 2026-11-10 (0.4.0 built, not yet published). Read README.md, then CHANGELOG.md, then this file.
+
+## 0.4.0 status (2026-11-10)
+All 0.4.0 branches are merged on main; full suite, typecheck and build pass; Settings and workspace smoke-checked; one live Build run with a Dahl key changed files and ran a command without approval cards (final reply lost to "model at capacity"). See CHANGELOG 0.4.0 for evidence per feature.
+Not verified live: Groq, OpenRouter, Ollama, LM Studio, Tab completions, image description by a vision model, Preview tools with a model, budgets against a real bill.
+Known gaps: Accurate OCR does nothing yet (no ONNX runtime, no inference step); PowerShell start is slow on some PCs, so short agent commands can show "(timed out)"; Codestral FIM path unreachable; `/chief` typed by hand is plain text; an extra instruction-files assertion in `tests/skills.test.ts` was left uncommitted in the skills agent's worktree.
+Next (0.4.1): background helpers with ping, worktree task panel, hooks, model check, the gaps above.
 
 ## Status by area
 | Area | Status |

@@ -14,6 +14,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.4.0', date: '2026-11-10', title: 'More models, real terminal, images and skills',
+    summary: 'Use Groq, OpenRouter or your own local models, keep an eye on cost, and give Dahl screenshots, PDFs and skills to work with.',
+    items: [
+      { icon: 'plug', title: 'More models', text: 'Groq, OpenRouter, Ollama and LM Studio join the model menu in the chat box. Model lists stay up to date on their own.' },
+      { icon: 'gauge', title: 'Cost you can see', text: 'See what today cost in the status bar, set a budget per task or per day, and pick Economy, Balanced or Best in the chat box.' },
+      { icon: 'shield', title: 'Never ask', text: 'One switch in Settings > Approvals lets Dahl work without approval cards. Publishing to GitHub still asks.' },
+      { icon: 'sparkles', title: 'Images and PDFs', text: 'Attach up to 15 images and PDFs. Dahl reads their text, layout and colours first, even with models that cannot see images.' },
+      { icon: 'agents', title: 'Skills', text: 'Type / or click Skills for 47 ready-made skills. Your CLAUDE.md, AGENTS.md and Cursor rules are read too.' },
+      { icon: 'keyboard', title: 'A real terminal', text: 'PowerShell, Command Prompt or Git Bash in tabs, with colours that match your theme.' },
+      { icon: 'globe', title: 'Dahl tests your app', text: 'Dahl can open your local app in Preview, click through it and read its console.' },
+      { icon: 'chats', title: 'Talk while it works', text: 'Send a message while Dahl is busy. It reads it at its next step.' },
+      { icon: 'palette', title: 'Fresh look', text: 'Clearer status icons, a progress strip above the chat and a new High Contrast theme.' }
+    ]
+  },
+  {
     version: '0.3.7', date: '2026-11-03', title: 'Tabs, questions and Git that does it all',
     summary: 'Work on several conversations at once, let Dahl ask before it guesses, and run your whole Git and GitHub flow from the chat.',
     items: [
