@@ -26,6 +26,8 @@ export type DahlErrorKind =
   | 'cancelled'
 
 export class DahlError extends Error {
+  /** the provider's own error code when it sends one (for example Groq "tool_use_failed") */
+  code?: string
   constructor(
     public kind: DahlErrorKind,
     message: string,
@@ -37,7 +39,23 @@ export class DahlError extends Error {
   }
 }
 
+/** classifyHttpError plus the provider's error code (error.code or code in the JSON body). */
+function withCode(err: DahlError, bodyText: string): DahlError {
+  try {
+    const j = JSON.parse(bodyText)
+    const code = j?.error?.code ?? j?.code
+    if (typeof code === 'string' && code) err.code = code
+  } catch {
+    /* plain text body */
+  }
+  return err
+}
+
 export function classifyHttpError(status: number, bodyText: string, retryAfter?: string | null): DahlError {
+  return withCode(classifyStatus(status, bodyText, retryAfter), bodyText)
+}
+
+function classifyStatus(status: number, bodyText: string, retryAfter?: string | null): DahlError {
   let msg = bodyText
   try {
     const j = JSON.parse(bodyText)
@@ -146,6 +164,8 @@ export interface StreamCallbacks {
 export interface EndpointOptions {
   baseUrl?: string
   headers?: Record<string, string>
+  /** last change to the request body before it is sent (provider quirks, see providers/quirks.ts) */
+  shape?: (body: Record<string, unknown>) => void
 }
 
 const CONNECT_TIMEOUT_MS = 120_000
@@ -173,7 +193,7 @@ export function toOpenAIMessages(messages: ChatMessage[], vision: boolean): unkn
 }
 
 /** Splits inline <think>...</think> blocks (used by some open models) out of streamed content. */
-class ThinkSplitter {
+export class ThinkSplitter {
   private inThink = false
   private buf = ''
   push(s: string, onText: (t: string) => void, onThink: (t: string) => void): void {
@@ -234,6 +254,7 @@ export async function streamChat(
   if (req.tools && req.tools.length) body.tools = req.tools
   if (req.temperature !== undefined) body.temperature = req.temperature
   if (req.extra) Object.assign(body, req.extra)
+  opts.shape?.(body)
 
   const fail = (e: unknown): never => {
     if (signal.aborted) throw new DahlError('cancelled', 'Request cancelled')
@@ -273,6 +294,7 @@ export async function streamChat(
     // Some gateways ignore stream:true and return plain JSON; handle that too.
     if (ctype.includes('application/json')) {
       const j = (await res.json()) as any
+      if (j?.error) throw classifyHttpError(Number(j.error.code) || 500, JSON.stringify(j))
       const msg = j?.choices?.[0]?.message ?? {}
       if (msg.reasoning_content || msg.reasoning) onThink(msg.reasoning_content ?? msg.reasoning)
       think.push(msg.content ?? '', onText, onThink)
@@ -305,6 +327,7 @@ export async function streamChat(
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl).trim()
         buf = buf.slice(nl + 1)
+        // SSE comments (": OPENROUTER PROCESSING" keep-alives) and event:/id: fields carry no data
         if (!line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (data === '[DONE]') {
@@ -333,6 +356,9 @@ export async function streamChat(
           if (tc.function?.name) calls[i].name += tc.function.name
           if (tc.function?.arguments) calls[i].args += typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments)
         }
+        // OpenRouter reports a provider failure inside a 200 stream as finish_reason "error" (the error object, when
+        // present, was handled above); the reply is incomplete, so it must not be saved as an answer
+        if (choice.finish_reason === 'error') throw new DahlError('server', 'The provider stopped with an error in the middle of the reply.')
         if (choice.finish_reason) result.finishReason = choice.finish_reason
       }
     }

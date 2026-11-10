@@ -12,6 +12,7 @@ import { dirSize, redact, shortId } from './util'
 import { mediaTypeFor } from './agent/history'
 import { checkForUpdates, getUpdateStatus } from './updater'
 import { installWhen, takeResumeOffer } from './restart'
+import { registerCompletionIpc } from './completion/ipc'
 import { costs } from './services'
 import { priceRows } from './pricing'
 
@@ -116,6 +117,8 @@ export function registerIpc(): void {
   handle('usage:reset', () => usage.reset())
   handle('models:list', () => models.list())
   handle('models:refresh', () => models.refresh())
+  // Settings > Local models: check Ollama and LM Studio now (after their address changed, or on demand)
+  handle('models:checkLocal', () => models.refresh(['ollama', 'lmstudio']))
 
   // ---- projects ----
   handle('project:pick', async () => {
@@ -308,4 +311,6 @@ export function registerIpc(): void {
     // used by the renderer's 'auto' effects mode
     gpu: String(app.getGPUFeatureStatus().gpu_compositing), cpus: os.cpus().length
   }))
+  // ---- Tab completions (completion/ipc.ts) ----
+  registerCompletionIpc()
 }

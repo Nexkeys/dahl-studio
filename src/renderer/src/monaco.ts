@@ -8,6 +8,7 @@ import CssWorker from 'monaco-editor/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker'
 import { THEMES } from './themes'
+import { registerTabCompletions } from './completion/provider'
 
 ;(self as unknown as { MonacoEnvironment: monaco.Environment }).MonacoEnvironment = {
   getWorker(_id: string, label: string) {
@@ -21,6 +22,8 @@ import { THEMES } from './themes'
 
 for (const t of THEMES) monaco.editor.defineTheme(t.id, t.monaco)
 loader.config({ monaco })
+// Tab completions (grey ghost text); the provider asks nothing while the feature is off
+registerTabCompletions(monaco)
 
 export { monaco }
 export { default as Editor, DiffEditor } from '@monaco-editor/react'
